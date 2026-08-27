@@ -10,8 +10,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=hydra_umc
-Group=hydra_umc
+User=hydra-umc-server
+Group=hydra-umc-server
 WorkingDirectory=/opt/hydra-umc/server
 EnvironmentFile=-/etc/hydra-umc/server.env
 ExecStart=/usr/bin/node dist/server.cjs

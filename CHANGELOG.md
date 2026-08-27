@@ -37,6 +37,22 @@ a change is actually worth summarizing for a human.
   root)` -> the real `src/server.ts`). Documentation-only - no code
   changed, no version bump.
 
+## [Unreleased]
+
+### Fixed
+
+- The CM5 systemd unit now runs under the dedicated non-login
+  `hydra-umc-server` account supplied by HYDRA-UMC-OS provisioning, rather
+  than the obsolete shared administrator identity.
+
+- Added isolated, real-server negative authentication coverage: anonymous
+  writes, invalid bearer tokens and operator access to administrative routes
+  are rejected; the explicitly operator-authorized work-file route remains
+  usable. `npm test` now runs this verification together with the SDK
+  ServerDiscovery contract.
+- Made both temporary server-contract verifiers retry their cleanup on Windows
+  so an already-exited `tsx` handle cannot turn a successful test into EBUSY.
+
 ## [0.1.5]
 
 - Build version synchronized with `hydra-umc.project.json` and the repository-native version source.

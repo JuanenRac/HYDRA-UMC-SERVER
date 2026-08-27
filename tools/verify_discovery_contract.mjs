@@ -108,7 +108,9 @@ async function main() {
       await Promise.race([once(child, "exit"), new Promise((resolve) => setTimeout(resolve, 3000))]);
       if (child.exitCode === null) child.kill("SIGKILL");
     }
-    await rm(temporaryDirectory, { recursive: true, force: true });
+    // Windows can keep a handle briefly after tsx/server exits.  Retrying
+    // cleanup prevents a correct contract run from being reported as failed.
+    await rm(temporaryDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 }
 
