@@ -14,8 +14,7 @@ is the recommended way to reach it remotely** - it keeps the "trusted
 LAN" model actually true instead of just assumed, with zero code
 changes anywhere in the ecosystem. Port-forwarding the raw API port
 directly to the internet is not recommended; if you need to do it
-anyway for a specific test, see the hardening options in
-`SONNET/HYDRA-UMC-SERVER/auditoria_historial.txt` (JWT secret, CORS
+anyway for a specific test, use the documented hardening options (JWT secret, CORS
 allowlist, rate-limiting, optional TLS - all added to this server, see
 [`REMOTE_API.md`](REMOTE_API.md) and the root `.env.example`) and use
 them together, not instead of a VPN.

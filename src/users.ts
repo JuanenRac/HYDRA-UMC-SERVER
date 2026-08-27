@@ -36,8 +36,8 @@ type UserResult = { ok: true } | { ok: false; error: string };
 
 const usersPath = () => path.join(process.cwd(), "data", "users.json");
 
-// scrypt cost parameters (SONNET/AUDITORIA_COMPLETA_44_PROYECTOS.txt #7:
-// Node's scryptSync default, when no options object is passed at all, is
+// scrypt cost parameters: Node's scryptSync default, when no options object
+// is passed at all, is
 // N=16384/r=8/p=1 - below the OWASP Password Storage Cheat Sheet's current
 // baseline of N=2^17/r=8/p=1. Bumped to that exact OWASP figure rather
 // than a smaller in-between value: this only runs once per login attempt

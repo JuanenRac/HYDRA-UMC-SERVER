@@ -393,3 +393,14 @@ The documentation (this README and its own translations -
 available under **Creative Commons Attribution-ShareAlike 4.0
 International (CC BY-SA 4.0)**. Full text at
 https://creativecommons.org/licenses/by-sa/4.0/.
+
+## 🛠️ BUILD & RUN
+
+Use the non-versioning build check before a release build:
+
+| Action | Windows | Linux / macOS |
+|---|---|---|
+| Build check (no version or CHANGELOG change) | `build-test.bat` | `./build-test.sh` |
+| Run / development (when provided) | `run*.bat` or `dev*.bat` | `./run*.sh` or `./dev*.sh` |
+
+`build-test.bat` and `build-test.sh` compile or validate the project stack without incrementing `hydra-umc.project.json` or modifying `CHANGELOG.md`. They may create normal compiler output only. Existing `build*.bat`, `build*.sh`, `run*` and `dev*` scripts retain their project-specific, versioned or runtime behavior; use them when that behavior is required.

@@ -28,13 +28,13 @@ a change is actually worth summarizing for a human.
 
 - Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
 
-## [0.1.4] - Fixes from SONNET/AUDITORIA_COMPLETA_44_PROYECTOS.txt
+## [0.1.4] - Safety and reliability fixes
 
 Real security/robustness gaps confirmed against the actual current code
 (most of that audit's other claims for this project turned out to already
 be fixed - CORS, JWT_SECRET default, path traversal, the WebSocket
 listener leak, and the kinematics NaN singularity were all already
-handled; see the audit response log in SONNET/ for the full triage).
+handled; the public code and tests record the resulting behavior).
 
 - **Real log rotation.** `industrialLog()` used to append to `server.log`
   forever with nothing that ever trimmed it - a real gap (audit #10):

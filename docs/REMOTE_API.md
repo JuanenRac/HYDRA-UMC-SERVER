@@ -23,6 +23,17 @@ not a special case served from the same process anymore.
 
 ## 1. Discovery: `GET /api/hydra-info`
 
+The response includes `schema_version: "1.0"` and conforms to the SDK v1
+`ServerDiscovery` contract. `remoteApiVersion` remains the independently
+versioned REST/WebSocket transport capability number; clients must check the
+SDK schema version before reading the remaining discovery metadata.
+
+For a non-destructive local integration check from a workspace containing the
+sibling SDK repository, run `node tools/verify_discovery_contract.mjs`. The
+tool starts Server on a temporary port and directory, validates the real HTTP
+response with the SDK reference client, then stops and removes the temporary
+instance.
+
 The first request any remote client should make to a candidate IP -
 confirms it's actually a HYDRA-UMC STUDIO server before trying to talk
 the real API to it. Deliberately cheap (answered from an in-memory cache,

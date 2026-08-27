@@ -161,8 +161,7 @@ logStream.on("error", (err) => console.error("[industrialLog] log stream error",
 
 // Real size-based rotation - the "Log rotation utility" comment above this
 // block used to be aspirational only (an append-only stream with nothing
-// that ever trimmed it), confirmed as a real gap by
-// SONNET/AUDITORIA_COMPLETA_44_PROYECTOS.txt's own #10: an industrial
+// that ever trimmed it): an industrial
 // cell logs a line on every robot command, so an unattended CM5 running
 // continuously for weeks/months WILL fill the eMMC eventually with no
 // bound at all. Single-file rotation (current -> .1, current truncated),
@@ -1142,8 +1141,7 @@ async function startServer() {
               // other case below (valve/pump/speed) already uses.
               const ROBOT_AXES = new Set(["x", "y", "z", "a", "b", "c"]);
               const JOINT_KEYS = ["j1", "j2", "j3", "j4", "j5", "j6"];
-              // Finite + bounded, not just typeof "number" (SONNET/
-              // AUDITORIA_COMPLETA_44_PROYECTOS.txt #6: a caller could send
+              // Finite + bounded, not just typeof "number": a caller could send
               // NaN/Infinity - both pass `typeof === "number"` - or an
               // absurd single-command delta like 1e9). STUDIO's own largest
               // JOG_STEP_OPTIONS entry is 100 (RobotDetail.tsx), so a single
@@ -1373,6 +1371,7 @@ async function startServer() {
     }
     const s = lastKnownSettings;
     res.json({
+      schema_version: "1.0",
       product: realSettings(lastKnownSettings)?.serverName || "HYDRA-UMC STUDIO",
       remoteApiVersion: REMOTE_API_VERSION,
       appVersion: pkgVersion,
@@ -1760,7 +1759,7 @@ async function startServer() {
     industrialLog(`=================================================`);
   });
 
-  // Graceful shutdown (SONNET/AUDITORIA_COMPLETA_44_PROYECTOS.txt #8): a
+  // Graceful shutdown: a
   // normal `systemctl stop`/`pm2 stop`/Ctrl-C sends SIGTERM/SIGINT, and
   // before this handler existed nothing here ever ran on that path - the
   // process just died mid-flight, leaving the mDNS record unpublished
