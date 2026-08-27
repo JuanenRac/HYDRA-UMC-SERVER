@@ -56,6 +56,14 @@ jobs:
           npm run typecheck --if-present
           npm test --if-present
           npm run lint --if-present
+      - name: Validate HYDRA-UMC-SERVER admin UI
+        if: ${{ hashFiles('admin-ui/package.json') != '' }}
+        working-directory: admin-ui
+        run: |
+          npm ci --ignore-scripts
+          npm run typecheck --if-present
+          npm test --if-present
+          npm run lint --if-present
       - name: Set up Rust
         if: ${{ hashFiles('Cargo.toml') != '' }}
         uses: dtolnay/rust-toolchain@stable
