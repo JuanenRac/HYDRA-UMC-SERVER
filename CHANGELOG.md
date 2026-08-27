@@ -24,6 +24,19 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## Documentation - Real HTTP API reference gaps closed
+
+- **`docs/REMOTE_API.md`** - documented 8 real endpoints that existed in
+  `src/server.ts` but were missing from this reference: the 4 admin-only
+  `/api/admin/*` routes (clients, logs, server-config read/write, restart
+  - new section 2e) and `GET /api/system/metrics`, `GET /metrics`
+  (Prometheus), `GET /api/camera/:id/stream` (currently a placeholder
+  stream, documented as such), and `POST /api/upload-work` (including its
+  real path-traversal and reserved-filename hardening - new section 2f).
+  Also fixed a stale file-path reference in section 5 (`server.ts (repo
+  root)` -> the real `src/server.ts`). Documentation-only - no code
+  changed, no version bump.
+
 ## [0.1.5]
 
 - Build version synchronized with `hydra-umc.project.json` and the repository-native version source.

@@ -222,6 +222,78 @@ created automatically on first accepted submission).
   an already-submitted model back down for further editing before
   resubmitting it with `overwrite: true`.
 
+## 2e. Admin operations: `/api/admin/*`
+
+All four routes below require `Authorization: Bearer <admin token>` -
+same `403`-for-`operator` posture as section 2b. These back the admin
+UI's own Clients/Logs/Config screens, not the main Dashboard.
+
+- `GET /api/admin/clients` -> `{ "clients": [{ ...connection metadata,
+  "connected": <bool> }, ...] }` - every currently-tracked WebSocket
+  client (see section 3), each entry's own metadata plus whether its
+  socket is still actually open right now.
+- `GET /api/admin/logs?lines=<n>` -> `{ "lines": ["<log line>", ...] }` -
+  the tail of the real on-disk log file (`industrialLog()`'s own
+  target), most recent last. `lines` defaults to `300`, capped at `2000`;
+  returns `{ "lines": [] }` (not an error) on a fresh install with no log
+  file yet. A full-file read on every call - fine for a periodically
+  polled admin viewer, not meant for tailing a huge file.
+- `GET /api/admin/server-config` -> `{ "port": <int>, "pendingPort":
+  <int|null> }` - `port` is what this process is actually listening on
+  right now; `pendingPort` is a saved-but-not-yet-applied change (see
+  `PUT` below).
+- `PUT /api/admin/server-config` (body: `{ "port"? }`) - saves a new
+  listen port to disk. `400` if `port` isn't an integer in `1-65535`.
+  **Does not take effect until the process restarts** (see
+  `POST /api/admin/restart` below) - the response is `{ "success": true,
+  "appliesOnRestart": true }`, never a live port change.
+- `POST /api/admin/restart` -> `{ "success": true }`, sent *before* the
+  process calls `process.exit(0)` a quarter-second later, so the admin
+  UI's own request doesn't see a connection-reset instead of a clean
+  `200`. Only meaningful behind a process supervisor that auto-restarts
+  on exit (systemd `Restart=always`, pm2, Docker `--restart`) - under
+  `npm run dev` this just stops the server.
+
+## 2f. Monitoring, camera & file upload
+
+- `GET /api/system/metrics` -> `{ "cpu_load", "memory_usage", "temp"
+  (number or `null`), "temp_is_real" (bool), "uptime", "network": {
+  "wifi", "ethernet", "bluetooth" (each bool) } }` - powers the Dashboard's
+  own status footer (CPU/memory/temp/network). `temp`/`temp_is_real` come
+  from a real `vcgencmd measure_temp` read on a CM5/Pi host; on any other
+  OS the command isn't found and this falls back to a clearly-marked
+  mock value (`temp_is_real: false`) rather than silently lying. No auth
+  required.
+- `GET /metrics` - a Prometheus text-exposition scrape endpoint
+  (`prom-client`, metric definitions in `src/metrics.ts`), including the
+  same `hydra_system_*` gauges `/api/system/metrics` reports as JSON, from
+  the identical underlying read. Deliberately unauthenticated, same
+  trusted-LAN posture as every other unauthenticated `GET` in this
+  document - see section 4 before exposing this server beyond a LAN.
+- `GET /api/camera/:id/stream` - an MJPEG multipart stream
+  (`multipart/x-mixed-replace`). **Currently a placeholder**: no real
+  camera/`libcamera`/`ffmpeg` pipe exists yet, so this sends a fixed
+  "camera offline" placeholder frame every 100ms rather than real video -
+  wired up this way so the Android app's video surface has a real,
+  spec-shaped stream to render against before a real camera pipeline
+  lands. No auth required.
+- `POST /api/upload-work` (body: `{ "folderPath", "fileName", "content" }`)
+  - **any authenticated token, `admin` or `operator`**. Writes `content`
+  as JSON under `data/<folderPath>/<fileName>` (creating the folder if
+  needed) and appends `fileName` to that folder's own `index.json`. Real
+  path-traversal hardening: `folderPath` has `..` stripped and the
+  resolved path is checked to still sit inside the server's own `data/`
+  directory (`403` if not); `fileName` is reduced to `path.basename()` so
+  it can't smuggle a directory component; and the 3 reserved filenames
+  (`settings.json`, `users.json`, `model_submissions.json` -
+  `RESERVED_DATA_FILENAMES` in `server.ts`) are always rejected (`403`)
+  regardless of `folderPath`, closing a real privilege-escalation path an
+  `operator` token could otherwise use to overwrite the account store or
+  global settings from this non-admin-gated route. `400` if `folderPath`/
+  `fileName` aren't strings or `fileName` resolves to an empty/`.`/`..`
+  basename; `500` with `{ "error": <message> }` on an unexpected write
+  failure.
+
 ## 3. Live sync: `WebSocket /ws`
 
 Connect with `ws://<host>:3000/ws?token=<JWT_TOKEN>` (see section 2a for
@@ -292,10 +364,11 @@ POST/broadcast ping-pong on every single change.
 
 ## 5. Where the server-side code lives
 
-`server.ts` (repo root) - every route in sections 1 through 2c, the
-`WebSocketServer` setup, and `broadcastSettings()`. `users.ts` (repo
-root) - the account store section 2a/2b talk to (scrypt hashing, role
-model, `data/users.json` persistence). `src/store.tsx`'s `HydraProvider`
+`src/server.ts` - every route in sections 1 through 2f, the
+`WebSocketServer` setup, and `broadcastSettings()`. `src/users.ts` -
+the account store section 2a/2b talk to (scrypt hashing, role
+model, `data/users.json` persistence). `src/metrics.ts` - the Prometheus
+gauge definitions `GET /metrics` (section 2f) renders. `src/store.tsx`'s `HydraProvider`
 and `src/components/AuthGate.tsx`/`UsersPanel.tsx` are the reference
 CLIENT implementation of everything in this document - read them
 alongside this file if a detail here is ambiguous, since the running code
