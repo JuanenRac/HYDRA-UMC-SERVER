@@ -16,7 +16,13 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SDK_ROOT = path.resolve(ROOT, "..", "HYDRA-UMC-SDK");
+// A developer checkout normally keeps the SDK beside this repository. CI
+// checks out the pinned contract client within this repository's workspace and
+// supplies its location explicitly, so the integration check never assumes
+// that a sibling repository happens to exist on a clean runner.
+const SDK_ROOT = process.env.HYDRA_UMC_SDK_ROOT
+  ? path.resolve(process.env.HYDRA_UMC_SDK_ROOT)
+  : path.resolve(ROOT, "..", "HYDRA-UMC-SDK");
 const TSX_CLI = path.join(ROOT, "node_modules", "tsx", "dist", "cli.mjs");
 const SERVER_SOURCE = path.join(ROOT, "src", "server.ts");
 

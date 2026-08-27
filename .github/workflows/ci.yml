@@ -20,6 +20,14 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
+      - name: Check out HYDRA-UMC-SDK contract client
+        if: ${{ hashFiles('tools/verify_discovery_contract.mjs') != '' }}
+        uses: actions/checkout@v5
+        with:
+          repository: JuanenRac/HYDRA-UMC-SDK
+          ref: main
+          path: .hydra-umc-sdk-contract
+          persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -51,6 +59,8 @@ jobs:
           cache: npm
       - name: Validate Node.js or TypeScript project
         if: ${{ hashFiles('package.json') != '' }}
+        env:
+          HYDRA_UMC_SDK_ROOT: ${{ github.workspace }}/.hydra-umc-sdk-contract
         run: |
           npm ci --ignore-scripts
           npm run typecheck --if-present
