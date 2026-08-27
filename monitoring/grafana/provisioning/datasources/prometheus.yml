@@ -1,0 +1,18 @@
+# Auto-provisions the Prometheus datasource on Grafana container start - the
+# dashboard JSON in ../../dashboards/hydra-umc-overview.json references this
+# datasource by name ("Prometheus"), so this file must exist for that
+# dashboard's panels to resolve to real data instead of "Datasource not found".
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    # Fixed uid (Grafana would otherwise generate a random one on first
+    # provision) - hydra-umc-overview.json's own panels reference this exact
+    # string as their datasource, so it has to be stable across container
+    # recreations rather than whatever Grafana happens to assign.
+    uid: hydraumcprom
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true

@@ -1,0 +1,16 @@
+# Auto-provisions every dashboard JSON found in /var/lib/grafana/dashboards
+# (mounted from ../../dashboards in docker-compose.yml) - drop another
+# exported dashboard .json in that folder and it appears in Grafana on the
+# next container restart, no manual import needed.
+apiVersion: 1
+
+providers:
+  - name: "HYDRA-UMC"
+    orgId: 1
+    folder: "HYDRA-UMC"
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

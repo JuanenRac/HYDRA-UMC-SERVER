@@ -1,0 +1,38 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# HYDRA-UMC STUDIO's built frontend, copied in by build-frontend.sh/.bat -
+# a generated artifact from a sibling repo's own build, never source here.
+public
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+data/users.json
+data/server-config.json
+
+# Local secrets (JWT_SECRET, etc.) - see .env.example for the template
+.env
+.env.local
+
+# HYDRA-UMC shared secret protection
+!.env.example

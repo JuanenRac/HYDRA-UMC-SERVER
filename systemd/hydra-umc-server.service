@@ -1,0 +1,27 @@
+# =============================================================================
+# HYDRA-UMC-SERVER - Local CM5 API and dashboard service
+# Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
+# GPL-3.0-or-later - see LICENSE
+# =============================================================================
+[Unit]
+Description=HYDRA-UMC-SERVER local API and dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hydra_umc
+Group=hydra_umc
+WorkingDirectory=/opt/hydra-umc/server
+EnvironmentFile=-/etc/hydra-umc/server.env
+ExecStart=/usr/bin/node dist/server.cjs
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/opt/hydra-umc/server/data
+
+[Install]
+WantedBy=multi-user.target

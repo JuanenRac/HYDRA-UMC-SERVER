@@ -1,0 +1,24 @@
+{
+  "schema_version": "1.0",
+  "ecosystem": "HYDRA-UMC",
+  "name": "HYDRA-UMC-SERVER",
+  "version": "0.1.5",
+  "role": "api",
+  "stack": "node",
+  "technologies": [
+    "Node.js 20+",
+    "Express",
+    "Socket.io/WebSocket",
+    "gRPC"
+  ],
+  "deployment_target": "cm5",
+  "maturity": "established",
+  "family": "Core Backend & Clients",
+  "parent": null,
+  "build": "npm install && npm run build.",
+  "notes": "The real headless backend every control client (STUDIO, SUITE, DSI, the mobile apps) actually talks to - the integration parent of this whole family.",
+  "native_version": {
+    "file": "package.json",
+    "pattern": "\"version\":\\s*\"(\\d+)\\.(\\d+)\\.(\\d+)\""
+  }
+}
