@@ -9,7 +9,7 @@
 
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -18,7 +18,9 @@ import { spawn } from "node:child_process";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const WORKSPACE = path.resolve(ROOT, "..");
-const VOICE_ROOT = path.join(WORKSPACE, "HYDRA-UMC-VOICE-UI");
+const VOICE_ROOT = process.env.HYDRA_UMC_VOICE_UI_ROOT
+  ? path.resolve(process.env.HYDRA_UMC_VOICE_UI_ROOT)
+  : path.join(WORKSPACE, "HYDRA-UMC-VOICE-UI");
 const TSX_CLI = path.join(ROOT, "node_modules", "tsx", "dist", "cli.mjs");
 const SERVER_SOURCE = path.join(ROOT, "src", "server.ts");
 const ADMIN = { username: "voice-contract-admin", password: "voice-contract-admin-password" };
@@ -90,6 +92,14 @@ async function main() {
   let serverStartupError;
   let logs = "";
   try {
+    try {
+      await access(path.join(VOICE_ROOT, "src", "hydra_umc_voice_ui", "main.py"));
+    } catch {
+      throw new Error(
+        `HYDRA-UMC-VOICE-UI source is unavailable at ${VOICE_ROOT}; `
+        + "set HYDRA_UMC_VOICE_UI_ROOT to a checkout before running this contract.",
+      );
+    }
     await mkdir(path.join(temporaryDirectory, "data"), { recursive: true });
     await writeFile(path.join(temporaryDirectory, "data", "settings.json"), "{}\n", "utf8");
     voice = spawn(python, ["-m", "hydra_umc_voice_ui.main", "serve", "--host", "127.0.0.1", "--port", String(voicePort)], {

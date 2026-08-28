@@ -52,6 +52,11 @@ a change is actually worth summarizing for a human.
   runner-specific Python PATH differences without weakening the real
   cross-service check.
 
+- Check out the real HYDRA-UMC-VOICE-UI source in Server CI and pass its
+  location through `HYDRA_UMC_VOICE_UI_ROOT`. The relay contract now fails
+  clearly if that source is unavailable instead of reporting a misleading
+  child-process `ENOENT`.
+
 - The CM5 systemd unit now runs under the dedicated non-login
   `hydra-umc-server` account supplied by HYDRA-UMC-OS provisioning, rather
   than the obsolete shared administrator identity.

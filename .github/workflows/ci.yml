@@ -28,6 +28,14 @@ jobs:
           ref: main
           path: .hydra-umc-sdk-contract
           persist-credentials: false
+      - name: Check out HYDRA-UMC-VOICE-UI relay gateway
+        if: ${{ hashFiles('tools/verify_voice_relay_contract.mjs') != '' }}
+        uses: actions/checkout@v5
+        with:
+          repository: JuanenRac/HYDRA-UMC-VOICE-UI
+          ref: main
+          path: .hydra-umc-voice-ui-contract
+          persist-credentials: false
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -61,6 +69,7 @@ jobs:
         if: ${{ hashFiles('package.json') != '' }}
         env:
           HYDRA_UMC_SDK_ROOT: ${{ github.workspace }}/.hydra-umc-sdk-contract
+          HYDRA_UMC_VOICE_UI_ROOT: ${{ github.workspace }}/.hydra-umc-voice-ui-contract
         run: |
           npm ci --ignore-scripts
           npm run typecheck --if-present
