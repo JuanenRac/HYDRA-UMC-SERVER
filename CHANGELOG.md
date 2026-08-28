@@ -41,10 +41,11 @@ a change is actually worth summarizing for a human.
 
 ### Fixed
 
-- Made the real Voice UI relay contract test use the exact interpreter
-  installed by `actions/setup-python` when GitHub Actions exposes it through
-  `pythonLocation`. The test now also reports a process-start failure cleanly
-  instead of crashing Node on an unhandled child-process error.
+- Made the real Voice UI relay contract test use the `python` command
+  guaranteed by this workflow's successful Python validation step, while
+  retaining `PYTHON` as an explicit override. The test now also reports a
+  process-start failure cleanly instead of crashing Node on an unhandled
+  child-process error.
 
 - The CM5 systemd unit now runs under the dedicated non-login
   `hydra-umc-server` account supplied by HYDRA-UMC-OS provisioning, rather

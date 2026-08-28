@@ -72,16 +72,10 @@ async function stop(child) {
 function resolvePythonCommand() {
   if (process.env.PYTHON) return process.env.PYTHON;
 
-  // actions/setup-python exposes the selected interpreter through
-  // pythonLocation. On Ubuntu it is not guaranteed to create a python3 alias.
-  const installedPython = process.env.pythonLocation || process.env.Python_ROOT_DIR || process.env.PYTHON_ROOT_DIR;
-  if (installedPython) {
-    return process.platform === "win32"
-      ? path.join(installedPython, "python.exe")
-      : path.join(installedPython, "bin", "python");
-  }
-
-  return process.platform === "win32" ? "python" : "python3";
+  // The workflow already invokes `python tools/ci_validate.py` successfully.
+  // Rely on that PATH contract: pythonLocation is metadata, not a portable
+  // promise that a child process may execute a derived absolute path.
+  return "python";
 }
 
 async function main() {
