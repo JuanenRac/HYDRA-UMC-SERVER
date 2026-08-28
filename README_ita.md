@@ -337,6 +337,11 @@ Questo progetto fa parte di un più ampio ecosistema robotico dello stesso autor
 - **[HYDRA-UMC-NODE-HEALING](https://github.com/JuanenRac/HYDRA-UMC-NODE-HEALING)** — coordina più istanze di questo server e ne gestisce il failover.
 - **[HYDRA-UMC-HIL-BRIDGE](https://github.com/JuanenRac/HYDRA-UMC-HIL-BRIDGE)** — fa da ponte tra questo server e il gemello digitale.
 - **[HYDRA-UMC-TOOL-CLI](https://github.com/JuanenRac/HYDRA-UMC-TOOL-CLI)** — esegue il DevOps di flotta contro l'API di questo server.
+- **[HYDRA-UMC-BRIDGE-ROS2](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-ROS2)** — espone solo coordinamento autenticato ad alto livello tra questo server e ROS 2.
+- **[HYDRA-UMC-BRIDGE-OPENPNP](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-OPENPNP)** — coordina passaggi PCB tracciabili tramite il percorso autorizzato del server.
+- **[HYDRA-UMC-BRIDGE-PRINTER3D](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-PRINTER3D)** — coordina ausiliari della stampante tramite il server; il firmware nativo mantiene l'autorità.
+- **[HYDRA-UMC-BRIDGE-CNC](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-CNC)** — richiede ausiliari limitati della cella CNC senza sostituire la sicurezza del controller.
+- **[HYDRA-UMC-BRIDGE-LASER](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-LASER)** — richiede ausiliari della cella laser senza un percorso per armare o attivare il laser.
 
 ### Resto dell'Ecosistema
 

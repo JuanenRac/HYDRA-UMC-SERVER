@@ -178,6 +178,11 @@ npm start
 - **[HYDRA-UMC-NODE-HEALING](https://github.com/JuanenRac/HYDRA-UMC-NODE-HEALING)** —— 本サーバーの複数インスタンスを協調させ、そのフェイルオーバーを管理します。
 - **[HYDRA-UMC-HIL-BRIDGE](https://github.com/JuanenRac/HYDRA-UMC-HIL-BRIDGE)** —— 本サーバーとデジタルツインを橋渡しします。
 - **[HYDRA-UMC-TOOL-CLI](https://github.com/JuanenRac/HYDRA-UMC-TOOL-CLI)** —— 本サーバーの API に対して車両群 DevOps を実行します。
+- **[HYDRA-UMC-BRIDGE-ROS2](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-ROS2)** —— このサーバーと ROS 2 間の認証済み高レベル協調のみを公開します。
+- **[HYDRA-UMC-BRIDGE-OPENPNP](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-OPENPNP)** —— サーバーの認可済み経路を通じて追跡可能な PCB 受け渡しを協調します。
+- **[HYDRA-UMC-BRIDGE-PRINTER3D](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-PRINTER3D)** —— サーバー経由でプリンター補助を協調し、ネイティブファームウェアが権限を維持します。
+- **[HYDRA-UMC-BRIDGE-CNC](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-CNC)** —— コントローラー安全性を置き換えず、制限された CNC セル補助を要求します。
+- **[HYDRA-UMC-BRIDGE-LASER](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-LASER)** —— レーザーのアームまたは発射への経路なしに、レーザーセル補助を要求します。
 
 ### エコシステムのその他のプロジェクト
 

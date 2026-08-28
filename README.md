@@ -311,6 +311,11 @@ This project is part of a larger robotics ecosystem by the same author (JuanenRa
 - **[HYDRA-UMC-NODE-HEALING](https://github.com/JuanenRac/HYDRA-UMC-NODE-HEALING)** — coordinates multiple instances of this server and manages their failover.
 - **[HYDRA-UMC-HIL-BRIDGE](https://github.com/JuanenRac/HYDRA-UMC-HIL-BRIDGE)** — bridges this server and the digital twin.
 - **[HYDRA-UMC-TOOL-CLI](https://github.com/JuanenRac/HYDRA-UMC-TOOL-CLI)** — performs fleet DevOps against this server's API.
+- **[HYDRA-UMC-BRIDGE-ROS2](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-ROS2)** — exposes only authenticated, high-level coordination between this server and ROS 2.
+- **[HYDRA-UMC-BRIDGE-OPENPNP](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-OPENPNP)** — coordinates traceable PCB hand-offs through this server's authorised path.
+- **[HYDRA-UMC-BRIDGE-PRINTER3D](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-PRINTER3D)** — coordinates printer auxiliaries through this server; native firmware remains authoritative.
+- **[HYDRA-UMC-BRIDGE-CNC](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-CNC)** — requests bounded CNC-cell auxiliaries; it never replaces controller safety.
+- **[HYDRA-UMC-BRIDGE-LASER](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-LASER)** — requests laser-cell auxiliaries without a route to arm or fire a laser.
 
 ### Rest of the Ecosystem
 

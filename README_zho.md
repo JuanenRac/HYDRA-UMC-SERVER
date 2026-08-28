@@ -178,6 +178,11 @@ npm start
 - **[HYDRA-UMC-NODE-HEALING](https://github.com/JuanenRac/HYDRA-UMC-NODE-HEALING)** —— 协调本服务器的多个实例并管理它们的故障转移。
 - **[HYDRA-UMC-HIL-BRIDGE](https://github.com/JuanenRac/HYDRA-UMC-HIL-BRIDGE)** —— 桥接本服务器与数字孪生系统。
 - **[HYDRA-UMC-TOOL-CLI](https://github.com/JuanenRac/HYDRA-UMC-TOOL-CLI)** —— 针对本服务器的 API 执行车队级 DevOps 操作。
+- **[HYDRA-UMC-BRIDGE-ROS2](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-ROS2)** —— 仅公开此服务器与 ROS 2 之间经认证的高层协调。
+- **[HYDRA-UMC-BRIDGE-OPENPNP](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-OPENPNP)** —— 通过服务器授权路径协调可追溯 PCB 交接。
+- **[HYDRA-UMC-BRIDGE-PRINTER3D](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-PRINTER3D)** —— 通过服务器协调打印机辅助任务；原生固件保留权限。
+- **[HYDRA-UMC-BRIDGE-CNC](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-CNC)** —— 请求受限 CNC 单元辅助任务，绝不替代控制器安全性。
+- **[HYDRA-UMC-BRIDGE-LASER](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-LASER)** —— 请求激光单元辅助任务，但没有解锁或发射激光的路径。
 
 ### 生态系统的其余部分
 

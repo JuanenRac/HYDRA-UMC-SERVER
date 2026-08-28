@@ -347,6 +347,11 @@ Dieses Projekt ist Teil eines größeren Robotik-Ökosystems desselben Autors (J
 - **[HYDRA-UMC-NODE-HEALING](https://github.com/JuanenRac/HYDRA-UMC-NODE-HEALING)** — koordiniert mehrere Instanzen dieses Servers und verwaltet deren Failover.
 - **[HYDRA-UMC-HIL-BRIDGE](https://github.com/JuanenRac/HYDRA-UMC-HIL-BRIDGE)** — bildet die Brücke zwischen diesem Server und dem digitalen Zwilling.
 - **[HYDRA-UMC-TOOL-CLI](https://github.com/JuanenRac/HYDRA-UMC-TOOL-CLI)** — führt flottenweites DevOps gegen die API dieses Servers aus.
+- **[HYDRA-UMC-BRIDGE-ROS2](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-ROS2)** — stellt nur authentifizierte, übergeordnete Koordination zwischen diesem Server und ROS 2 bereit.
+- **[HYDRA-UMC-BRIDGE-OPENPNP](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-OPENPNP)** — koordiniert nachverfolgbare PCB-Übergaben über den autorisierten Serverpfad.
+- **[HYDRA-UMC-BRIDGE-PRINTER3D](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-PRINTER3D)** — koordiniert Druckerhilfen über den Server; die native Firmware bleibt autoritativ.
+- **[HYDRA-UMC-BRIDGE-CNC](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-CNC)** — fordert begrenzte CNC-Zellenhilfen an, ohne die Controller-Sicherheit zu ersetzen.
+- **[HYDRA-UMC-BRIDGE-LASER](https://github.com/JuanenRac/HYDRA-UMC-BRIDGE-LASER)** — fordert Laserzellenhilfen an, ohne einen Weg zum Scharfschalten oder Auslösen eines Lasers bereitzustellen.
 
 ### Rest des Ökosystems
 
