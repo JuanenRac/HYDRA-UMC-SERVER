@@ -35,9 +35,13 @@ async function reservePort() {
   return address.port;
 }
 
-async function waitFor(url) {
+async function waitFor(url, startupError = () => undefined) {
   let lastError;
   for (let attempt = 0; attempt < 120; attempt += 1) {
+    const processError = startupError();
+    if (processError) {
+      throw new Error(`service process could not start: ${processError.message}`);
+    }
     try {
       const response = await fetch(url);
       if (response.ok) return;
@@ -59,20 +63,37 @@ async function request(port, route, options = {}) {
 }
 
 async function stop(child) {
-  if (!child || child.exitCode !== null) return;
+  if (!child || !child.pid || child.exitCode !== null) return;
   child.kill("SIGTERM");
   await Promise.race([once(child, "exit"), new Promise((resolve) => setTimeout(resolve, 3000))]);
   if (child.exitCode === null) child.kill("SIGKILL");
+}
+
+function resolvePythonCommand() {
+  if (process.env.PYTHON) return process.env.PYTHON;
+
+  // actions/setup-python exposes the selected interpreter through
+  // pythonLocation. On Ubuntu it is not guaranteed to create a python3 alias.
+  const installedPython = process.env.pythonLocation || process.env.Python_ROOT_DIR || process.env.PYTHON_ROOT_DIR;
+  if (installedPython) {
+    return process.platform === "win32"
+      ? path.join(installedPython, "python.exe")
+      : path.join(installedPython, "bin", "python");
+  }
+
+  return process.platform === "win32" ? "python" : "python3";
 }
 
 async function main() {
   const temporaryDirectory = await mkdtemp(path.join(tmpdir(), "hydra-umc-server-voice-relay-"));
   const voicePort = await reservePort();
   const serverPort = await reservePort();
-  const python = process.env.PYTHON || (process.platform === "win32" ? "python" : "python3");
+  const python = resolvePythonCommand();
   const pathSeparator = process.platform === "win32" ? ";" : ":";
   let voice;
   let server;
+  let voiceStartupError;
+  let serverStartupError;
   let logs = "";
   try {
     await mkdir(path.join(temporaryDirectory, "data"), { recursive: true });
@@ -86,9 +107,10 @@ async function main() {
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
+    voice.once("error", (error) => { voiceStartupError = error; });
     voice.stdout.on("data", (chunk) => { logs += chunk; });
     voice.stderr.on("data", (chunk) => { logs += chunk; });
-    await waitFor(`http://127.0.0.1:${voicePort}/health`);
+    await waitFor(`http://127.0.0.1:${voicePort}/health`, () => voiceStartupError);
 
     server = spawn(process.execPath, [TSX_CLI, SERVER_SOURCE], {
       cwd: temporaryDirectory,
@@ -104,9 +126,10 @@ async function main() {
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
+    server.once("error", (error) => { serverStartupError = error; });
     server.stdout.on("data", (chunk) => { logs += chunk; });
     server.stderr.on("data", (chunk) => { logs += chunk; });
-    await waitFor(`http://127.0.0.1:${serverPort}/api/hydra-info`);
+    await waitFor(`http://127.0.0.1:${serverPort}/api/hydra-info`, () => serverStartupError);
 
     const login = await request(serverPort, "/api/login", { method: "POST", body: JSON.stringify(ADMIN) });
     assert.equal(login.response.status, 200);
