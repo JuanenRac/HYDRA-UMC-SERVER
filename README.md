@@ -155,7 +155,7 @@ HYDRA-UMC-SERVER/
 │   └── REMOTE_API.md    # Full contract: every route, the WS protocol, auth
 ├── monitoring/           # Optional Prometheus + Grafana stack - see monitoring/README.md
 ├── scripts/
-│   └── bump-version.mjs # Odometer-style version bump, runs before every build
+│   └── bump-version.mjs # Legacy native-only helper; standard builds use bump_manifest_version.py
 ├── build.bat / build.sh # Install deps + production build
 ├── dev.bat / dev.sh      # Install deps + start the dev server
 ├── package.json
@@ -265,8 +265,8 @@ frontend involved):
 ### Production Build
 
 Bundles the server into a single deployable file with esbuild:
-- **Windows:** double-click `build.bat` or run `npm run build`
-- **Linux/Mac:** run `./build.sh` or `npm run build`
+- **Windows:** use `build.bat` for a versioned release build; use `npm run build` for a compile-only build.
+- **Linux/Mac:** use `./build.sh` for a versioned release build; use `npm run build` for a compile-only build.
 
 Then start the production server with:
 ```bash
@@ -279,13 +279,13 @@ persists in `data/`.
 
 ### Versioning
 
-Every real `npm run build` bumps `package.json`'s own `version`
-automatically (`scripts/bump-version.mjs`, wired as the first step of the
-`build` script) - a base-10 "odometer": patch +1 per build, rolling over
-into minor (and minor into major) past 9 rather than ever reaching a
-two-digit segment (`0.0.9` -> `0.1.0`, not `0.0.10`). The running version
-is readable live from `GET /api/hydra-info` (`appVersion`), and the full
-history is in [`CHANGELOG.md`](CHANGELOG.md).
+Only the root `build*.bat` and `build*.sh` scripts create a release version
+increment. They call `bump_manifest_version.py` exactly once, keeping
+`package.json`, `hydra-umc.project.json` and [`CHANGELOG.md`](CHANGELOG.md)
+in sync with the base-10 odometer rule (`0.0.9` -> `0.1.0`, never
+`0.0.10`). `npm run build` is deliberately compile-only, so direct builds and
+`build-test` validation never make a package-only version change. The running
+version is readable live from `GET /api/hydra-info` (`appVersion`).
 
 ## 📊 Monitoring (Optional)
 

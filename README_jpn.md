@@ -88,7 +88,7 @@ HYDRA-UMC-SERVER/
 │   └── REMOTE_API.md    # 完全な契約：すべてのルート、WS プロトコル、認証
 ├── monitoring/           # 任意の Prometheus + Grafana スタック —— monitoring/README.md 参照
 ├── scripts/
-│   └── bump-version.mjs # 奇数計方式のバージョン加算、全ビルドの前に実行
+│   └── bump-version.mjs # 旧式のネイティブ版ヘルパー。標準ビルドは bump_manifest_version.py を使用
 ├── build.bat / build.sh # 依存関係のインストール + プロダクションビルド
 ├── dev.bat / dev.sh      # 依存関係のインストール + 開発サーバーの起動
 ├── package.json
@@ -147,8 +147,8 @@ npm install
 ### プロダクションビルド
 
 esbuild を用いてサーバーを単一のデプロイ可能なファイルへバンドルします：
-- **Windows：** `build.bat` をダブルクリックするか、`npm run build` を実行
-- **Linux/Mac：** `./build.sh` または `npm run build` を実行
+- **Windows：** バージョンを増やすリリースビルドには `build.bat` を使用し、コンパイルのみには `npm run build` を使用
+- **Linux/Mac：** バージョンを増やすリリースビルドには `./build.sh` を使用し、コンパイルのみには `npm run build` を使用
 
 その後、以下でプロダクションサーバーを起動します：
 ```bash
@@ -159,7 +159,7 @@ npm start
 
 ### バージョン管理
 
-実際に `npm run build` が実行されるたびに、`package.json` 自身の `version` が自動的に加算されます（`scripts/bump-version.mjs`、`build` スクリプトの最初のステップとして実行）—— 10 進法の「オドメーター」方式です：ビルドごとに patch を +1 し、9 を超えると minor へ（minor が 9 を超えると major へ）繰り上がります。2 桁の数字を持つセグメントには決して到達しません（`0.0.9` -> `0.1.0` であり、`0.0.10` にはなりません）。現在実行中のバージョンは `GET /api/hydra-info`（`appVersion`）から実際に読み取ることができ、完全な履歴は [`CHANGELOG.md`](CHANGELOG.md) にあります。
+リリース版のバージョン増分を行うのは、ルートの `build*.bat` と `build*.sh` だけです。これらは `bump_manifest_version.py` を一度だけ呼び出し、10 進オドメーター規則（`0.0.9` -> `0.1.0`、`0.0.10` にはしない）に従って `package.json`、`hydra-umc.project.json`、[`CHANGELOG.md`](CHANGELOG.md) を同期します。`npm run build` は意図的にコンパイル専用なので、直接のビルドや `build-test` 検証が `package.json` だけのバージョンを変更することはありません。実行中のバージョンは `GET /api/hydra-info`（`appVersion`）から取得できます。
 
 ## 📊 モニタリング（任意）
 

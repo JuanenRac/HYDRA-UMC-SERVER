@@ -53,6 +53,26 @@ a change is actually worth summarizing for a human.
 - Made both temporary server-contract verifiers retry their cleanup on Windows
   so an already-exited `tsx` handle cannot turn a successful test into EBUSY.
 
+## [0.2.1]
+
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
+
+## [0.2.0]
+
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
+
+## [0.1.9]
+
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
+
+## [0.1.8]
+
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
+
+## [0.1.7]
+
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
+
 ## [0.1.5]
 
 - Build version synchronized with `hydra-umc.project.json` and the repository-native version source.

@@ -171,7 +171,7 @@ HYDRA-UMC-SERVER/
 │   └── REMOTE_API.md    # Contrato completo: cada ruta, el protocolo WS, auth
 ├── monitoring/           # Stack opcional Prometheus + Grafana - ver monitoring/README.md
 ├── scripts/
-│   └── bump-version.mjs # Incremento de versión tipo cuentakilómetros, corre antes de cada build
+│   └── bump-version.mjs # Ayudante nativo heredado; los builds estándar usan bump_manifest_version.py
 ├── build.bat / build.sh # Instala dependencias + build de producción
 ├── dev.bat / dev.sh      # Instala dependencias + arranca el servidor de desarrollo
 ├── package.json
@@ -295,8 +295,8 @@ frontend involucrado):
 ### Build de Producción
 
 Empaqueta el servidor en un único archivo desplegable con esbuild:
-- **Windows:** doble clic en `build.bat` o `npm run build`
-- **Linux/Mac:** ejecuta `./build.sh` o `npm run build`
+- **Windows:** usa `build.bat` para un build de publicación versionado; usa `npm run build` solo para compilar.
+- **Linux/Mac:** usa `./build.sh` para un build de publicación versionado; usa `npm run build` solo para compilar.
 
 Luego arranca el servidor de producción con:
 ```bash
@@ -309,14 +309,14 @@ Todo el estado persiste en `data/`.
 
 ### Versionado
 
-Cada `npm run build` real incrementa el campo `version` de `package.json`
-automáticamente (`scripts/bump-version.mjs`, enganchado como primer paso
-del script `build`) - un "cuentakilómetros" en base 10: patch +1 por
-build, con acarreo a minor (y de minor a major) al superar 9 en vez de
-llegar nunca a un segmento de dos dígitos (`0.0.9` -> `0.1.0`, nunca
-`0.0.10`). La versión en ejecución se puede leer en vivo desde
-`GET /api/hydra-info` (`appVersion`), y el historial completo está en
-[`CHANGELOG.md`](CHANGELOG.md).
+Solo los scripts raíz `build*.bat` y `build*.sh` crean un incremento de
+versión de publicación. Llaman una única vez a `bump_manifest_version.py`,
+manteniendo sincronizados `package.json`, `hydra-umc.project.json` y
+[`CHANGELOG.md`](CHANGELOG.md) con la regla de cuentakilómetros en base 10
+(`0.0.9` -> `0.1.0`, nunca `0.0.10`). `npm run build` compila deliberadamente
+sin versionar, por lo que los builds directos y la validación `build-test` no
+pueden cambiar solo la versión de `package.json`. La versión en ejecución se
+lee en vivo desde `GET /api/hydra-info` (`appVersion`).
 
 ## 📊 Monitorización (Opcional)
 

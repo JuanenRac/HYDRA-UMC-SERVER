@@ -88,7 +88,7 @@ HYDRA-UMC-SERVER/
 │   └── REMOTE_API.md    # 完整契约：每个路由、WS 协议、身份验证
 ├── monitoring/           # 可选的 Prometheus + Grafana 技术栈——见 monitoring/README.md
 ├── scripts/
-│   └── bump-version.mjs # 里程表式版本递增，在每次构建前运行
+│   └── bump-version.mjs # 旧版仅原生版本辅助工具；标准构建使用 bump_manifest_version.py
 ├── build.bat / build.sh # 安装依赖 + 生产构建
 ├── dev.bat / dev.sh      # 安装依赖 + 启动开发服务器
 ├── package.json
@@ -147,8 +147,8 @@ npm install
 ### 生产构建
 
 使用 esbuild 将服务器打包为单个可部署文件：
-- **Windows：** 双击 `build.bat`，或运行 `npm run build`
-- **Linux/Mac：** 运行 `./build.sh` 或 `npm run build`
+- **Windows：** 使用 `build.bat` 执行带版本递增的发布构建；仅编译时使用 `npm run build`。
+- **Linux/Mac：** 使用 `./build.sh` 执行带版本递增的发布构建；仅编译时使用 `npm run build`。
 
 随后以生产模式启动服务器：
 ```bash
@@ -159,7 +159,7 @@ npm start
 
 ### 版本管理
 
-每次真正执行 `npm run build` 都会自动递增 `package.json` 自身的 `version`（`scripts/bump-version.mjs`，作为 `build` 脚本的第一步运行）——采用十进制“里程表”方式：每次构建 patch 位 +1，超过 9 后向 minor 位（minor 超过 9 后向 major 位）进位，而不会出现两位数字段（`0.0.9` -> `0.1.0`，而非 `0.0.10`）。当前运行版本可通过 `GET /api/hydra-info`（`appVersion`）实时读取，完整历史记录见 [`CHANGELOG.md`](CHANGELOG.md)。
+只有根目录的 `build*.bat` 与 `build*.sh` 会创建发布版本递增。它们只调用一次 `bump_manifest_version.py`，并依照十进制“里程表”规则（`0.0.9` -> `0.1.0`，绝不产生 `0.0.10`）同步 `package.json`、`hydra-umc.project.json` 与 [`CHANGELOG.md`](CHANGELOG.md)。`npm run build` 被刻意设计为只编译，因此直接构建和 `build-test` 验证都不会只修改 `package.json` 的版本。运行中的版本可通过 `GET /api/hydra-info`（`appVersion`）读取。
 
 ## 📊 监控（可选）
 
