@@ -47,6 +47,11 @@ a change is actually worth summarizing for a human.
   process-start failure cleanly instead of crashing Node on an unhandled
   child-process error.
 
+- Resolved the Voice UI interpreter in the GitHub Actions Bash step and pass
+  its executable path explicitly to the Node relay-contract test. This avoids
+  runner-specific Python PATH differences without weakening the real
+  cross-service check.
+
 - The CM5 systemd unit now runs under the dedicated non-login
   `hydra-umc-server` account supplied by HYDRA-UMC-OS provisioning, rather
   than the obsolete shared administrator identity.
