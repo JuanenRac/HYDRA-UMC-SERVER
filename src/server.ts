@@ -83,6 +83,48 @@ if (JWT_SECRET_IS_DEFAULT) {
 // a bare number of seconds, ...).
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "30d";
 
+// Optional local cognitive boundary. Server is the only component that knows
+// how to reach Voice UI; watches and phones keep using their authenticated
+// Server session and never receive the Voice UI token. Leaving the URL unset
+// keeps the endpoint unavailable rather than silently falling back to an
+// unauthenticated or guessed process.
+const VOICE_UI_URL = (process.env.HYDRA_UMC_VOICE_UI_URL || "").replace(/\/$/, "");
+const VOICE_UI_TOKEN = process.env.HYDRA_UMC_VOICE_UI_TOKEN || "";
+const VOICE_UI_TIMEOUT_MS = Math.min(
+  Math.max(Number(process.env.HYDRA_UMC_VOICE_UI_TIMEOUT_MS) || 4000, 250),
+  10000,
+);
+const VOICE_REQUEST_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+function validateVoiceTurnPayload(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return "voice turn must be a JSON object";
+  }
+  const candidate = payload as Record<string, unknown>;
+  if (candidate.type !== "voice_turn") return "type must be voice_turn";
+  if (typeof candidate.requestId !== "string" || !VOICE_REQUEST_ID.test(candidate.requestId)) {
+    return "requestId must contain 1-64 letters, digits, _ or -";
+  }
+  if (typeof candidate.transcript !== "string" || !candidate.transcript.trim() || candidate.transcript.length > 500) {
+    return "transcript must contain 1-500 characters";
+  }
+  if (typeof candidate.locale !== "string" || candidate.locale.length < 2 || candidate.locale.length > 35) {
+    return "locale must contain 2-35 characters";
+  }
+  return null;
+}
+
+function isAssistantReplyForRequest(payload: unknown, requestId: string): payload is Record<string, unknown> {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  const candidate = payload as Record<string, unknown>;
+  return candidate.type === "assistant_reply" &&
+    candidate.requestId === requestId &&
+    typeof candidate.text === "string" && candidate.text.length > 0 && candidate.text.length <= 600 &&
+    typeof candidate.level === "string" &&
+    typeof candidate.speak === "boolean" &&
+    typeof candidate.requiresConfirmation === "boolean";
+}
+
 // Bonjour/mDNS service for instant discovery
 const bonjour = new Bonjour();
 let mdnsService: any = null;
@@ -364,7 +406,7 @@ function authenticate(req: any, res: any, next: any) {
       // this session to confirm they don't branch on the exact status code
       // today; changing 403->401 here would be a wire-visible contract
       // change needing the same cross-client coordination already declined
-      // for #024/#031 in auditoria_historial.txt). Adding a stable `code`
+      // for the earlier compatibility findings). Adding a stable `code`
       // field is backward compatible instead: a client that only checks
       // the HTTP status sees no difference, while a future client update
       // can branch on TOKEN_EXPIRED ("log in again") vs TOKEN_INVALID
@@ -568,10 +610,8 @@ async function startServer() {
   // See queueSettingsWrite's own header comment for why each robot's
   // recordedPoints array lives in its own file here rather than inline in
   // settings.json - isolates the one field that can legitimately grow to
-  // several MB (a long real trajectory) or, per the 2026-08-19 incident
-  // documented in HYDRA-UMC-STUDIO's own auditoria_historial.txt, balloon
-  // from a client-side bug (a 48x block-duplication was found and traced
-  // there), into its own file whose OWN size/mtime immediately points at
+  // several MB (a long real trajectory) or balloon because of a client-side
+  // duplication bug, into its own file whose own size and modification time immediately point at
   // the culprit robot instead of hiding inside one multi-MB settings.json.
   function getPointsPath(controllerId: unknown, robotId: unknown): string {
     return path.join(dataPath, "points", safeIdSegment(controllerId), `${safeIdSegment(robotId)}.json`);
@@ -689,10 +729,9 @@ async function startServer() {
   // existed) into settings.json (everything else) plus one
   // points/<controllerId>/<robotId>.json per robot (see getPointsPath's
   // own header comment for why: isolating the one field that can
-  // legitimately grow to several MB, or balloon from a client-side bug
-  // the way the 2026-08-19 incident in HYDRA-UMC-STUDIO's own
-  // auditoria_historial.txt did, into its own file whose size/mtime
-  // immediately points at the culprit robot). Every snapshot
+  // legitimately grow to several MB, or balloon from a client-side bug,
+  // into its own file whose size/mtime immediately points at the culprit
+  // robot). Every snapshot
   // (JSON.stringify) happens HERE, synchronously, at enqueue time - not
   // lazily inside the queued callback - for the exact same reason this
   // function always took that care for its one JSON.stringify:
@@ -819,8 +858,8 @@ async function startServer() {
   }
 
   // Serve static data files (like WORKS/, and any custom worksPaths a
-  // robot is configured to use - see mejoras_futuras.txt, those can point
-  // anywhere under data/, not just WORKS/) at the root level - but never
+  // robot is configured to use, which can point anywhere under data/, not
+  // just WORKS/) at the root level - but never
   // any file that holds credentials or otherwise-gated data. Block every
   // such file, not just settings.json/users.json (the original 2-entry
   // list left 2 more sensitive things in data/ silently reachable):
@@ -1056,6 +1095,67 @@ async function startServer() {
     }
   });
 
+  // Authenticated, non-actuating relay for a recognised voice turn. The
+  // phone/watch presents its ordinary Server JWT; the Server alone holds the
+  // local Voice UI token. This is intentionally REST rather than a robot
+  // command route, and it never translates an intent into movement.
+  app.post("/api/voice/turn", authenticate, async (req, res) => {
+    const validationError = validateVoiceTurnPayload(req.body);
+    if (validationError) return res.status(400).json({ error: validationError });
+    if (!VOICE_UI_URL) {
+      return res.status(503).json({ error: "HYDRA-UMC-VOICE-UI is not configured on this Server" });
+    }
+
+    const requestId = req.body.requestId as string;
+    try {
+      const upstream = await fetch(`${VOICE_UI_URL}/v1/voice/turn`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(VOICE_UI_TOKEN ? { authorization: `Bearer ${VOICE_UI_TOKEN}` } : {}),
+        },
+        body: JSON.stringify(req.body),
+        signal: AbortSignal.timeout(VOICE_UI_TIMEOUT_MS),
+      });
+      const reply = await upstream.json().catch(() => null);
+      if (!upstream.ok) {
+        console.warn(`[VOICE] gateway rejected requestId=${requestId} status=${upstream.status}`);
+        return res.status(502).json({ error: "HYDRA-UMC-VOICE-UI rejected the voice turn" });
+      }
+      if (!isAssistantReplyForRequest(reply, requestId)) {
+        console.error(`[VOICE] gateway contract failure requestId=${requestId}`);
+        return res.status(502).json({ error: "HYDRA-UMC-VOICE-UI returned an invalid assistant reply" });
+      }
+      // Do not log the transcript or reply text: both can contain operator
+      // information. The correlation ID and safety fields are sufficient for
+      // operational diagnosis.
+      industrialLog(`[VOICE] requestId=${requestId} level=${reply.level} confirmation=${reply.requiresConfirmation}`);
+      res.set("Cache-Control", "no-store").json(reply);
+    } catch (error) {
+      const timedOut = error instanceof DOMException && error.name === "TimeoutError";
+      console.error(`[VOICE] gateway unavailable requestId=${requestId} reason=${timedOut ? "timeout" : "connection"}`);
+      res.status(503).json({ error: timedOut ? "HYDRA-UMC-VOICE-UI timed out" : "HYDRA-UMC-VOICE-UI is unavailable" });
+    }
+  });
+
+  // Small, authenticated status payload shared by phone/watch surfaces. It
+  // exposes health only, never full settings, usernames or machine paths.
+  app.get("/api/watch/system-status", authenticate, async (_req, res) => {
+    const metrics = await getSystemMetrics();
+    const level = metrics.temp_is_real && (metrics.temp ?? 0) >= 80
+      ? "CRITICAL"
+      : metrics.temp_is_real && (metrics.temp ?? 0) >= 70
+        ? "WARNING"
+        : "NOMINAL";
+    res.set("Cache-Control", "no-store").json({
+      type: "system_status",
+      headline: level === "NOMINAL" ? "HYDRA-UMC Server online" : "HYDRA-UMC Server temperature warning",
+      detail: `CPU load ${metrics.cpu_load} · memory ${metrics.memory_usage}% · uptime ${metrics.uptime}s`,
+      level,
+      speak: level !== "NOMINAL",
+    });
+  });
+
   // Direct Atomic API for Industrial Control
   app.post("/api/robot/:id/command", authenticate, async (req, res) => {
     const robotId = parseInt(req.params.id);
@@ -1077,6 +1177,13 @@ async function startServer() {
 
     // Identify all robots that should receive this command (Self + Combined)
     const affectedIds = [robotId, ...(targetRobot.combinedWith || [])];
+    // Resolve pause once from the command target. Applying `!isPaused` to
+    // each member separately lets a stale combined pair (for example A1/A2)
+    // end in opposite states; every client must receive one desired group
+    // state instead. Older clients that send no parameter retain toggle UX.
+    const requestedPause = typeof params?.paused === "boolean"
+      ? params.paused
+      : !Boolean(targetRobot.playbackState?.isPaused ?? targetRobot.playbackState?.paused);
 
     // One entry per affected robot this command actually mutated - built
     // FROM the same validated switch/case below as it runs, never from a
@@ -1110,17 +1217,16 @@ async function startServer() {
               // being replayed, could show a stale "completed successfully"
               // notification/badge again once this patch's own isFinished
               // (silently still true) lands.
-              robot.playbackState = { ...robot.playbackState, isPlaying: false, activeStep: -1, isPaused: false, paused: false, isFinished: false, finished: false };
+              robot.playbackState = { ...robot.playbackState, isPlaying: false, playing: false, activeStep: -1, isPaused: false, paused: false, requestPause: false, requestStop: true, isFinished: false, finished: false };
               patch = { playbackState: robot.playbackState };
               break;
             case "play":
               // See "stop" case's own comment just above - same gap, same fix.
-              robot.playbackState = { ...robot.playbackState, isPlaying: true, activeStep: 0, isPaused: false, paused: false, isFinished: false, finished: false };
+              robot.playbackState = { ...robot.playbackState, isPlaying: true, playing: true, activeStep: 0, isPaused: false, paused: false, requestPause: false, requestStop: false, isFinished: false, finished: false };
               patch = { playbackState: robot.playbackState };
               break;
             case "pause":
-              const newPauseState = !robot.playbackState.isPaused;
-              robot.playbackState = { ...robot.playbackState, isPaused: newPauseState, paused: newPauseState };
+              robot.playbackState = { ...robot.playbackState, isPlaying: true, playing: true, isPaused: requestedPause, paused: requestedPause, requestPause: requestedPause, requestStop: false, isFinished: false, finished: false };
               patch = { playbackState: robot.playbackState };
               break;
             case "jog": {
@@ -1260,7 +1366,12 @@ async function startServer() {
             case "vision":
               if (typeof params?.enabled === "boolean") {
                 robot.visionEnabled = params.enabled;
-                patch = { visionEnabled: robot.visionEnabled };
+                if (robot.camera && typeof robot.camera === "object") {
+                  robot.camera.connected = params.enabled;
+                }
+                patch = robot.camera && typeof robot.camera === "object"
+                  ? { visionEnabled: robot.visionEnabled, camera: robot.camera }
+                  : { visionEnabled: robot.visionEnabled };
                 const cam = (controller.cameras || []).find((c: any) => c.assignedRobotId === robot.id || c.id === robot.id);
                 if (cam) {
                   cam.connected = params.enabled;
@@ -1438,7 +1549,7 @@ async function startServer() {
       // didn't catch it. Blocking the 3 reserved filenames regardless of
       // which folder they'd land in closes this without restricting the
       // legitimate use case (arbitrary folderPath values under dataPath,
-      // needed for settings.worksPaths - see mejoras_futuras.txt point 6).
+      // including settings.worksPaths).
       if (RESERVED_DATA_FILENAMES.has(safeFileName.toLowerCase())) {
         return res.status(403).json({ error: "Access denied: reserved file name" });
       }

@@ -16,7 +16,7 @@
   "family": "Core Backend & Clients",
   "parent": null,
   "build": "npm install && npm run build.",
-  "notes": "The real headless backend every control client (STUDIO, SUITE, DSI, the mobile apps) actually talks to - the integration parent of this whole family.",
+  "notes": "The real headless backend every control client (STUDIO, SUITE, DSI, the mobile apps) actually talks to. It now relays bounded authenticated voice turns to a loopback HYDRA-UMC-VOICE-UI gateway while retaining the gateway token server-side; voice never becomes a direct robot command.",
   "native_version": {
     "file": "package.json",
     "pattern": "\"version\":\\s*\"(\\d+)\\.(\\d+)\\.(\\d+)\""

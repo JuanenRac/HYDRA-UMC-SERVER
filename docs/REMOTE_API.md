@@ -254,7 +254,27 @@ UI's own Clients/Logs/Config screens, not the main Dashboard.
   on exit (systemd `Restart=always`, pm2, Docker `--restart`) - under
   `npm run dev` this just stops the server.
 
-## 2f. Monitoring, camera & file upload
+## 2f. Voice relay and Watch health cards
+
+Both endpoints require a normal bearer token. They are deliberately separate
+from `/api/robot/:id/command`: voice may ask for an action but it can never
+turn into an actuator call on this route.
+
+- `POST /api/voice/turn` accepts a bounded `voice_turn` object and relays it
+  to the locally configured HYDRA-UMC-VOICE-UI gateway. The Server owns the
+  Voice UI token, so Android and Watch clients never receive it. It returns a
+  validated `assistant_reply`, or `503` when Voice UI is not configured or
+  unavailable. A motion-related reply has `requiresConfirmation: true`.
+- `GET /api/watch/system-status` returns a small authenticated
+  `system_status` health card with CPU, memory and uptime. It intentionally
+  excludes full settings, credentials and filesystem paths.
+
+The Server reads `HYDRA_UMC_VOICE_UI_URL`,
+`HYDRA_UMC_VOICE_UI_TOKEN` and the bounded timeout
+`HYDRA_UMC_VOICE_UI_TIMEOUT_MS` only from its runtime environment. In a CM5
+deployment, keep Voice UI on `127.0.0.1:8090` and do not expose its port.
+
+## 2g. Monitoring, camera & file upload
 
 - `GET /api/system/metrics` -> `{ "cpu_load", "memory_usage", "temp"
   (number or `null`), "temp_is_real" (bool), "uptime", "network": {
