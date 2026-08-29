@@ -30,6 +30,13 @@ public
 data/users.json
 data/server-config.json
 
+# Atomic-write leftovers from queueSettingsWrite's own per-robot points
+# files (data/points/<controllerId>/<robotId>.json.<pid>.<timestamp>.tmp) -
+# only ever exist if a write was interrupted mid-rename, never meant to be
+# committed. Found tracked in git by accident (15 stray files, none newer
+# than a real write) while auditing this session's own test-session changes.
+*.tmp
+
 # Local secrets (JWT_SECRET, etc.) - see .env.example for the template
 .env
 .env.local
