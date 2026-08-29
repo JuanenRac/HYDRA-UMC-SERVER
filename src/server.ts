@@ -331,6 +331,72 @@ async function getSystemMetrics(): Promise<{
 // wsClients to exist.
 setSystemMetricsSource(getSystemMetrics);
 
+// Real, honest V0 - NOT a live health check of 49 running microservices
+// (almost none of the wider ecosystem's repos are actually deployed as
+// live network services anywhere yet, this machine included - they're
+// source repos under active development). What genuinely exists right
+// now and IS real: every HYDRA-UMC/URTC repo self-describes itself in its
+// own hydra-umc.project.json (schema_version/name/role/stack/maturity/
+// family/deployment_target/version - see the dashboard/updater tools'
+// own dynamic-manifest-discovery pattern, which this mirrors server-side
+// instead of duplicating a static catalog a third time). This scans this
+// process's own parent directory (matches how every real
+// HYDRA-UMC-SERVER instance is actually launched today - from inside its
+// own checkout, sibling to every other repo on the SAME dev/staging
+// machine) for that same manifest file in each immediate subdirectory,
+// server carries this work per the ecosystem's own standing principle
+// (clients like Android/STUDIO stay thin frontends of whatever server
+// exposes, not scanners of their own). Deliberately gives up cleanly
+// (available: false, not a thrown error) when siblings aren't there to
+// find - a real future CM5 deployment won't have 49 other repos checked
+// out next to it, and this must never crash startup or a real request
+// over that.
+function getEcosystemStatus(): {
+  available: boolean;
+  scannedAt: string;
+  projects: Array<{
+    name: string;
+    role: string | null;
+    stack: string | null;
+    maturity: string | null;
+    family: string | null;
+    version: string | null;
+    deploymentTarget: string | null;
+  }>;
+} {
+  const scannedAt = new Date().toISOString();
+  try {
+    const parentDir = path.resolve(process.cwd(), "..");
+    const entries = fs.readdirSync(parentDir, { withFileTypes: true });
+    const projects: ReturnType<typeof getEcosystemStatus>["projects"] = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const manifestPath = path.join(parentDir, entry.name, "hydra-umc.project.json");
+      if (!fs.existsSync(manifestPath)) continue;
+      try {
+        const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+        projects.push({
+          name: typeof manifest.name === "string" ? manifest.name : entry.name,
+          role: typeof manifest.role === "string" ? manifest.role : null,
+          stack: typeof manifest.stack === "string" ? manifest.stack : null,
+          maturity: typeof manifest.maturity === "string" ? manifest.maturity : null,
+          family: typeof manifest.family === "string" ? manifest.family : null,
+          version: typeof manifest.version === "string" ? manifest.version : null,
+          deploymentTarget: typeof manifest.deployment_target === "string" ? manifest.deployment_target : null,
+        });
+      } catch {
+        // Malformed/unreadable manifest for this one repo - skip it, not
+        // the whole scan (one repo mid-edit shouldn't hide every other
+        // one's real status).
+      }
+    }
+    projects.sort((a, b) => (a.family || "").localeCompare(b.family || "") || a.name.localeCompare(b.name));
+    return { available: true, scannedAt, projects };
+  } catch {
+    return { available: false, scannedAt, projects: [] };
+  }
+}
+
 // The real wire shape POST/GET /api/settings and the WS "settings"/"delta"
 // payload all use is { settings: SystemSettings, controllers, activeControllerId }
 // (see docs/REMOTE_API.md section 2c, src/store.tsx's own POST body) - every
@@ -1577,6 +1643,15 @@ async function startServer() {
   // route is just that function's own JSON wire shape, unchanged.
   app.get("/api/system/metrics", async (req, res) => {
     res.json(await getSystemMetrics());
+  });
+
+  // Real, honest V0 of ecosystem-wide status - see getEcosystemStatus()'s
+  // own header comment for what this actually is and isn't. Same trust
+  // tier as /api/system/metrics right above (read-only host introspection,
+  // no auth) - this exposes local directory names and per-project manifest
+  // fields, nothing about running robots/credentials.
+  app.get("/api/ecosystem/status", (req, res) => {
+    res.json(getEcosystemStatus());
   });
 
   // Prometheus scrape endpoint - text exposition format via `prom-client`

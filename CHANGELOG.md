@@ -93,6 +93,27 @@ a change is actually worth summarizing for a human.
 - Made both temporary server-contract verifiers retry their cleanup on Windows
   so an already-exited `tsx` handle cannot turn a successful test into EBUSY.
 
+## [0.2.2]
+
+### Added
+
+- Real, honest V0 ecosystem-status endpoint: `GET /api/ecosystem/status`.
+  NOT a live health check of every ecosystem project as a running network
+  service (almost none of the wider ecosystem is actually deployed
+  anywhere yet) - scans this process's own parent directory (matching how
+  a real HYDRA-UMC-SERVER instance is actually launched today, from
+  inside its own checkout sibling to every other repo on the same
+  dev/staging machine) for each sibling's own `hydra-umc.project.json`
+  self-description, mirroring the same dynamic-manifest-discovery pattern
+  the dashboard/updater tools already use rather than duplicating a static
+  catalog a third time. Gives up cleanly (`available: false`, never an
+  error) when siblings aren't there to find - a real CM5 deployment won't
+  have 49 other repos checked out next to it, and this must never affect
+  startup or a real request over that. Same trust tier as the existing
+  `/api/system/metrics` (read-only host introspection, no auth). Built
+  for HYDRA-UMC-ANDROID-CONTROL's own new ecosystem-status tab, but
+  usable by any client.
+
 ## [0.2.1]
 
 - Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
