@@ -857,6 +857,146 @@ async function startServer() {
     }
   }
 
+  // V0 server-authoritative playback engine (2026-08-29): linear
+  // point-to-point replay of a robot's own recordedPoints, straight from
+  // each point's OWN stored j1..j6/pos (real values captured live at
+  // record time, not re-derived) - deliberately NOT the full velocity/
+  // acceleration interpolation curve HYDRA-UMC-STUDIO's own
+  // RobotDetail.tsx (playRobotTrajectory) still uses for its own render,
+  // and deliberately not running any inverse kinematics itself. Exists so
+  // play/pause/stop physically move a robot from ANY client (Android,
+  // iOS, DSI, SUITE) without depending on some STUDIO browser tab being
+  // open with that exact robot's panel mounted and running its own local
+  // interpolation loop - see docs this session's own SONNET tracking
+  // (HYDRA-UMC-SERVER/mejoras_futuras.txt) for the full investigation and
+  // the reasoning behind keeping this intentionally small.
+  //
+  // The server is now the SINGLE source of truth for playback motion:
+  // every client (STUDIO included, see RobotDetail.tsx's own
+  // playRobotTrajectory comment) only ever renders robot.pos/joints as
+  // they arrive over the WebSocket, never drives them locally - avoiding
+  // two writers (this engine and a browser tab's own loop) racing to set
+  // the same robot's position, which would be a real problem on physical
+  // hardware, not just a UI glitch.
+  const playbackTimers = new Map<number, NodeJS.Timeout>();
+  const PLAYBACK_BASE_INTERVAL_MS = 600;
+
+  function findRobotById(robotId: number): any {
+    let found: any = null;
+    lastKnownSettings.controllers?.forEach((c: any) => {
+      const r = c.robots?.find((r: any) => r.id === robotId);
+      if (r) found = r;
+    });
+    return found;
+  }
+
+  function findControllerIdForRobot(robotId: number): string | null {
+    let found: string | null = null;
+    lastKnownSettings.controllers?.forEach((c: any) => {
+      if (c.robots?.some((r: any) => r.id === robotId)) found = c.id;
+    });
+    return found;
+  }
+
+  function stopServerPlayback(robotId: number) {
+    const timer = playbackTimers.get(robotId);
+    if (timer) {
+      clearInterval(timer);
+      playbackTimers.delete(robotId);
+    }
+  }
+
+  // Called right after the 'play' case above sets robot.playbackState -
+  // NOT from inside that forEach's own patch (this needs its own tick
+  // loop, not a one-shot patch), but for the SAME robot.id each iteration
+  // already covers - so calling this per-robot inside that same forEach
+  // (self + every combinedWith sibling) is exactly the right fan-out,
+  // reusing affectedIds's own existing combined-group handling rather
+  // than duplicating it here.
+  function startServerPlayback(robotId: number) {
+    stopServerPlayback(robotId); // clean restart if a play was already running
+
+    const robot = findRobotById(robotId);
+    const controllerId = findControllerIdForRobot(robotId);
+    if (!robot || !controllerId) return;
+
+    if (!Array.isArray(robot.recordedPoints) || robot.recordedPoints.length === 0) {
+      // Nothing to play - reflect that immediately instead of leaving
+      // every client's UI on a "playing" state forever. Mutates the
+      // EXISTING playbackState object's own fields rather than replacing
+      // it with a new one (like every other case here does): the 'play'
+      // case just above already captured `patch = { playbackState:
+      // robot.playbackState }` as a reference to this same object before
+      // calling this function, and the caller's own broadcastRobotDelta
+      // still fires once, synchronously after this returns - a second,
+      // separate broadcast from here (with a replaced object `patch`
+      // would no longer even point at) would race it and could arrive in
+      // either order.
+      robot.playbackState.isPlaying = false;
+      robot.playbackState.playing = false;
+      robot.playbackState.activeStep = -1;
+      return;
+    }
+
+    // Scales the same direction as STUDIO's own baseVelocity (higher
+    // speed% = shorter interval = faster playback) without attempting
+    // its real acceleration curve - a fixed per-point interval only.
+    const speed = Number(robot.playbackState?.speed) || 100;
+    const intervalMs = Math.max(50, PLAYBACK_BASE_INTERVAL_MS * (100 / speed));
+
+    const timer = setInterval(() => {
+      const r = findRobotById(robotId);
+      const cId = findControllerIdForRobot(robotId);
+      if (!r || !cId) {
+        stopServerPlayback(robotId);
+        return;
+      }
+
+      const pb = r.playbackState || {};
+      if (!pb.isPlaying || pb.requestStop) {
+        stopServerPlayback(robotId);
+        return;
+      }
+      if (pb.isPaused || pb.requestPause) return; // keep the timer alive, just don't advance this tick
+
+      const step = typeof pb.activeStep === "number" && pb.activeStep >= 0 ? pb.activeStep : 0;
+      const points = r.recordedPoints;
+      if (!Array.isArray(points) || step >= points.length) {
+        // Natural completion - isFinished used to be set ONLY by a
+        // browser client's own playback loop reaching the end (see
+        // RobotDetail.tsx's own isFinished comment); this engine is now
+        // an equally real source of that same natural-completion signal.
+        r.playbackState = { ...pb, isPlaying: false, playing: false, isFinished: true, finished: true, activeStep: -1 };
+        queueSettingsWrite(lastKnownSettings);
+        broadcastRobotDelta([{ controllerId: cId, robotId, patch: { playbackState: r.playbackState } }], lastKnownSettings);
+        stopServerPlayback(robotId);
+        return;
+      }
+
+      const pt = points[step];
+      const patch: Record<string, unknown> = {};
+      if (typeof pt.j1 === "number") {
+        r.joints = { j1: pt.j1, j2: pt.j2, j3: pt.j3, j4: pt.j4, j5: pt.j5, j6: pt.j6 };
+        patch.joints = r.joints;
+      }
+      if (typeof pt.x === "number") {
+        r.pos = {
+          ...r.pos,
+          x: pt.x, y: pt.y, z: pt.z,
+          a: pt.a ?? r.pos?.a, b: pt.b ?? r.pos?.b, c: pt.c ?? r.pos?.c,
+        };
+        patch.pos = r.pos;
+      }
+      r.playbackState = { ...pb, activeStep: step + 1 };
+      patch.playbackState = r.playbackState;
+
+      queueSettingsWrite(lastKnownSettings);
+      broadcastRobotDelta([{ controllerId: cId, robotId, patch }], lastKnownSettings);
+    }, intervalMs);
+
+    playbackTimers.set(robotId, timer);
+  }
+
   // Serve static data files (like WORKS/, and any custom worksPaths a
   // robot is configured to use, which can point anywhere under data/, not
   // just WORKS/) at the root level - but never
@@ -1219,11 +1359,20 @@ async function startServer() {
               // (silently still true) lands.
               robot.playbackState = { ...robot.playbackState, isPlaying: false, playing: false, activeStep: -1, isPaused: false, paused: false, requestPause: false, requestStop: true, isFinished: false, finished: false };
               patch = { playbackState: robot.playbackState };
+              // Stops this robot's own V0 server-side playback timer (see
+              // startServerPlayback's own header comment) immediately
+              // rather than waiting for its next tick to notice
+              // requestStop - a manual stop should feel instant.
+              stopServerPlayback(robot.id);
               break;
             case "play":
               // See "stop" case's own comment just above - same gap, same fix.
               robot.playbackState = { ...robot.playbackState, isPlaying: true, playing: true, activeStep: 0, isPaused: false, paused: false, requestPause: false, requestStop: false, isFinished: false, finished: false };
               patch = { playbackState: robot.playbackState };
+              // Starts this robot's own V0 server-side playback timer -
+              // see startServerPlayback's own header comment for why this
+              // exists and what it deliberately doesn't attempt yet.
+              startServerPlayback(robot.id);
               break;
             case "pause":
               robot.playbackState = { ...robot.playbackState, isPlaying: true, playing: true, isPaused: requestedPause, paused: requestedPause, requestPause: requestedPause, requestStop: false, isFinished: false, finished: false };
