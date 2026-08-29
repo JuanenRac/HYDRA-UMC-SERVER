@@ -27,6 +27,7 @@ import path from "path";
 import fs from "fs";
 import http from "http";
 import https from "https";
+import net from "net";
 import os from "os";
 import { execFile } from "child_process";
 import { promisify } from "util";
@@ -331,50 +332,131 @@ async function getSystemMetrics(): Promise<{
 // wsClients to exist.
 setSystemMetricsSource(getSystemMetrics);
 
-// Real, honest V0 - NOT a live health check of 49 running microservices
-// (almost none of the wider ecosystem's repos are actually deployed as
-// live network services anywhere yet, this machine included - they're
-// source repos under active development). What genuinely exists right
-// now and IS real: every HYDRA-UMC/URTC repo self-describes itself in its
-// own hydra-umc.project.json (schema_version/name/role/stack/maturity/
-// family/deployment_target/version - see the dashboard/updater tools'
-// own dynamic-manifest-discovery pattern, which this mirrors server-side
-// instead of duplicating a static catalog a third time). This scans this
-// process's own parent directory (matches how every real
-// HYDRA-UMC-SERVER instance is actually launched today - from inside its
-// own checkout, sibling to every other repo on the SAME dev/staging
-// machine) for that same manifest file in each immediate subdirectory,
-// server carries this work per the ecosystem's own standing principle
-// (clients like Android/STUDIO stay thin frontends of whatever server
-// exposes, not scanners of their own). Deliberately gives up cleanly
-// (available: false, not a thrown error) when siblings aren't there to
-// find - a real future CM5 deployment won't have 49 other repos checked
-// out next to it, and this must never crash startup or a real request
-// over that.
-function getEcosystemStatus(): {
+// Real, honest V0 - most of the wider ecosystem's repos are source
+// checkouts under active development, not deployed network services, so
+// this can't and doesn't pretend every one of them has a live green/red
+// bulb. What genuinely exists: every HYDRA-UMC/URTC repo self-describes
+// itself in its own hydra-umc.project.json (schema_version/name/role/
+// stack/maturity/family/deployment_target/version - see the dashboard/
+// updater tools' own dynamic-manifest-discovery pattern, which this
+// mirrors server-side instead of duplicating a static catalog a third
+// time). This scans this process's own parent directory (matches how
+// every real HYDRA-UMC-SERVER instance is actually launched today - from
+// inside its own checkout, sibling to every other repo on the SAME
+// dev/staging machine) for that same manifest file in each immediate
+// subdirectory, server carries this work per the ecosystem's own
+// standing principle (clients like Android/STUDIO stay thin frontends of
+// whatever server exposes, not scanners of their own). Deliberately
+// gives up cleanly (available: false, not a thrown error) when siblings
+// aren't there to find - a real future CM5 deployment won't have 49
+// other repos checked out next to it, and this must never crash startup
+// or a real request over that.
+//
+// On top of that static scan, a repo whose manifest opts in with a real
+// `service` object ({port, health_path?}) gets a REAL live probe (see
+// probeService() below) - a genuine TCP connect, or an HTTP GET expecting
+// 2xx when health_path is declared - run concurrently against every
+// declared sibling on this same host. `live` is `null` for every project
+// that doesn't declare one (a library/CLI/firmware/UI - "not applicable",
+// never shown as down for something it was never meant to do), and a
+// real `true`/`false` for one that does. This is the real, per-service
+// "green bulb / red bulb" clients like the Android app's Ecosystem tab
+// read - not just a maturity label.
+// Real per-service liveness probe - the "Integración real entre proyectos"
+// gap this whole endpoint exists to close: a manifest saying "maturity:
+// established" is a claim, not a fact about whether that process is
+// actually up right now. A repo only gets probed if its own manifest
+// opts in with a real `service` object ({port, health_path?}) - see
+// HYDRA-UMC-UPDATER's project_manifest.py for the schema this reads.
+// `health_path` present means a real HTTP GET expecting 2xx; absent
+// means a bare TCP connect is enough (a raw protocol like MQTT/OPC-UA
+// that doesn't speak HTTP). Every sibling is assumed to run on this same
+// host (127.0.0.1) - true for every real deployment today (one dev
+// machine, or eventually one CM5), and the same assumption this
+// endpoint's own manifest-scan already makes by only looking at the
+// immediate parent directory.
+const SERVICE_PROBE_TIMEOUT_MS = 800;
+const SERVICE_PROBE_HOST = "127.0.0.1";
+
+function probeTcp(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.createConnection({ host: SERVICE_PROBE_HOST, port });
+    const timer = setTimeout(() => {
+      socket.destroy();
+      resolve(false);
+    }, SERVICE_PROBE_TIMEOUT_MS);
+    socket.once("connect", () => {
+      clearTimeout(timer);
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once("error", () => {
+      clearTimeout(timer);
+      resolve(false);
+    });
+  });
+}
+
+function probeHttp(port: number, healthPath: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = http.get(
+      { host: SERVICE_PROBE_HOST, port, path: healthPath, timeout: SERVICE_PROBE_TIMEOUT_MS },
+      (res) => {
+        const ok = typeof res.statusCode === "number" && res.statusCode >= 200 && res.statusCode < 300;
+        res.resume(); // drain so the socket can close cleanly, we don't need the body
+        resolve(ok);
+      }
+    );
+    req.on("timeout", () => req.destroy());
+    req.on("error", () => resolve(false));
+  });
+}
+
+function probeService(port: number, healthPath: string | null): Promise<boolean> {
+  return healthPath ? probeHttp(port, healthPath) : probeTcp(port);
+}
+
+interface EcosystemProjectStatus {
+  name: string;
+  role: string | null;
+  stack: string | null;
+  maturity: string | null;
+  family: string | null;
+  version: string | null;
+  deploymentTarget: string | null;
+  servicePort: number | null;
+  serviceHealthPath: string | null;
+  // null = this project doesn't declare a service (a library/CLI/
+  // firmware/UI - "not applicable", never shown as down). true/false =
+  // a real probe actually ran and this is its result.
+  live: boolean | null;
+}
+
+async function getEcosystemStatus(): Promise<{
   available: boolean;
   scannedAt: string;
-  projects: Array<{
-    name: string;
-    role: string | null;
-    stack: string | null;
-    maturity: string | null;
-    family: string | null;
-    version: string | null;
-    deploymentTarget: string | null;
-  }>;
-} {
+  projects: EcosystemProjectStatus[];
+}> {
   const scannedAt = new Date().toISOString();
   try {
     const parentDir = path.resolve(process.cwd(), "..");
     const entries = fs.readdirSync(parentDir, { withFileTypes: true });
-    const projects: ReturnType<typeof getEcosystemStatus>["projects"] = [];
+    const projects: EcosystemProjectStatus[] = [];
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const manifestPath = path.join(parentDir, entry.name, "hydra-umc.project.json");
       if (!fs.existsSync(manifestPath)) continue;
       try {
         const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+        const service = manifest.service;
+        const servicePort =
+          service && typeof service === "object" && Number.isInteger(service.port) && service.port > 0 && service.port <= 65535
+            ? service.port
+            : null;
+        const serviceHealthPath =
+          servicePort !== null && typeof service.health_path === "string" && service.health_path.startsWith("/")
+            ? service.health_path
+            : null;
         projects.push({
           name: typeof manifest.name === "string" ? manifest.name : entry.name,
           role: typeof manifest.role === "string" ? manifest.role : null,
@@ -383,6 +465,9 @@ function getEcosystemStatus(): {
           family: typeof manifest.family === "string" ? manifest.family : null,
           version: typeof manifest.version === "string" ? manifest.version : null,
           deploymentTarget: typeof manifest.deployment_target === "string" ? manifest.deployment_target : null,
+          servicePort,
+          serviceHealthPath,
+          live: null, // filled in below, after every manifest is read - a probe is real I/O, keep it out of this synchronous scan
         });
       } catch {
         // Malformed/unreadable manifest for this one repo - skip it, not
@@ -390,6 +475,14 @@ function getEcosystemStatus(): {
         // one's real status).
       }
     }
+    // Real probes run concurrently (not one-by-one) so N declared services
+    // cost one SERVICE_PROBE_TIMEOUT_MS window total, not N of them.
+    await Promise.all(
+      projects.map(async (project) => {
+        if (project.servicePort === null) return;
+        project.live = await probeService(project.servicePort, project.serviceHealthPath);
+      })
+    );
     projects.sort((a, b) => (a.family || "").localeCompare(b.family || "") || a.name.localeCompare(b.name));
     return { available: true, scannedAt, projects };
   } catch {
@@ -1650,8 +1743,8 @@ async function startServer() {
   // tier as /api/system/metrics right above (read-only host introspection,
   // no auth) - this exposes local directory names and per-project manifest
   // fields, nothing about running robots/credentials.
-  app.get("/api/ecosystem/status", (req, res) => {
-    res.json(getEcosystemStatus());
+  app.get("/api/ecosystem/status", async (req, res) => {
+    res.json(await getEcosystemStatus());
   });
 
   // Prometheus scrape endpoint - text exposition format via `prom-client`

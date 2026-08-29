@@ -93,6 +93,33 @@ a change is actually worth summarizing for a human.
 - Made both temporary server-contract verifiers retry their cleanup on Windows
   so an already-exited `tsx` handle cannot turn a successful test into EBUSY.
 
+## [0.2.3] - Real per-service liveness probing on GET /api/ecosystem/status
+
+### Added
+
+- **A real live probe per declared sibling service.** A repo whose
+  `hydra-umc.project.json` opts in with a new, optional `service` object
+  (`{port, health_path?}` - see HYDRA-UMC-UPDATER's schema) now gets a
+  genuine TCP connect (or an HTTP GET expecting 2xx, when `health_path`
+  is declared) run concurrently against every declared sibling on this
+  same host. Each project in the response now carries `servicePort`,
+  `serviceHealthPath`, and `live` (`true`/`false` for a real probe
+  result, `null` for a project that never declares a service - a
+  library/CLI/firmware/UI, "not applicable", never shown as down for
+  something it was never meant to do). This is the real "Integración
+  real entre proyectos" gap this endpoint previously only described in
+  its own header comment as future work: a maturity label is a claim, a
+  live probe is a fact.
+- This server's own manifest now declares `service: {port: 3000,
+  health_path: "/api/system/metrics"}`, so it shows up correctly in its
+  own scan the same way every other opted-in sibling does.
+- New real contract test (`tools/verify_ecosystem_status_contract.mjs`,
+  wired into `npm test`): builds an isolated fake workspace with a real
+  listening fixture service, a reserved-then-closed port, and a
+  service-less library fixture, starts a real Server instance against
+  it, and asserts the live HTTP response reports `true`/`false`/`null`
+  correctly for each. Full suite: 6/6 contract scripts passing.
+
 ## [0.2.2]
 
 ### Added
