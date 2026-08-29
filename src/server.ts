@@ -857,19 +857,17 @@ async function startServer() {
     }
   }
 
-  // V0 server-authoritative playback engine (2026-08-29): linear
-  // point-to-point replay of a robot's own recordedPoints, straight from
-  // each point's OWN stored j1..j6/pos (real values captured live at
-  // record time, not re-derived) - deliberately NOT the full velocity/
-  // acceleration interpolation curve HYDRA-UMC-STUDIO's own
-  // RobotDetail.tsx (playRobotTrajectory) still uses for its own render,
-  // and deliberately not running any inverse kinematics itself. Exists so
-  // play/pause/stop physically move a robot from ANY client (Android,
-  // iOS, DSI, SUITE) without depending on some STUDIO browser tab being
-  // open with that exact robot's panel mounted and running its own local
-  // interpolation loop - see docs this session's own SONNET tracking
-  // (HYDRA-UMC-SERVER/mejoras_futuras.txt) for the full investigation and
-  // the reasoning behind keeping this intentionally small.
+  // V0 server-authoritative playback engine: linear point-to-point replay
+  // of a robot's own recordedPoints, straight from each point's OWN
+  // stored j1..j6/pos (real values captured live at record time, not
+  // re-derived) - deliberately NOT the full velocity/acceleration
+  // interpolation curve HYDRA-UMC-STUDIO's own RobotDetail.tsx used to
+  // render playback with (that client-side loop is now removed - it
+  // rendered whatever this engine broadcasts instead, like every other
+  // client already did), and deliberately not running any inverse
+  // kinematics itself. Exists so play/pause/stop physically move a robot
+  // from ANY client (Android, iOS, DSI, SUITE) without depending on some
+  // STUDIO browser tab being open with that exact robot's panel mounted.
   //
   // The server is now the SINGLE source of truth for playback motion:
   // every client (STUDIO included, see RobotDetail.tsx's own
