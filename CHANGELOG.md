@@ -39,6 +39,30 @@ a change is actually worth summarizing for a human.
 
 ## [Unreleased]
 
+### Added
+
+- **V0 server-authoritative playback engine.** `play`/`pause`/`stop` used
+  to only ever set a `playbackState` flag - the actual recorded-trajectory
+  motion was entirely driven by whichever HYDRA-UMC STUDIO browser tab
+  happened to have that robot's panel open, polling that same flag
+  locally (`RobotDetail.tsx`'s own `playRobotTrajectory`). If no such tab
+  was open - a common real case when only Android/iOS/DSI/SUITE are
+  controlling a robot - pause/play/stop updated state but physically
+  moved nothing. The server now linearly replays a robot's own
+  `recordedPoints` itself (each point's own already-recorded `j1..j6`/
+  `pos`, not a re-derived inverse-kinematics guess, and not yet the full
+  velocity/acceleration interpolation curve STUDIO's own client-side
+  player still renders with - see this session's own investigation notes
+  for the deliberately-scoped V0 boundary), broadcasting a real delta on
+  every step so play/pause/stop work from any client without depending on
+  a STUDIO tab being open anywhere. New
+  `tools/verify_server_playback_contract.mjs` proves this against the
+  real API in an isolated temp data directory: a robot with no recorded
+  points doesn't get stuck "playing", play physically advances pos/joints
+  through real recorded values, pause halts advancement and resume
+  continues it, reaching the end sets `isFinished`, and stop halts it for
+  good.
+
 ### Fixed
 
 - Made the real Voice UI relay contract test use the `python` command
