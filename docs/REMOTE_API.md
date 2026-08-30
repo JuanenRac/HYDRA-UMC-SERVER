@@ -314,6 +314,39 @@ deployment, keep Voice UI on `127.0.0.1:8091` and do not expose its port.
   basename; `500` with `{ "error": <message> }` on an unexpected write
   failure.
 
+## 2h. Hardware bridge: real CM5<->STM32H745 SPI-OTA relay
+
+Relays to the local `spi_bridge` HTTP service
+(`HYDRA-UMC/src/cm5_host/spi_bridge/`) - the real SPI1 + `HYDRA_DATA_READY`
+GPIO link to the STM32H745 "Kinematic Brain", the same link
+`HYDRA-UMC-STUDIO`'s Flasher/Tester read once `settings.canOta.transport
+=== 'hardware'` (previously always `'mock'`). Both routes answer `503`
+when `HYDRA_UMC_SPI_BRIDGE_URL` is unset, the same "never a guessed
+process" posture as the Voice UI relay above.
+
+- `GET /api/hardware/canota/version?tier=&slot=` - any authenticated
+  token. Relays to `spi_bridge`'s own `GET /version`, returning
+  `{ "online", "is_bootloader", "hardware_id", "firmware_major",
+  "firmware_minor" }`.
+- `POST /api/hardware/canota/flash?tier=&slot=&hardware_id=&version_major=&version_minor=`
+  - **`admin` only** (unlike the read-only version query above - writing
+  firmware is exactly the kind of action every other bridge in this
+  ecosystem gates more tightly than a read). Body: raw firmware bytes,
+  `Content-Type: application/octet-stream`. The real, per-page flash
+  progress is **not** returned in this HTTP response - it is broadcast
+  live to every connected WebSocket client as `{ "type":
+  "canota_progress", "payload": { "phase", "pages_sent", "pages_total",
+  "percent", "error" } }` while the flash is in progress (see section 3).
+  This response only reports the final outcome once the cycle ends:
+  `{ "success": bool, "finalPhase" }`.
+
+The Server reads `HYDRA_UMC_SPI_BRIDGE_URL`,
+`HYDRA_UMC_SPI_BRIDGE_TIMEOUT_MS` (version query, default 4000ms) and
+`HYDRA_UMC_SPI_BRIDGE_FLASH_TIMEOUT_MS` (flash cycle, default 120000ms -
+much longer, a real page-by-page transfer+verify genuinely takes a while)
+only from its runtime environment. Keep `spi_bridge` on loopback in a CM5
+deployment, same as Voice UI.
+
 ## 3. Live sync: `WebSocket /ws`
 
 Connect with `ws://<host>:3000/ws?token=<JWT_TOKEN>` (see section 2a for
@@ -344,11 +377,21 @@ connected client (the sender included) whenever the state changes, from
   an `operator` connection gets `{"error": "Access denied: admin
   privileges required"}` back instead of the write being applied.
 
-Only one message `type` exists today (`"settings"`) - the envelope
-(`{type, payload}`) is deliberately generic so a future message type
-(e.g. a lighter per-robot delta, or a live telemetry stream once real
-STM32H745 firmware exists to source one from) can be added without
-breaking a client that already knows to ignore an unrecognized `type`.
+The envelope (`{type, payload}`, or `{type, schema, ...}` for `"delta"`
+below) is deliberately generic, so a client that already knows to ignore
+an unrecognized `type` never breaks when a new one is added. Real `type`
+values today:
+- `"settings"` - the full state, above.
+- `"delta"` - a lighter per-robot update from `POST /api/robot/:id/command`.
+  `schema: 1` clients get the same full-tree shape as `"settings"`;
+  clients that opened `/ws` with `?remoteApiVersion=2` get `schema: 2`
+  instead - one message per affected robot, `{ "type": "delta", "schema":
+  2, "controllerId", "robotId", "patch", "cameraId"?, "cameraPatch"? }`.
+- `"canota_progress"` - real, live per-page flash progress from `POST
+  /api/hardware/canota/flash` (section 2h), broadcast to every connected
+  client while a real STM32H745 flash cycle is in progress: `{ "type":
+  "canota_progress", "payload": { "phase", "pages_sent", "pages_total",
+  "percent", "error" } }`.
 
 **Client responsibility:** the server broadcasts to the sender too rather
 than tracking "who sent this" (simpler server-side). A client MUST
@@ -361,11 +404,14 @@ POST/broadcast ping-pong on every single change.
 
 ## 4. What this API does NOT cover (yet)
 
-- **CAN-OTA firmware flashing/testing** - Flasher/Tester (`src/components/Flasher.tsx`/`Tester.tsx`)
-  currently run entirely client-side against a simulated transport
-  (`src/lib/canOta.ts`) - there is no server-side endpoint for it, so a
-  remote client can't drive a real flash/test cycle through this API today.
-  Revisit once real STM32H745 firmware exists on real hardware to talk to.
+- **Real STM32H745 hardware verification** - `POST /api/hardware/canota/flash`
+  and `GET /api/hardware/canota/version` (section 2h) are a real relay to a
+  real local `spi_bridge` service with a real, unit-tested SPI-OTA state
+  machine - but no populated STM32H745 board exists yet (no schematic, see
+  `HYDRA-UMC/hardware/PCB/kinematic_brain_stm32h745/README.md`), so none of
+  this has been exercised against real silicon. `Flasher.tsx`/`Tester.tsx`
+  (`src/lib/canOta.ts`) still default to `transport: 'mock'`; `'hardware'`
+  now calls these real routes instead of only disabling the Flash button.
 - **Transport-level security** - every endpoint is plain HTTP/WS, not TLS,
   and `GET /api/settings`/`GET /api/system/metrics` still require no
   bearer token at all (only writes and account management do - see

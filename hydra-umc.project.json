@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "ecosystem": "HYDRA-UMC",
   "name": "HYDRA-UMC-SERVER",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "role": "api",
   "stack": "node",
   "technologies": [
@@ -16,7 +16,7 @@
   "family": "Core Backend & Clients",
   "parent": null,
   "build": "npm install && npm run build.",
-  "notes": "The real headless backend every control client (STUDIO, SUITE, DSI, the mobile apps) actually talks to. It now relays bounded authenticated voice turns to a loopback HYDRA-UMC-VOICE-UI gateway while retaining the gateway token server-side; voice never becomes a direct robot command.",
+  "notes": "The real headless backend every control client (STUDIO, SUITE, DSI, the mobile apps) actually talks to. It relays bounded authenticated voice turns to a loopback HYDRA-UMC-VOICE-UI gateway while retaining the gateway token server-side (voice never becomes a direct robot command), and now relays the real CM5<->STM32H745 SPI-OTA link to a local spi_bridge service (admin-only for flashing, live progress over WebSocket) - not yet exercised against real STM32H745 hardware, since no populated board exists yet.",
   "native_version": {
     "file": "package.json",
     "pattern": "\"version\":\\s*\"(\\d+)\\.(\\d+)\\.(\\d+)\""

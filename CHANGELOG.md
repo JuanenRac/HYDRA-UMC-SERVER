@@ -29,6 +29,35 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.2.7] - Real CM5<->STM32H745 SPI-OTA relay (pre-real: connected, not simulated)
+
+- **`GET /api/hardware/canota/version`, `POST /api/hardware/canota/flash`**
+  (new) - a real relay to `HYDRA-UMC`'s own new `src/cm5_host/spi_bridge/`
+  local service, the real SPI1 + `HYDRA_DATA_READY` GPIO link to the
+  STM32H745 "Kinematic Brain". Gated by a new `HYDRA_UMC_SPI_BRIDGE_URL`
+  env var (same shape as `HYDRA_UMC_VOICE_UI_URL`/`HYDRA_UMC_DATALAKE_URL`) -
+  unconfigured returns a clean `503 { available: false }`. The version
+  query is `authenticate` only; `flash` is **`admin` only**, unlike every
+  other relay in this file - writing firmware is exactly the kind of
+  action every other bridge in this ecosystem gates more tightly than a
+  read.
+- Real per-page flash progress is broadcast live to every connected
+  WebSocket client as a new `{ "type": "canota_progress", "payload":
+  {...} }` message while the flash cycle runs, rather than only returned
+  once in the final HTTP response - `POST /api/hardware/canota/flash`
+  reads spi_bridge's own real newline-delimited-JSON progress stream and
+  re-broadcasts each line as it arrives.
+- Corrected `docs/REMOTE_API.md`'s WebSocket section, which incorrectly
+  claimed only one message `type` (`"settings"`) exists - `"delta"` (from
+  `POST /api/robot/:id/command`) was already real and undocumented there;
+  both are now listed alongside the new `"canota_progress"`.
+- Verified: `tsc --noEmit`, `npm test` (new
+  `tools/verify_canota_relay_contract.mjs` - a real Server + a real stub
+  spi_bridge over real HTTP + a real connected WebSocket client, proving
+  the unconfigured-503 case, the auth/admin gates, real tier/slot param
+  forwarding, real firmware bytes forwarded byte-for-byte, and real
+  streamed progress arriving over WS).
+
 ## [0.2.6] - Real read-only telemetry proxy for STUDIO's Ecosystem panel
 
 - **`GET /api/telemetry/query`, `GET /api/telemetry/aggregate`** (new,
