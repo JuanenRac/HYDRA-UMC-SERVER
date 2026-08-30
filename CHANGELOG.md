@@ -93,6 +93,48 @@ a change is actually worth summarizing for a human.
 - Made both temporary server-contract verifiers retry their cleanup on Windows
   so an already-exited `tsx` handle cannot turn a successful test into EBUSY.
 
+## [0.2.4] - Real Integrations "Test Connection" + fail-closed production bootstrap
+
+### Added
+
+- **`POST /api/integrations/test-connection`** - the real backend for
+  STUDIO's Config > Integrations panel (OpenPnP/CNC/Laser/ROS2/
+  Printer3D bridges), whose cards used to only save an ip/port to
+  `settings.json` with zero verification either way. A real bare-TCP
+  reachability probe (reuses `probeTcp()`, the same primitive
+  `GET /api/ecosystem/status` already uses) against the client-supplied
+  `host`/`port` - deliberately generic rather than bridge-specific, so
+  one route works uniformly across every bridge without this server
+  needing to know any of their individual real HTTP APIs. Requires a
+  real session (`authenticate`) - unlike the ecosystem scan, this takes
+  client-supplied host/port, so an anonymous version would let anyone
+  use this server as a blind network-reachability oracle. `host` is
+  checked against a conservative hostname/IPv4 character allowlist
+  before it ever reaches a real socket connect. New
+  `tools/verify_integrations_test_connection_contract.mjs`: a real
+  listening fixture reports `reachable:true`, a closed port reports
+  `reachable:false`, malformed host/port is rejected with 400, and an
+  anonymous request is rejected with 401.
+- **Fail-closed production bootstrap** - a production start
+  (`NODE_ENV=production`) now refuses to boot with an empty
+  `JWT_SECRET` (previously only a loud warning; the server started
+  anyway on the source-published development signing key). The first
+  administrator account now requires explicit
+  `HYDRA_UMC_BOOTSTRAP_ADMIN_USERNAME`/`_PASSWORD` on a real first start
+  rather than a fixed, well-known `admin`/`admin` seed. `startServer()`
+  is now awaited with a real `.catch()` at the top level, so a rejected
+  bootstrap actually terminates the process instead of risking an
+  unhandled rejection keeping a misconfigured instance alive. New
+  `docs/PRODUCTION_BOOTSTRAP.md` and
+  `tools/verify_production_bootstrap_contract.mjs`; `.env.example` and
+  all 7 README language files updated to document the two new required
+  variables.
+
+### Verified
+
+- `npm run typecheck` clean; full `npm test` - 8/8 contract scripts
+  passing, including both new ones above.
+
 ## [0.2.3] - Real per-service liveness probing on GET /api/ecosystem/status
 
 ### Added

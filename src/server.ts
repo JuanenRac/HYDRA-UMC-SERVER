@@ -59,13 +59,15 @@ const NODE_ENV = process.env.NODE_ENV || "development";
 // which also needs the async form so it doesn't block the event loop.
 const execFileAsync = promisify(execFile);
 
-// Falls back to this literal only when JWT_SECRET isn't set in the
-// environment - keeps `npm run dev`/a fresh checkout working with zero
-// setup. A deployment exposed beyond a fully trusted LAN should set its
-// own JWT_SECRET (see .env.example and README.md) so a leaked/published
-// source tree can't be used to forge admin tokens.
-const JWT_SECRET_IS_DEFAULT = !process.env.JWT_SECRET;
-const JWT_SECRET = process.env.JWT_SECRET || "hydra_industrial_secret_2026";
+// Development keeps a deterministic fallback so a fresh checkout can run
+// locally. Production never accepts it: a source-known signing key would let
+// anyone forge a valid token for an internet-reachable deployment.
+const configuredJwtSecret = process.env.JWT_SECRET?.trim();
+const JWT_SECRET_IS_DEFAULT = !configuredJwtSecret;
+if (NODE_ENV === "production" && JWT_SECRET_IS_DEFAULT) {
+  throw new Error("Production startup requires a non-empty JWT_SECRET");
+}
+const JWT_SECRET = configuredJwtSecret || "hydra_industrial_secret_2026";
 if (JWT_SECRET_IS_DEFAULT) {
   console.warn("[SECURITY] JWT_SECRET not set in the environment - using the built-in development default. Set a real JWT_SECRET before exposing this server beyond a trusted LAN.");
 }
@@ -378,9 +380,9 @@ setSystemMetricsSource(getSystemMetrics);
 const SERVICE_PROBE_TIMEOUT_MS = 800;
 const SERVICE_PROBE_HOST = "127.0.0.1";
 
-function probeTcp(port: number): Promise<boolean> {
+function probeTcp(port: number, host: string = SERVICE_PROBE_HOST): Promise<boolean> {
   return new Promise((resolve) => {
-    const socket = net.createConnection({ host: SERVICE_PROBE_HOST, port });
+    const socket = net.createConnection({ host, port });
     const timer = setTimeout(() => {
       socket.destroy();
       resolve(false);
@@ -696,23 +698,13 @@ async function startServer() {
     fs.mkdirSync(dataPath, { recursive: true });
   }
 
-  // First-ever start seeds data/users.json with a single admin/admin
-  // account - see users.ts's own header comment for why this replaced the
-  // old hardcoded "demo"/"demo" check below.
+  // users.ts requires explicit bootstrap credentials on a production first
+  // start. Development/test retain an isolated local convenience account.
   ensureSeedUser();
 
-  // Production-only startup checks (audit: real internet exposure via
-  // NAT/port-forward confirmed by the owner) - loud, impossible-to-miss
-  // warnings for the two defaults that matter most if this process is
-  // reachable from outside a trusted LAN: a JWT signing secret anyone can
-  // read straight out of the published source tree, and the seeded
-  // admin/admin account still sitting at its original password. Neither
-  // check ever runs (or prints anything) outside NODE_ENV=production, so
-  // a plain `npm run dev` checkout is unaffected. This is detection, not
-  // enforcement - the server still starts either way, since refusing to
-  // boot on a fresh CM5 deployment before the owner has even had a chance
-  // to log in and change anything would be a worse failure mode than a
-  // warning.
+  // The signing key and first administrator are enforced above. Keep a loud
+  // diagnostic for an operator who deliberately configured the weak literal
+  // admin/admin pair, but never create it implicitly in production.
   if (NODE_ENV === "production") {
     // scrypt uses a random salt per user (see users.ts's own
     // hashPassword()), so there's no fixed "known bad hash" to compare
@@ -733,15 +725,6 @@ async function startServer() {
       console.warn("  account still has its original default password. Anyone who can");
       console.warn("  reach this server can log in as admin. Change it now: Config >");
       console.warn("  Users, or POST /api/users/admin with a new password.");
-      console.warn("=================================================================");
-    }
-    if (JWT_SECRET_IS_DEFAULT) {
-      console.warn("=================================================================");
-      console.warn("[SECURITY WARNING] NODE_ENV=production but JWT_SECRET is not set -");
-      console.warn("  using the built-in development default, which is published in");
-      console.warn("  this project's own source code. Anyone who reads it can forge a");
-      console.warn("  valid admin login token. Set a real JWT_SECRET (see .env.example)");
-      console.warn("  before this server is reachable outside a fully trusted LAN.");
       console.warn("=================================================================");
     }
   }
@@ -1747,6 +1730,37 @@ async function startServer() {
     res.json(await getEcosystemStatus());
   });
 
+  // Real "Test Connection" for STUDIO's Config > Integrations panel
+  // (OpenPnP/CNC/Laser/ROS2/Printer3D bridges) - the "real, working
+  // integrations (not just text)" gap: those cards used to only save an
+  // ip/port to settings.json with zero verification either way. This is
+  // deliberately a bare TCP reachability probe (probeTcp, the same real
+  // primitive getEcosystemStatus() uses above) rather than anything
+  // bridge-specific - a generic "is anything listening at host:port"
+  // check works uniformly across all 5+ bridges without this server
+  // needing to know any of their individual real HTTP APIs, and stays
+  // correct as those APIs evolve independently. Requires a real session
+  // (authenticate) since, unlike the ecosystem scan above, this takes
+  // client-supplied host/port - an unauthenticated version would let
+  // anyone use this server as a blind network-reachability oracle
+  // against arbitrary hosts.
+  app.post("/api/integrations/test-connection", authenticate, async (req, res) => {
+    const { host, port } = req.body || {};
+    // A conservative hostname/IPv4 allowlist pattern (letters/digits/dots/
+    // hyphens only, max 253 chars per RFC 1035) - not full RFC validation,
+    // just enough to refuse anything that isn't plausibly a host (no
+    // whitespace, no URL scheme/path, no shell-metacharacter-looking
+    // input) before it ever reaches net.createConnection.
+    const validHost = typeof host === "string" && host.length > 0 && host.length <= 253 && /^[A-Za-z0-9.-]+$/.test(host);
+    const validPort = typeof port === "number" && Number.isInteger(port) && port > 0 && port <= 65535;
+    if (!validHost || !validPort) {
+      res.status(400).json({ error: "host must be a valid hostname/IP string and port an integer 1-65535" });
+      return;
+    }
+    const reachable = await probeTcp(port, host);
+    res.json({ reachable });
+  });
+
   // Prometheus scrape endpoint - text exposition format via `prom-client`
   // (src/metrics.ts owns every metric definition; this route only renders
   // the registry). Deliberately unauthenticated, same posture as GET
@@ -2213,4 +2227,10 @@ async function startServer() {
   process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 }
 
-startServer();
+startServer().catch((error: unknown) => {
+  // A rejected bootstrap promise must terminate the process. Merely leaving an
+  // unhandled rejection can keep Node alive on some runtimes and turn a
+  // fail-closed production configuration error into a hung service manager.
+  console.error("[STARTUP] Fatal configuration error:", error);
+  process.exit(1);
+});

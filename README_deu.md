@@ -173,7 +173,10 @@ HYDRA-UMC-SERVER/
 │   ├── logs/
 │   └── WORKS/
 ├── docs/
-│   └── REMOTE_API.md    # Vollständiger Vertrag: jede Route, das WS-Protokoll, Auth
+│   ├── REMOTE_API.md              # Vollständiger Vertrag: Routen, WS-Protokoll, Auth
+│   └── PRODUCTION_BOOTSTRAP.md    # Erforderliches JWT und erster Administrator
+├── tools/
+│   └── verify_production_bootstrap_contract.mjs # Prüft sicheres Scheitern in Produktion
 ├── monitoring/           # Optionaler Prometheus + Grafana Stack - siehe monitoring/README.md
 ├── scripts/
 │   └── bump-version.mjs # Legacy-Hilfe nur für die native Version; Standard-Builds nutzen bump_manifest_version.py

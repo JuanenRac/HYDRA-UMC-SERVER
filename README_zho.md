@@ -85,7 +85,10 @@ HYDRA-UMC-SERVER/
 │   ├── logs/
 │   └── WORKS/
 ├── docs/
-│   └── REMOTE_API.md    # 完整契约：每个路由、WS 协议、身份验证
+│   ├── REMOTE_API.md              # 完整契约：路由、WS 协议、身份验证
+│   └── PRODUCTION_BOOTSTRAP.md    # 必需的 JWT 与初始管理员配置
+├── tools/
+│   └── verify_production_bootstrap_contract.mjs # 验证生产环境安全失败
 ├── monitoring/           # 可选的 Prometheus + Grafana 技术栈——见 monitoring/README.md
 ├── scripts/
 │   └── bump-version.mjs # 旧版仅原生版本辅助工具；标准构建使用 bump_manifest_version.py
