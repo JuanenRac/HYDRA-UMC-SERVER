@@ -97,6 +97,20 @@ const VOICE_UI_TIMEOUT_MS = Math.min(
   Math.max(Number(process.env.HYDRA_UMC_VOICE_UI_TIMEOUT_MS) || 4000, 250),
   10000,
 );
+
+// Same reasoning and same shape as VOICE_UI_URL above, for STUDIO's
+// Ecosystem > Telemetry panel: Server is the only component that knows how
+// to reach Datalake, so STUDIO stays a thin frontend of Server instead of a
+// second client that has to know Datalake's own host/port. Datalake's own
+// HTTP API (GET /query, GET /aggregate - see HYDRA-UMC-DATALAKE/src/
+// hydra_umc_datalake/api.py) takes no auth of its own today (same
+// same-host-only assumption as every other real service probe in this
+// file), so there is no upstream token to hold here, unlike Voice UI.
+const DATALAKE_URL = (process.env.HYDRA_UMC_DATALAKE_URL || "").replace(/\/$/, "");
+const DATALAKE_TIMEOUT_MS = Math.min(
+  Math.max(Number(process.env.HYDRA_UMC_DATALAKE_TIMEOUT_MS) || 4000, 250),
+  10000,
+);
 const VOICE_REQUEST_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 function validateVoiceTurnPayload(payload: unknown): string | null {
@@ -1747,6 +1761,46 @@ async function startServer() {
   // fields, nothing about running robots/credentials.
   app.get("/api/ecosystem/status", async (req, res) => {
     res.json(await getEcosystemStatus());
+  });
+
+  // Real, authenticated read-only proxy to HYDRA-UMC-DATALAKE's own /query
+  // and /aggregate (see DATALAKE_URL's own comment above for why this is a
+  // proxy rather than STUDIO reaching Datalake's port directly). authenticate
+  // only (no requireAdmin) - viewing telemetry is no more sensitive than
+  // viewing a robot's live state, which every logged-in STUDIO session can
+  // already do. Query params are forwarded verbatim; Datalake's own api.py
+  // is the one real source of truth for what's valid (limit/bucketMs/agg/
+  // etc.) - duplicating that validation here would just be a second place
+  // for it to drift out of sync.
+  async function proxyToDatalake(res: express.Response, path: string, query: Record<string, unknown>) {
+    if (!DATALAKE_URL) {
+      return res.status(503).json({ error: "HYDRA-UMC-DATALAKE is not configured on this Server", available: false });
+    }
+    const qs = new URLSearchParams();
+    for (const [key, value] of Object.entries(query)) {
+      if (typeof value === "string") qs.set(key, value);
+    }
+    try {
+      const upstream = await fetch(`${DATALAKE_URL}${path}?${qs.toString()}`, {
+        signal: AbortSignal.timeout(DATALAKE_TIMEOUT_MS),
+      });
+      const body = await upstream.json().catch(() => null);
+      if (!upstream.ok) {
+        return res.status(upstream.status).json(body && typeof body === "object" ? body : { error: "HYDRA-UMC-DATALAKE rejected the request" });
+      }
+      res.json(body);
+    } catch (error) {
+      const timedOut = error instanceof DOMException && error.name === "TimeoutError";
+      res.status(503).json({ error: timedOut ? "HYDRA-UMC-DATALAKE timed out" : "HYDRA-UMC-DATALAKE is unavailable" });
+    }
+  }
+
+  app.get("/api/telemetry/query", authenticate, async (req, res) => {
+    await proxyToDatalake(res, "/query", req.query as Record<string, unknown>);
+  });
+
+  app.get("/api/telemetry/aggregate", authenticate, async (req, res) => {
+    await proxyToDatalake(res, "/aggregate", req.query as Record<string, unknown>);
   });
 
   // Real "Test Connection" for STUDIO's Config > Integrations panel

@@ -4,10 +4,15 @@ All notable work on **HYDRA-UMC SERVER** is summarized here, newest first.
 
 ## Versioning scheme
 
-`package.json`'s `version` field bumps automatically on every real production
-build (`npm run build` - see `scripts/bump-version.mjs`, wired as the first
-step of the `build` script). It follows a simple base-10 "odometer" rule
-rather than semantic-versioning judgment calls:
+`package.json`'s `version` field bumps via `bump_manifest_version.py`
+(bare invocation - this repo is a "single owner" of its own version, no
+separate `--sync` step), run as the first step of `build.bat`/`build.sh`
+before `npm run build` itself. `scripts/bump-version.mjs` is a legacy
+native-only helper kept for historical local workflows - see its own
+header comment for why it is deliberately NOT wired into `npm run build`
+(that would let a second, package-only bump drift the manifest/CHANGELOG
+out of sync with `package.json`). Either way, the same base-10 "odometer"
+rule rather than semantic-versioning judgment calls:
 
 - `patch` +1 on every build
 - when `patch` would exceed 9, it resets to 0 and `minor` +1 instead (e.g. `0.0.9` -> `0.1.0`, never `0.0.10`)
@@ -21,6 +26,27 @@ About dialog included) already checks.
 This file itself is *not* auto-generated per build (most builds are routine
 verification runs with nothing changelog-worthy); it's updated by hand when
 a change is actually worth summarizing for a human.
+
+---
+
+## [0.2.6] - Real read-only telemetry proxy for STUDIO's Ecosystem panel
+
+- **`GET /api/telemetry/query`, `GET /api/telemetry/aggregate`** (new,
+  `authenticate` only) - a thin, authenticated proxy to
+  HYDRA-UMC-DATALAKE's own `/query`/`/aggregate` HTTP API, gated by a new
+  `HYDRA_UMC_DATALAKE_URL` env var (same shape as `HYDRA_UMC_VOICE_UI_URL`).
+  Unconfigured returns a clean `503 { available: false }` instead of an
+  error - Server stays the one client STUDIO talks to, never a second
+  place that has to know Datalake's own host/port.
+- Fixed the same stale "Versioning scheme" documentation bug found twice
+  earlier this session (MTCONNECT-ADAPTER, STUDIO): this section falsely
+  claimed `scripts/bump-version.mjs` is wired into `npm run build`,
+  contradicted by both `package.json`'s real `build` script and the
+  script's own header comment.
+- Verified: `tsc --noEmit`, `npm test` (new `tools/verify_telemetry_relay_contract.mjs`
+  - real Server + a real stub Datalake over real HTTP, proving the proxy
+  forwards real query params, surfaces a real upstream failure, and stays
+  a clean 503 when unconfigured) and `tools/ci_validate.py`.
 
 ---
 
@@ -92,6 +118,10 @@ a change is actually worth summarizing for a human.
   ServerDiscovery contract.
 - Made both temporary server-contract verifiers retry their cleanup on Windows
   so an already-exited `tsx` handle cannot turn a successful test into EBUSY.
+
+## [0.2.6]
+
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
 
 ## [0.2.5] - Independent remote-access gate for HYDRA-UMC-WATCH
 
