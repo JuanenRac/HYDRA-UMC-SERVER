@@ -29,6 +29,7 @@ public
 
 data/users.json
 data/server-config.json
+data/settings.json
 
 # Atomic-write leftovers from queueSettingsWrite's own per-robot points
 # files (data/points/<controllerId>/<robotId>.json.<pid>.<timestamp>.tmp) -
