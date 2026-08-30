@@ -272,7 +272,7 @@ turn into an actuator call on this route.
 The Server reads `HYDRA_UMC_VOICE_UI_URL`,
 `HYDRA_UMC_VOICE_UI_TOKEN` and the bounded timeout
 `HYDRA_UMC_VOICE_UI_TIMEOUT_MS` only from its runtime environment. In a CM5
-deployment, keep Voice UI on `127.0.0.1:8090` and do not expose its port.
+deployment, keep Voice UI on `127.0.0.1:8091` and do not expose its port.
 
 ## 2g. Monitoring, camera & file upload
 
