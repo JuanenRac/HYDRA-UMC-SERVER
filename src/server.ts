@@ -1850,10 +1850,14 @@ async function startServer() {
     }
     const tier = String(req.query.tier ?? "0");
     const slot = String(req.query.slot ?? "0");
+    // relay=1 tunnels through the resolved Tier 0/1 target to reach Tier 2
+    // (the URTC Tool Head) - see spi_bridge's own relay_tunnel.py.
+    const relay = String(req.query.relay ?? "0");
     try {
-      const upstream = await fetch(`${SPI_BRIDGE_URL}/version?tier=${encodeURIComponent(tier)}&slot=${encodeURIComponent(slot)}`, {
-        signal: AbortSignal.timeout(SPI_BRIDGE_VERSION_TIMEOUT_MS),
-      });
+      const upstream = await fetch(
+        `${SPI_BRIDGE_URL}/version?tier=${encodeURIComponent(tier)}&slot=${encodeURIComponent(slot)}&relay=${encodeURIComponent(relay)}`,
+        { signal: AbortSignal.timeout(SPI_BRIDGE_VERSION_TIMEOUT_MS) },
+      );
       const body = await upstream.json().catch(() => null);
       if (!upstream.ok) {
         return res.status(upstream.status).json(body && typeof body === "object" ? body : { error: "spi_bridge rejected the request" });
@@ -1879,7 +1883,7 @@ async function startServer() {
         return res.status(400).json({ error: "request body must be a non-empty application/octet-stream firmware image" });
       }
       const qs = new URLSearchParams();
-      for (const key of ["tier", "slot", "hardware_id", "version_major", "version_minor"]) {
+      for (const key of ["tier", "slot", "relay", "hardware_id", "version_major", "version_minor"]) {
         if (typeof req.query[key] === "string") qs.set(key, req.query[key] as string);
       }
       const username = (req as any).user?.username ?? "unknown";

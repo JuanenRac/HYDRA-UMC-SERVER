@@ -324,11 +324,13 @@ GPIO link to the STM32H745 "Kinematic Brain", the same link
 when `HYDRA_UMC_SPI_BRIDGE_URL` is unset, the same "never a guessed
 process" posture as the Voice UI relay above.
 
-- `GET /api/hardware/canota/version?tier=&slot=` - any authenticated
+- `GET /api/hardware/canota/version?tier=&slot=&relay=` - any authenticated
   token. Relays to `spi_bridge`'s own `GET /version`, returning
   `{ "online", "is_bootloader", "hardware_id", "firmware_major",
-  "firmware_minor" }`.
-- `POST /api/hardware/canota/flash?tier=&slot=&hardware_id=&version_major=&version_minor=`
+  "firmware_minor" }`. `relay=1` tunnels through the resolved Tier 0/1
+  target to reach Tier 2 (the URTC Tool Head) - see `spi_bridge`'s own
+  `relay_tunnel.py`.
+- `POST /api/hardware/canota/flash?tier=&slot=&relay=&hardware_id=&version_major=&version_minor=`
   - **`admin` only** (unlike the read-only version query above - writing
   firmware is exactly the kind of action every other bridge in this
   ecosystem gates more tightly than a read). Body: raw firmware bytes,

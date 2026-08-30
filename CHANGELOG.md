@@ -29,6 +29,17 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.2.8] - Real Tier 2 relay param (URTC Tool Head, through STACK A)
+
+- **`GET /api/hardware/canota/version`, `POST /api/hardware/canota/flash`**
+  now forward a new `relay` query parameter to `spi_bridge`, unchanged
+  otherwise - `relay=1` tunnels the request through the resolved Tier 0/1
+  target to reach Tier 2 (the URTC Tool Head), via `spi_bridge`'s new real
+  `relay_tunnel.py` (RELAY_SEND/RELAY_RECV, architecture.md section 5).
+  Verified: `tools/verify_canota_relay_contract.mjs` gained a real
+  assertion that `relay=1` is genuinely forwarded to the (stub) upstream,
+  not just accepted and dropped.
+
 ## [0.2.7] - Real CM5<->STM32H745 SPI-OTA relay (pre-real: connected, not simulated)
 
 - **`GET /api/hardware/canota/version`, `POST /api/hardware/canota/flash`**

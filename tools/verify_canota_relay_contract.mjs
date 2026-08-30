@@ -185,6 +185,16 @@ async function main() {
     assert(stub.seenRequests.some((r) => r.startsWith("/version?") && r.includes("tier=2") && r.includes("slot=3")),
       `proxy did not forward the real tier/slot params, saw: ${JSON.stringify(stub.seenRequests)}`);
 
+    // relay=1 (Tier 2, tunneled through Tier 1 - spi_bridge's own
+    // relay_tunnel.py) must also be forwarded, not just tier/slot.
+    const relayVersionResponse = await fetch(
+      `http://127.0.0.1:${serverPortWithBridge}/api/hardware/canota/version?tier=2&slot=3&relay=1`,
+      { headers: adminAuth },
+    );
+    assert.equal(relayVersionResponse.status, 200);
+    assert(stub.seenRequests.some((r) => r.startsWith("/version?") && r.includes("relay=1")),
+      `proxy did not forward the real relay param, saw: ${JSON.stringify(stub.seenRequests)}`);
+
     // A real non-admin user must be denied /flash - the same admin gate
     // every other real write route in this Server already enforces.
     const createOperator = await fetch(`http://127.0.0.1:${serverPortWithBridge}/api/users`, {
