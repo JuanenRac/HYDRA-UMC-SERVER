@@ -513,17 +513,23 @@ function realSettings(payload: any): any {
 }
 
 // Per-client remote-access toggles (Config > Remote Access in the browser
-// UI, src/store.tsx's own SystemSettings.remoteAccess) - 3 independent
-// toggles (SUITE/Android/iOS) instead of one combined switch, so e.g.
-// Android access can be revoked without also blocking SUITE. Each of the 3 real clients sends its
-// own `X-Hydra-Client: suite|android|ios` request header (see each
+// UI, src/store.tsx's own SystemSettings.remoteAccess) - 4 independent
+// toggles (SUITE/Android/iOS/Watch) instead of one combined switch, so e.g.
+// Android access can be revoked without also blocking SUITE. Each of the 4 real clients sends its
+// own `X-Hydra-Client: suite|android|ios|watch` request header (see each
 // project's own network client) - a request with NO such header (a plain
 // browser tab, curl, or any other unidentified caller) is never gated here,
-// since this check only exists to control the 3 named remote apps, not
+// since this check only exists to control the 4 named remote apps, not
 // this same server's own browser UI (which never sends that header and
-// reaches this same route from About.tsx's own version check).
+// reaches this same route from About.tsx's own version check). "watch"
+// is distinct from "android": HYDRA-UMC-WATCH has no direct connection of
+// its own - it relays through the paired phone's own HydraApiClient,
+// which sends this specific header only for the 2 real Watch-relay calls
+// (POST /api/voice/turn, GET /api/watch/system-status), not for the
+// phone app's own ordinary traffic - so Watch access can be revoked
+// without also blocking that same phone's direct Android access.
 function remoteAccessAllowed(settings: any, clientType: string | undefined): boolean {
-  if (clientType !== "suite" && clientType !== "android" && clientType !== "ios") return true;
+  if (clientType !== "suite" && clientType !== "android" && clientType !== "ios" && clientType !== "watch") return true;
   const ra = settings?.remoteAccess;
   if (!ra) return true; // no config saved at all yet - matches this feature's own original always-on default
   const specific = ra[clientType];
@@ -1380,6 +1386,14 @@ async function startServer() {
   // local Voice UI token. This is intentionally REST rather than a robot
   // command route, and it never translates an intent into movement.
   app.post("/api/voice/turn", authenticate, async (req, res) => {
+    // Real per-client gate (Config > Remote Access, remoteAccessAllowed()'s
+    // own header comment above) - the paired phone sends
+    // X-Hydra-Client: watch only for this relayed-on-the-Watch's-behalf
+    // call, never for its own ordinary Android traffic, so disabling Watch
+    // access here cannot also lock that same phone out of its own session.
+    if (!remoteAccessAllowed(realSettings(lastKnownSettings), req.headers["x-hydra-client"] as string | undefined)) {
+      return res.status(404).end();
+    }
     const validationError = validateVoiceTurnPayload(req.body);
     if (validationError) return res.status(400).json({ error: validationError });
     if (!VOICE_UI_URL) {
@@ -1420,7 +1434,12 @@ async function startServer() {
 
   // Small, authenticated status payload shared by phone/watch surfaces. It
   // exposes health only, never full settings, usernames or machine paths.
-  app.get("/api/watch/system-status", authenticate, async (_req, res) => {
+  app.get("/api/watch/system-status", authenticate, async (req, res) => {
+    // Same real per-client gate as POST /api/voice/turn above - see that
+    // route's own comment.
+    if (!remoteAccessAllowed(realSettings(lastKnownSettings), req.headers["x-hydra-client"] as string | undefined)) {
+      return res.status(404).end();
+    }
     const metrics = await getSystemMetrics();
     const level = metrics.temp_is_real && (metrics.temp ?? 0) >= 80
       ? "CRITICAL"

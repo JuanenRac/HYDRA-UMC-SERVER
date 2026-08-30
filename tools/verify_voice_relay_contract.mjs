@@ -167,7 +167,43 @@ async function main() {
     });
     assert.equal(motion.response.status, 200);
     assert.equal(motion.body.requiresConfirmation, true);
-    console.log("SERVER_VOICE_RELAY_CONTRACT=PASS auth=1 status=1 non_actuating_motion=1");
+
+    // Real per-client gate: disabling Config > Remote Access "Watch" must
+    // 404 both Watch-relay routes for a request carrying that header,
+    // without touching this same admin session's own unrelated access -
+    // proves the gate is live, not just declared in a type.
+    const current = await request(serverPort, "/api/settings", { headers: authorization });
+    assert.equal(current.response.status, 200);
+    const watchDisabled = await request(serverPort, "/api/settings", {
+      method: "POST",
+      headers: authorization,
+      body: JSON.stringify({
+        ...current.body,
+        settings: { ...current.body.settings, remoteAccess: { ...current.body.settings?.remoteAccess, watch: false } },
+      }),
+    });
+    assert.equal(watchDisabled.response.status, 200);
+
+    // A gated-out 404 has no JSON body (res.status(404).end()) - a raw
+    // fetch here, not the request() helper above, which always parses one.
+    const statusGatedOut = await fetch(`http://127.0.0.1:${serverPort}/api/watch/system-status`, {
+      headers: { ...authorization, "x-hydra-client": "watch" },
+    });
+    assert.equal(statusGatedOut.status, 404);
+
+    const turnGatedOut = await fetch(`http://127.0.0.1:${serverPort}/api/voice/turn`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...authorization, "x-hydra-client": "watch" },
+      body: JSON.stringify({ type: "voice_turn", requestId: "voice-gated-001", transcript: "status", locale: "en-US" }),
+    });
+    assert.equal(turnGatedOut.status, 404);
+
+    // The SAME phone session, without that header, is unaffected - Watch
+    // access and this app's own direct access are genuinely independent.
+    const statusStillDirect = await request(serverPort, "/api/watch/system-status", { headers: authorization });
+    assert.equal(statusStillDirect.response.status, 200);
+
+    console.log("SERVER_VOICE_RELAY_CONTRACT=PASS auth=1 status=1 non_actuating_motion=1 watch_gate=1");
   } finally {
     await stop(server);
     await stop(voice);

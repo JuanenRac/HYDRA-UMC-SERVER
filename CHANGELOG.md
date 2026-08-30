@@ -93,6 +93,27 @@ a change is actually worth summarizing for a human.
 - Made both temporary server-contract verifiers retry their cleanup on Windows
   so an already-exited `tsx` handle cannot turn a successful test into EBUSY.
 
+## [0.2.5] - Independent remote-access gate for HYDRA-UMC-WATCH
+
+- **`remoteAccessAllowed()`** now recognizes a 4th client type, `"watch"`,
+  alongside the existing `suite`/`android`/`ios` (Config > Remote Access
+  in the browser UI, `src/store.tsx`'s own `SystemSettings.remoteAccess`).
+  Watch has no direct connection of its own - the paired phone's
+  `HydraApiClient` sends `X-Hydra-Client: watch` only for the 2 real
+  Watch-relay calls (`POST /api/voice/turn`, `GET /api/watch/system-status`),
+  never for that same phone's own ordinary Android traffic - so Watch
+  access can be revoked independently, without also locking that phone
+  out of its own session.
+- Both routes now 404 for a gated-out request, matching the existing
+  `GET /api/hydra-info` gate's own semantics.
+- New real end-to-end test in `tools/verify_voice_relay_contract.mjs`:
+  disables `remoteAccess.watch` via a real `POST /api/settings`, proves
+  both routes 404 for `X-Hydra-Client: watch`, and proves the same admin
+  session's own direct access is unaffected.
+
+Verified: full `build-test.bat` suite passes (8 contract scripts
+including the new watch-gate assertions).
+
 ## [0.2.4] - Real Integrations "Test Connection" + fail-closed production bootstrap
 
 ### Added
