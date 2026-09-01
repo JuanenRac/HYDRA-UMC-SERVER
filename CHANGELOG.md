@@ -50,6 +50,10 @@ a change is actually worth summarizing for a human.
   contract now proves both arm and table move together without conflating
   their coordinate systems.
 
+## [0.3.4]
+
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
+
 ## [0.3.3]
 
 - Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
