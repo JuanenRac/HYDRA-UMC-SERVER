@@ -456,6 +456,47 @@ function probeService(port: number, healthPath: string | null): Promise<boolean>
   return healthPath ? probeHttp(port, healthPath) : probeTcp(port);
 }
 
+interface SystemdProbeResult {
+  pid: number | null;
+  activeState: string | null;
+  subState: string | null;
+}
+
+// Real, tested (against the actual CM5 systemd manager, not guessed):
+// `systemctl show <unit> --property=...` is a read-only query that the
+// unprivileged hydra-umc-server user can run for ANY unit, not just its
+// own - no polkit rule needed (unlike runPowerAction's reboot/poweroff
+// above, a genuinely privileged action). A unit that doesn't exist
+// answers MainPID=0/ActiveState=inactive/SubState=dead with exit 0
+// rather than an error - indistinguishable here from "exists but
+// stopped", which is an honest, acceptable limit of `show` alone.
+async function probeSystemd(unit: string): Promise<SystemdProbeResult> {
+  try {
+    const { stdout } = await execFileAsync(
+      "systemctl",
+      ["show", unit, "--property=MainPID,ActiveState,SubState"],
+      { timeout: SERVICE_PROBE_TIMEOUT_MS }
+    );
+    const props: Record<string, string> = {};
+    for (const line of stdout.split("\n")) {
+      const eq = line.indexOf("=");
+      if (eq === -1) continue;
+      props[line.slice(0, eq)] = line.slice(eq + 1).trim();
+    }
+    const pid = Number.parseInt(props.MainPID ?? "", 10);
+    return {
+      pid: Number.isFinite(pid) && pid > 0 ? pid : null,
+      activeState: props.ActiveState || null,
+      subState: props.SubState || null,
+    };
+  } catch {
+    // systemctl itself missing/unreachable (e.g. running this repo's own
+    // test suite, or a non-systemd dev machine) - not an error worth
+    // failing the whole scan over, just "no systemd info for this one".
+    return { pid: null, activeState: null, subState: null };
+  }
+}
+
 interface EcosystemProjectStatus {
   name: string;
   role: string | null;
@@ -466,6 +507,21 @@ interface EcosystemProjectStatus {
   deploymentTarget: string | null;
   servicePort: number | null;
   serviceHealthPath: string | null;
+  // The fixed local probe host (127.0.0.1) whenever servicePort is set -
+  // every real probe in this scan is local-only, never a remote address.
+  serviceHost: string | null;
+  // Real feedback from live testing: most running services on the CM5
+  // don't declare a TCP/HTTP service.port at all (their manifest never
+  // claimed one - many are CLI/library-shaped, not network services), so
+  // `live` alone left them looking indistinguishable from "not running".
+  // service.systemd_unit (optional manifest field) names the real
+  // systemd unit managing this project, if any - independent of whether
+  // it exposes a port, giving those exact projects a real, honest signal
+  // instead of none.
+  systemdUnit: string | null;
+  pid: number | null;
+  activeState: string | null;
+  subState: string | null;
   // null = this project doesn't declare a service (a library/CLI/
   // firmware/UI - "not applicable", never shown as down). true/false =
   // a real probe actually ran and this is its result.
@@ -514,6 +570,10 @@ async function getEcosystemStatus(): Promise<{
           servicePort !== null && typeof service.health_path === "string" && service.health_path.startsWith("/")
             ? service.health_path
             : null;
+        const systemdUnit =
+          service && typeof service === "object" && typeof service.systemd_unit === "string" && service.systemd_unit.trim()
+            ? service.systemd_unit.trim()
+            : null;
         projects.push({
           name: typeof manifest.name === "string" ? manifest.name : entry.name,
           role: typeof manifest.role === "string" ? manifest.role : null,
@@ -524,7 +584,12 @@ async function getEcosystemStatus(): Promise<{
           deploymentTarget: typeof manifest.deployment_target === "string" ? manifest.deployment_target : null,
           servicePort,
           serviceHealthPath,
-          live: null, // filled in below, after every manifest is read - a probe is real I/O, keep it out of this synchronous scan
+          serviceHost: servicePort !== null ? SERVICE_PROBE_HOST : null,
+          systemdUnit,
+          pid: null, // filled in below, after every manifest is read - a probe is real I/O, keep it out of this synchronous scan
+          activeState: null,
+          subState: null,
+          live: null,
         });
       } catch {
         // Malformed/unreadable manifest for this one repo - skip it, not
@@ -533,11 +598,27 @@ async function getEcosystemStatus(): Promise<{
       }
     }
     // Real probes run concurrently (not one-by-one) so N declared services
-    // cost one SERVICE_PROBE_TIMEOUT_MS window total, not N of them.
+    // cost one SERVICE_PROBE_TIMEOUT_MS window total, not N of them. A
+    // project can have EITHER, both, or neither of servicePort/systemdUnit
+    // declared - each probe runs independently of the other.
     await Promise.all(
       projects.map(async (project) => {
-        if (project.servicePort === null) return;
-        project.live = await probeService(project.servicePort, project.serviceHealthPath);
+        const tasks: Promise<void>[] = [];
+        if (project.servicePort !== null) {
+          tasks.push(
+            probeService(project.servicePort, project.serviceHealthPath).then((live) => { project.live = live; })
+          );
+        }
+        if (project.systemdUnit !== null) {
+          tasks.push(
+            probeSystemd(project.systemdUnit).then((result) => {
+              project.pid = result.pid;
+              project.activeState = result.activeState;
+              project.subState = result.subState;
+            })
+          );
+        }
+        await Promise.all(tasks);
       })
     );
     projects.sort((a, b) => (a.family || "").localeCompare(b.family || "") || a.name.localeCompare(b.name));

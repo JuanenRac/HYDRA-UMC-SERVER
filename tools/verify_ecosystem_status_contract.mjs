@@ -81,6 +81,7 @@ async function main() {
   const upDir = path.join(workspace, "hydra-umc-fixture-up-service");
   const downDir = path.join(workspace, "hydra-umc-fixture-down-service");
   const libraryDir = path.join(workspace, "hydra-umc-fixture-library");
+  const systemdDir = path.join(workspace, "hydra-umc-fixture-systemd-only");
 
   const upPort = await reservePort();
   // A real listener the probe should find genuinely up - deliberately no
@@ -99,6 +100,16 @@ async function main() {
   await writeManifest(upDir, baseManifest("HYDRA-UMC-FIXTURE-UP-SERVICE", { service: { port: upPort } }));
   await writeManifest(downDir, baseManifest("HYDRA-UMC-FIXTURE-DOWN-SERVICE", { service: { port: downPort } }));
   await writeManifest(libraryDir, baseManifest("HYDRA-UMC-FIXTURE-LIBRARY", { role: "library" }));
+  // No service.port at all - exercises the systemd-only path real
+  // portless services on the CM5 need (COGNITIVE-NODE, VISION-NODE, ...).
+  // A unit name that doesn't exist on this test machine either way
+  // (Windows dev has no systemctl at all; a real Linux CI box has no unit
+  // by this fixture name) keeps this portable while still proving the
+  // field itself round-trips and pid/activeState/subState come back as
+  // real (null, not missing) keys rather than crashing the whole scan.
+  await writeManifest(systemdDir, baseManifest("HYDRA-UMC-FIXTURE-SYSTEMD-ONLY", {
+    service: { systemd_unit: "hydra-umc-fixture-nonexistent-unit-for-tests.service" },
+  }));
 
   let child;
   let logs = "";
@@ -133,12 +144,28 @@ async function main() {
     assert(up, "up-service fixture missing from response");
     assert.equal(up.servicePort, upPort);
     assert.equal(up.serviceHealthPath, null);
+    assert.equal(up.serviceHost, "127.0.0.1", "serviceHost must be the real local probe address when servicePort is set");
     assert.equal(up.live, true, "a real listener on the declared port must probe as live: true");
 
     const down = byName["HYDRA-UMC-FIXTURE-DOWN-SERVICE"];
     assert(down, "down-service fixture missing from response");
     assert.equal(down.servicePort, downPort);
     assert.equal(down.live, false, "a closed port must probe as live: false, never true or null");
+
+    const systemdOnly = byName["HYDRA-UMC-FIXTURE-SYSTEMD-ONLY"];
+    assert(systemdOnly, "systemd-only fixture missing from response");
+    assert.equal(systemdOnly.servicePort, null, "a manifest with only service.systemd_unit must still report servicePort: null");
+    assert.equal(systemdOnly.serviceHost, null, "serviceHost must be null when there is no servicePort to probe");
+    assert.equal(systemdOnly.systemdUnit, "hydra-umc-fixture-nonexistent-unit-for-tests.service", "systemdUnit must round-trip from the manifest exactly");
+    assert.equal(systemdOnly.live, null, "a project with no service.port must never get a live value from the systemd probe");
+    assert.equal(systemdOnly.pid, null, "a nonexistent unit must report pid: null, not throw or hang the whole scan");
+    // activeState/subState are asserted to be present as real keys, not
+    // any specific value - a Linux box WITH systemctl reports a real
+    // "inactive"/"dead" for a unit that doesn't exist, Windows dev (no
+    // systemctl binary at all) reports null from probeSystemd's own
+    // catch - both are honest, neither is a test failure.
+    assert.ok("activeState" in systemdOnly, "activeState key must always be present");
+    assert.ok("subState" in systemdOnly, "subState key must always be present");
 
     const library = byName["HYDRA-UMC-FIXTURE-LIBRARY"];
     assert(library, "library fixture missing from response");
@@ -186,7 +213,7 @@ async function main() {
       const overrideNames = overridePayload.projects.map((p) => p.name).sort();
       assert.deepEqual(
         overrideNames,
-        ["HYDRA-UMC-FIXTURE-DOWN-SERVICE", "HYDRA-UMC-FIXTURE-LIBRARY", "HYDRA-UMC-FIXTURE-UP-SERVICE"],
+        ["HYDRA-UMC-FIXTURE-DOWN-SERVICE", "HYDRA-UMC-FIXTURE-LIBRARY", "HYDRA-UMC-FIXTURE-SYSTEMD-ONLY", "HYDRA-UMC-FIXTURE-UP-SERVICE"],
         "HYDRA_UMC_ECOSYSTEM_ROOT must find the exact same fixtures as the default-cwd scan above, from a cwd with no manifests anywhere near it",
       );
     } finally {

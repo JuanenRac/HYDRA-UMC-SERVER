@@ -31,6 +31,33 @@ a change is actually worth summarizing for a human.
 
 ## Unreleased
 
+## [0.3.6] - Real PID and systemd state per project, independent of whether it exposes a port
+
+- **Most running CM5 services never declared a `service.port` at all and
+  looked indistinguishable from a project that isn't a service** - real
+  feedback from live testing, after `[0.3.5]` fixed the panel showing
+  zero services: of 19 real running units, only 6 declare a TCP/HTTP
+  port (`live` stayed `null` - "not applicable" - for the other 13, same
+  as a genuine library/CLI). Added an optional `service.systemd_unit`
+  manifest field; when present, a new `probeSystemd()` runs
+  `systemctl show <unit> --property=MainPID,ActiveState,SubState` (a
+  read-only query the unprivileged `hydra-umc-server` user can already
+  run for any unit, verified live, no polkit rule needed) alongside the
+  existing port probe. `EcosystemProjectStatus` gained `serviceHost`
+  (the fixed local probe address, `127.0.0.1`, whenever a port is
+  declared), `systemdUnit`, `pid`, `activeState` and `subState` - a
+  project can have either, both, or neither of servicePort/systemdUnit,
+  probed independently and concurrently. New contract test case (a
+  fixture with only `service.systemd_unit`, naming a unit that exists on
+  neither this test machine nor CI) proves the field round-trips and
+  `pid: null`/real key presence hold even when `systemctl` itself isn't
+  reachable, rather than crashing the whole scan.
+- Declared `service.systemd_unit` in the 19 real CM5-deployed repos' own
+  manifests (`hydra-umc-<name>.service`, the real running unit name in
+  each case) - a plain, additive metadata change in each of those repos,
+  no version bump needed there since it changes nothing about their own
+  behavior.
+
 ## [0.3.5] - Ecosystem status panel now finds its real manifests on the CM5
 
 - **`GET /api/ecosystem/status` always reported zero services on a real CM5

@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "ecosystem": "HYDRA-UMC",
   "name": "HYDRA-UMC-SERVER",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "role": "api",
   "stack": "node",
   "technologies": [
@@ -23,6 +23,7 @@
   },
   "service": {
     "port": 3000,
-    "health_path": "/api/system/metrics"
+    "health_path": "/api/system/metrics",
+    "systemd_unit": "hydra-umc-server.service"
   }
 }
