@@ -414,15 +414,12 @@ Dieses Projekt ist Teil eines größeren Robotik-Ökosystems desselben Autors (J
 
 ---
 
-## 👤 Autor
-
+## 👤 AUTOR
 **JuanenRac** (Electro Hobby 3D)
 📧 electrohobby3d@gmail.com
-📺 youtube.com/@electrohobby3d
+📺 [youtube.com/@electrohobby3d](https://youtube.com/@electrohobby3d)
 
----
-
-## 📜 Lizenz und Urheberrechtshinweise
+## 📜 LIZENZ
 
 HYDRA-UMC SERVER ist (c) 2026 JuanenRac (Electro Hobby 3D). Dieser
 Hinweis muss in jeder Verbreitung dieses Projekts oder abgeleiteter

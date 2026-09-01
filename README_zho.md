@@ -246,14 +246,11 @@ npm start
 ---
 
 ## 👤 作者
-
-**JuanenRac**（Electro Hobby 3D）
+**JuanenRac** (Electro Hobby 3D)
 📧 electrohobby3d@gmail.com
-📺 youtube.com/@electrohobby3d
+📺 [youtube.com/@electrohobby3d](https://youtube.com/@electrohobby3d)
 
----
-
-## 📜 许可证与版权声明
+## 📜 许可证
 
 HYDRA-UMC SERVER 版权所有 (c) 2026 JuanenRac（Electro Hobby 3D）。分发本项目或其衍生作品时必须包含此声明。
 
