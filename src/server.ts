@@ -29,6 +29,7 @@ import http from "http";
 import https from "https";
 import net from "net";
 import os from "os";
+import { Readable } from "stream";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { WebSocketServer, WebSocket } from "ws";
@@ -1872,26 +1873,46 @@ async function startServer() {
     res.json({ success: true, affectedCount: affectedIds.length });
   });
 
-  // Industrial Native Streaming Server (MJPEG Proxy Placeholder)
-  // Allows the Android app to show video directly from the CM5
-  app.get("/api/camera/:id/stream", (req, res) => {
+  // Real proxy to HYDRA-UMC-VISION-STREAMER's own real MJPEG capture+serve
+  // (mjpeg_server.py, "hydra-umc-vision-streamer stream serve") - this
+  // used to be a placeholder that wrote fake, non-JPEG bytes forever (see
+  // that project's own CHANGELOG for the real fix that made this
+  // possible). One camera = one local, loopback-only mjpeg_server.py
+  // instance on its own port, deterministically 8100 + (id - 1) - camera
+  // 1 -> 8100, camera 2 -> 8101, etc, up to the documented 8-camera cap
+  // (config.py's own MAX_CAMERAS) - avoids needing a separate port-
+  // mapping config file for a v0 with this few, fixed slots. Real
+  // passthrough proxy, not a re-implementation of MJPEG chunking:
+  // upstream's own multipart body (and its own real boundary) is piped
+  // through byte for byte, so this route's own behavior can never drift
+  // from what mjpeg_server.py actually sends.
+  function cameraStreamPort(id: number): number {
+    return 8100 + (id - 1);
+  }
+
+  app.get("/api/camera/:id/stream", async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) {
+      return res.status(400).json({ error: "camera id must be a positive integer" });
+    }
+    const port = cameraStreamPort(id);
+    let upstream: Response;
+    try {
+      upstream = await fetch(`http://127.0.0.1:${port}/stream`, { signal: AbortSignal.timeout(5000) });
+    } catch {
+      return res.status(503).json({ error: `No camera stream running locally for camera ${id} (expected on 127.0.0.1:${port}) - see HYDRA-UMC-VISION-STREAMER's own "stream serve" command.`, available: false });
+    }
+    if (!upstream.ok || !upstream.body) {
+      return res.status(502).json({ error: `Local camera stream for camera ${id} answered with an unexpected response.` });
+    }
     res.writeHead(200, {
-      'Content-Type': 'multipart/x-mixed-replace; boundary=--boundary',
-      'Cache-Control': 'no-cache',
-      'Connection': 'close',
-      'Pragma': 'no-cache'
+      "Content-Type": upstream.headers.get("content-type") || "multipart/x-mixed-replace",
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      "Pragma": "no-cache",
     });
-
-    // In a real CM5 implementation, this would pipe from a libcamera or ffmpeg process
-    // For now, we send a "Camera Offline" placeholder frame periodically
-    const interval = setInterval(() => {
-      const frame = Buffer.from("placeholder_frame_data");
-      res.write(`--boundary\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.length}\r\n\r\n`);
-      res.write(frame);
-      res.write("\r\n");
-    }, 100);
-
-    req.on('close', () => clearInterval(interval));
+    const nodeStream = Readable.fromWeb(upstream.body as any);
+    nodeStream.pipe(res);
+    req.on("close", () => nodeStream.destroy());
   });
 
   // System Metrics API for industrial monitoring - powers the Overview
@@ -2151,6 +2172,55 @@ async function startServer() {
         : 0,
       uptimeSeconds: Math.round(process.uptime()),
     });
+  });
+
+  // Real, deliberately UNauthenticated power controls for THIS device's own
+  // kiosk (HYDRA-UMC-OS's install_kiosk.sh) - the shutdown/restart buttons
+  // on STUDIO's own pre-login screen (AuthGate.tsx) have to work before an
+  // operator standing at the physical touchscreen has logged in at all, the
+  // same way a real power button would. Safe specifically because they are
+  // gated to loopback callers only: this server's own HTTP listener binds
+  // 0.0.0.0 (STUDIO/mobile apps need real LAN reach), so without a loopback
+  // check the exact same unauthenticated request from any other device on
+  // the network could power off the robot controller. The kiosk's own
+  // Chromium runs ON this device (see kiosk-session.sh), so its requests
+  // genuinely originate from 127.0.0.1/::1 - nothing else on the LAN can
+  // spoof req.socket.remoteAddress.
+  function requireLoopbackCaller(req: express.Request, res: express.Response): boolean {
+    const addr = req.socket.remoteAddress || "";
+    if (addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1") return true;
+    res.status(403).json({ error: "This endpoint only accepts requests from this device itself." });
+    return false;
+  }
+
+  // Responds BEFORE actually executing systemctl: once reboot/poweroff
+  // really runs, this process (and the TCP connection carrying the
+  // response) can be torn down mid-flight, and a client that never sees a
+  // response would show its own confusing network-error state instead of
+  // "it's shutting down". Requires the polkit rule
+  // HYDRA-UMC-OS/provisioning/polkit/49-hydra-umc-server-power.rules -
+  // this service otherwise runs as the unprivileged hydra-umc-server user
+  // (NoNewPrivileges, see its own systemd unit) and could not reboot/power
+  // off the host on its own.
+  async function runPowerAction(action: "reboot" | "poweroff", res: express.Response) {
+    res.json({ success: true });
+    try {
+      await execFileAsync("systemctl", [action]);
+    } catch (error) {
+      // The response above already went out - this can only ever reach the
+      // server's own log now, never a second HTTP response.
+      console.error(`[POWER] systemctl ${action} failed:`, error);
+    }
+  }
+
+  app.post("/api/system/reboot", (req, res) => {
+    if (!requireLoopbackCaller(req, res)) return;
+    void runPowerAction("reboot", res);
+  });
+
+  app.post("/api/system/shutdown", (req, res) => {
+    if (!requireLoopbackCaller(req, res)) return;
+    void runPowerAction("poweroff", res);
   });
 
   // authenticate (not requireAdmin): saving/loading a robot's own
