@@ -145,7 +145,60 @@ async function main() {
     assert.equal(library.servicePort, null, "a manifest with no service field must report servicePort: null");
     assert.equal(library.live, null, "a project that never declares a service must report live: null, not false");
 
-    console.log(`SERVER_ECOSYSTEM_STATUS_CONTRACT=PASS up=${up.live} down=${down.live} library=${library.live}`);
+    // Real bug this covers, live-reproduced on the CM5: a production
+    // deployment's own cwd (/opt/hydra-umc/server) has no manifests under
+    // its parent at all - the real checkouts with manifests live
+    // elsewhere (~/hydra-umc/HYDRA-UMC-*). A second server instance,
+    // spawned with its cwd deliberately OUTSIDE `workspace` (so the
+    // default `../` scan finds nothing) but HYDRA_UMC_ECOSYSTEM_ROOT
+    // pointed AT `workspace`, must still find the same 3 fixtures -
+    // proving the override, not an accidental path match, is what makes
+    // this work.
+    const outsideRoot = await mktemp();
+    const outsideCwd = path.join(outsideRoot, "server-cwd-outside-any-manifest-tree");
+    let overrideChild;
+    let overrideLogs = "";
+    const overridePort = await reservePort();
+    try {
+      await mkdir(outsideCwd, { recursive: true });
+      await copyFile(path.join(ROOT, "package.json"), path.join(outsideCwd, "package.json"));
+      overrideChild = spawn(process.execPath, [TSX_CLI, SERVER_SOURCE], {
+        cwd: outsideCwd,
+        env: {
+          ...process.env,
+          PORT: String(overridePort),
+          NODE_ENV: "test",
+          JWT_SECRET: "local-contract-verification-only-not-for-deployment",
+          HYDRA_UMC_ECOSYSTEM_ROOT: workspace,
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      overrideChild.stdout.on("data", (chunk) => { overrideLogs += chunk; });
+      overrideChild.stderr.on("data", (chunk) => { overrideLogs += chunk; });
+
+      let overridePayload;
+      try {
+        overridePayload = await fetchEcosystemStatus(overridePort);
+      } catch (error) {
+        throw new Error(`${error instanceof Error ? error.message : error}\nServer startup output:\n${overrideLogs || "<no output>"}`);
+      }
+      assert.equal(overridePayload.available, true, "HYDRA_UMC_ECOSYSTEM_ROOT must redirect the scan to a real manifest tree");
+      const overrideNames = overridePayload.projects.map((p) => p.name).sort();
+      assert.deepEqual(
+        overrideNames,
+        ["HYDRA-UMC-FIXTURE-DOWN-SERVICE", "HYDRA-UMC-FIXTURE-LIBRARY", "HYDRA-UMC-FIXTURE-UP-SERVICE"],
+        "HYDRA_UMC_ECOSYSTEM_ROOT must find the exact same fixtures as the default-cwd scan above, from a cwd with no manifests anywhere near it",
+      );
+    } finally {
+      if (overrideChild && overrideChild.exitCode === null) {
+        overrideChild.kill("SIGTERM");
+        await Promise.race([once(overrideChild, "exit"), new Promise((resolve) => setTimeout(resolve, 3000))]);
+        if (overrideChild.exitCode === null) overrideChild.kill("SIGKILL");
+      }
+      await rm(outsideRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    }
+
+    console.log(`SERVER_ECOSYSTEM_STATUS_CONTRACT=PASS up=${up.live} down=${down.live} library=${library.live} root_override=1`);
   } finally {
     upListener.close();
     if (child && child.exitCode === null) {

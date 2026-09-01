@@ -31,6 +31,32 @@ a change is actually worth summarizing for a human.
 
 ## Unreleased
 
+## [0.3.5] - Ecosystem status panel now finds its real manifests on the CM5
+
+- **`GET /api/ecosystem/status` always reported zero services on a real CM5
+  deployment** - real feedback from live testing (STUDIO's Ecosystem >
+  Services panel showed nothing at all, not just services marked down).
+  The scan's own `../` (this repo's parent directory) is correct for a
+  local dev checkout, where every HYDRA-UMC-*/URTC-* repo sits flat next
+  to this one - but a real CM5 deployment's `WorkingDirectory`
+  (`/opt/hydra-umc/server`) has only each service's own build artifacts
+  under its parent (`/opt/hydra-umc/`), never a full checkout with a
+  `hydra-umc.project.json` manifest, so every `existsSync()` check
+  silently skipped every directory and the scan always returned an empty
+  list. Added `HYDRA_UMC_ECOSYSTEM_ROOT` (see `.env.example`) to point
+  the scan at wherever a deployment's real manifests actually live;
+  unset (every existing dev setup) keeps today's exact `../` behavior.
+  New contract test case proves a server whose own cwd has no manifests
+  anywhere nearby still finds every real fixture once the override
+  points it at them. On the real CM5, `HYDRA_UMC_ECOSYSTEM_ROOT` pointed
+  at the staging checkouts under `/home` turned out to still fail -
+  `ProtectHome=true` in this service's own systemd unit blocks `/home`
+  entirely regardless of file permissions - so the actual live fix was
+  copying each running service's own `hydra-umc.project.json` into its
+  `/opt/hydra-umc/<service>/` directory instead, letting the unchanged
+  default `../` scan find them. `HYDRA_UMC_ECOSYSTEM_ROOT` itself stays
+  as a real, tested escape hatch for a deployment without that same
+  sandboxing constraint.
 - **Atomic Work loading** - added `command: "trajectory"` to the authenticated
   robot-command endpoint. Studio now persists and synchronizes a selected
   Work before Play can reach the server, fixing the race that replayed the

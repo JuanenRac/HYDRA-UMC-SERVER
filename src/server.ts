@@ -479,7 +479,24 @@ async function getEcosystemStatus(): Promise<{
 }> {
   const scannedAt = new Date().toISOString();
   try {
-    const parentDir = path.resolve(process.cwd(), "..");
+    // Real bug, live-reproduced on the CM5: `../` from process.cwd() is
+    // correct for local dev, where every HYDRA-UMC-* repo is checked out
+    // flat next to this one (e.g. C:\...\GitHub\HYDRA-UMC-SERVER,
+    // HYDRA-UMC-ANOMALY-DETECTOR, ... all siblings) - but a real CM5
+    // deployment's own WorkingDirectory is /opt/hydra-umc/server, whose
+    // parent (/opt/hydra-umc/) holds only each service's build ARTIFACTS
+    // (dist/, package.json - no hydra-umc.project.json at all), not the
+    // full source checkouts with manifests that live instead under this
+    // deployment's own staging tree (~/hydra-umc/HYDRA-UMC-*). Every
+    // manifest existsSync() check below silently failed there, so the
+    // scan always returned zero projects - the panel wasn't broken, it
+    // was scanning an empty directory. HYDRA_UMC_ECOSYSTEM_ROOT lets a
+    // real deployment point this at wherever its own manifests actually
+    // live; unset (every existing dev setup) keeps today's exact `../`
+    // behavior.
+    const parentDir = process.env.HYDRA_UMC_ECOSYSTEM_ROOT
+      ? path.resolve(process.env.HYDRA_UMC_ECOSYSTEM_ROOT)
+      : path.resolve(process.cwd(), "..");
     const entries = fs.readdirSync(parentDir, { withFileTypes: true });
     const projects: EcosystemProjectStatus[] = [];
     for (const entry of entries) {
