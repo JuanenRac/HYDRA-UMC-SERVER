@@ -288,7 +288,47 @@ async function main() {
       { message: "stopped playback's state" },
     );
 
-    console.log("SERVER_PLAYBACK_CONTRACT=PASS empty=1 play=1 xy-table=1 pause=1 resume=1 finish=1 stop=1");
+    // Repeat/loop: with isLooping set, reaching the end must NOT stop
+    // playback - it must wrap back to the first point and keep going,
+    // instead of always halting regardless of the Repeat button's own
+    // state (the real regression this covers: the engine used to ignore
+    // playbackState.isLooping entirely).
+    const settingsBeforeLoop = await request(port, "/api/settings");
+    const loopSettings = settingsBeforeLoop.body;
+    findRobot(loopSettings, 1).playbackState.isLooping = true;
+    const saveLoop = await request(port, "/api/settings", {
+      method: "POST", headers: authorization, body: JSON.stringify(loopSettings),
+    });
+    assert.equal(saveLoop.response.status, 200);
+
+    const playLoop = await request(port, "/api/robot/1/command", {
+      method: "POST", headers: authorization, body: JSON.stringify({ command: "play" }),
+    });
+    assert.equal(playLoop.response.status, 200);
+
+    // First lap: the last recorded point must still be applied normally.
+    await waitUntil(
+      async () => (await currentRobot1()).joints.j1 === 15,
+      { message: "looping playback must still apply every point of its first lap" },
+    );
+
+    // The wrap: the FIRST point must be applied again - proof the engine
+    // actually restarted the trajectory rather than leaving isPlaying
+    // stuck true at the end without ever moving again.
+    await waitUntil(
+      async () => {
+        const r = await currentRobot1();
+        return r.joints.j1 === 10 && r.playbackState.activeStep >= 1;
+      },
+      { message: "looping playback must wrap back to its first recorded point and keep going" },
+    );
+    const loopedRobot = await currentRobot1();
+    assert.equal(loopedRobot.playbackState.isPlaying, true, "looping playback must remain in the playing state after wrapping");
+    assert.ok(!loopedRobot.playbackState.isFinished, "looping playback must never set isFinished while isLooping is on");
+
+    await request(port, "/api/robot/1/command", { method: "POST", headers: authorization, body: JSON.stringify({ command: "stop" }) });
+
+    console.log("SERVER_PLAYBACK_CONTRACT=PASS empty=1 play=1 xy-table=1 pause=1 resume=1 finish=1 stop=1 loop=1");
   } finally {
     if (child && child.exitCode === null) {
       child.kill("SIGTERM");

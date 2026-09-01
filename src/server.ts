@@ -1146,6 +1146,17 @@ async function startServer() {
       const step = typeof pb.activeStep === "number" && pb.activeStep >= 0 ? pb.activeStep : 0;
       const points = r.recordedPoints;
       if (!Array.isArray(points) || step >= points.length) {
+        if (pb.isLooping && Array.isArray(points) && points.length > 0) {
+          // Repeat is on: go around again instead of stopping. Only
+          // activeStep resets - isPlaying stays true so the SAME timer
+          // keeps ticking and drives the next lap without a fresh 'play'
+          // command (which would also re-resolve intervalMs from a
+          // possibly-stale speed% for no reason).
+          r.playbackState = { ...pb, activeStep: 0 };
+          queueSettingsWrite(lastKnownSettings);
+          broadcastRobotDelta([{ controllerId: cId, robotId, patch: { playbackState: r.playbackState } }], lastKnownSettings);
+          return;
+        }
         // Natural completion - isFinished used to be set ONLY by a
         // browser client's own playback loop reaching the end (see
         // RobotDetail.tsx's own isFinished comment); this engine is now
