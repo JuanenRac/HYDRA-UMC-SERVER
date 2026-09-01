@@ -127,10 +127,13 @@ async function writeFixture(directory) {
         {
           id: 1,
           name: "Robot A1",
+          hasXYTable: true,
+          xyTable: { pos: { x: 0, y: 0 }, tableSize: { width: 500, length: 500 } },
+          pos: { x: 0, y: 0, z: 0, a: 0, b: 0, c: 0, tx: 0, ty: 0 },
           playbackState: { isPlaying: false, playing: false, isPaused: false, paused: false, speed: 40 },
           recordedPoints: [
-            { j1: 10, j2: 20, j3: 30, j4: 0, j5: 0, j6: 0, x: 100, y: 0, z: 50, a: 0, b: 0, c: 0 },
-            { j1: 15, j2: 25, j3: 35, j4: 0, j5: 0, j6: 0, x: 110, y: 10, z: 55, a: 0, b: 0, c: 0 },
+            { j1: 10, j2: 20, j3: 30, j4: 0, j5: 0, j6: 0, x: 100, y: 0, z: 50, a: 0, b: 0, c: 0, tx: 120, ty: 140 },
+            { j1: 15, j2: 25, j3: 35, j4: 0, j5: 0, j6: 0, x: 110, y: 10, z: 55, a: 0, b: 0, c: 0, tx: 220, ty: 240 },
           ],
         },
         {
@@ -213,6 +216,11 @@ async function main() {
     const expectedJ1 = robot.playbackState.activeStep === 1 ? 10 : 15;
     assert.equal(robot.joints.j1, expectedJ1, `applied point must match activeStep=${robot.playbackState.activeStep}`);
     if (robot.playbackState.activeStep === 1) assert.equal(robot.pos.x, 100, "applied point's own real pos must be set too");
+    const expectedTableX = robot.playbackState.activeStep === 1 ? 120 : 220;
+    const expectedTableY = robot.playbackState.activeStep === 1 ? 140 : 240;
+    assert.equal(robot.xyTable.pos.x, expectedTableX, "playback must move the XY table's own X axis");
+    assert.equal(robot.xyTable.pos.y, expectedTableY, "playback must move the XY table's own Y axis");
+    assert.equal(robot.pos.tx, expectedTableX, "robot status must mirror the independent table X axis");
 
     // Pause must actually halt advancement, not just flip a UI flag - not
     // "no MORE ticks ever fire" (they do, harmlessly, every intervalMs
@@ -225,7 +233,7 @@ async function main() {
     const pausedAt = await staysStable(
       async () => {
         const r = await currentRobot1();
-        return { activeStep: r.playbackState.activeStep, j1: r.joints.j1 };
+        return { activeStep: r.playbackState.activeStep, j1: r.joints.j1, tx: r.xyTable.pos.x, ty: r.xyTable.pos.y };
       },
       { message: "paused playback's activeStep/joints" },
     );
@@ -280,7 +288,7 @@ async function main() {
       { message: "stopped playback's state" },
     );
 
-    console.log("SERVER_PLAYBACK_CONTRACT=PASS empty=1 play=1 pause=1 resume=1 finish=1 stop=1");
+    console.log("SERVER_PLAYBACK_CONTRACT=PASS empty=1 play=1 xy-table=1 pause=1 resume=1 finish=1 stop=1");
   } finally {
     if (child && child.exitCode === null) {
       child.kill("SIGTERM");

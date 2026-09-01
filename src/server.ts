@@ -1175,6 +1175,29 @@ async function startServer() {
         };
         patch.pos = r.pos;
       }
+      // Keep table axes separate from the arm target. The table's full object
+      // is sent in the delta because clients shallow-merge it; `{ pos }`
+      // alone would erase tableSize and other configuration remotely.
+      if (typeof pt.tx === "number" || typeof pt.ty === "number" || typeof pt.trz === "number") {
+        if (r.xyTable?.pos) {
+          r.xyTable = {
+            ...r.xyTable,
+            pos: {
+              ...r.xyTable.pos,
+              ...(typeof pt.tx === "number" ? { x: pt.tx } : {}),
+              ...(typeof pt.ty === "number" ? { y: pt.ty } : {}),
+            },
+          };
+          patch.xyTable = r.xyTable;
+        }
+        r.pos = {
+          ...r.pos,
+          ...(typeof pt.tx === "number" ? { tx: pt.tx } : {}),
+          ...(typeof pt.ty === "number" ? { ty: pt.ty } : {}),
+          ...(typeof pt.trz === "number" ? { trz: pt.trz } : {}),
+        };
+        patch.pos = r.pos;
+      }
       r.playbackState = {
         ...pb,
         activeStep: step + 1,
@@ -1520,8 +1543,76 @@ async function startServer() {
       return res.status(404).json({ error: "Robot not found" });
     }
 
-    // Identify all robots that should receive this command (Self + Combined)
-    const affectedIds = [robotId, ...(targetRobot.combinedWith || [])];
+    // A trajectory belongs to one robot. Unlike play/pause/stop, loading it
+    // must not overwrite a combined sibling's independently selected Work.
+    const affectedIds = command === "trajectory"
+      ? [robotId]
+      : [robotId, ...(targetRobot.combinedWith || [])];
+
+    // Work loading used to be a browser-only change followed by the normal
+    // 500 ms full-settings debounce. A Play click could therefore arrive at
+    // Server first and replay the previous trajectory. Validate and prepare
+    // the complete point list before touching state so "trajectory" is one
+    // durable, broadcast atomic command like every other robot operation.
+    let validatedTrajectory: Record<string, number | string>[] | undefined;
+    let validatedWorkFile: string | undefined;
+    let validatedExample: string | undefined;
+    if (command === "trajectory") {
+      const rawPoints = params?.points;
+      const numericFields = ["j1", "j2", "j3", "j4", "j5", "j6", "x", "y", "z", "a", "b", "c", "tx", "ty", "trz"];
+      if (!Array.isArray(rawPoints) || rawPoints.length === 0 || rawPoints.length > 10000) {
+        return res.status(400).json({ error: "trajectory requires between 1 and 10000 points" });
+      }
+      try {
+        validatedTrajectory = rawPoints.map((rawPoint: unknown) => {
+          if (!rawPoint || typeof rawPoint !== "object" || Array.isArray(rawPoint)) {
+            throw new Error("each trajectory point must be an object");
+          }
+          const point = rawPoint as Record<string, unknown>;
+          const clean: Record<string, number | string> = {};
+          for (const field of numericFields) {
+            if (point[field] === undefined) continue;
+            if (typeof point[field] !== "number" || !Number.isFinite(point[field])) {
+              throw new Error(`trajectory ${field} must be finite`);
+            }
+            clean[field] = point[field];
+          }
+          if (point.motionType !== undefined) {
+            if (point.motionType !== "model-joints") throw new Error("unsupported trajectory motionType");
+            clean.motionType = "model-joints";
+          }
+          const hasNativeJoints = ["j1", "j2", "j3", "j4", "j5", "j6"].every((field) => typeof clean[field] === "number");
+          const hasCartesianPose = ["x", "y", "z"].every((field) => typeof clean[field] === "number");
+          if (!hasNativeJoints && !hasCartesianPose) {
+            throw new Error("trajectory point requires native joints or x/y/z");
+          }
+          return clean;
+        });
+      } catch (error) {
+        return res.status(400).json({ error: error instanceof Error ? error.message : "invalid trajectory" });
+      }
+      // tx/ty belong to an XY table, never to the arm's own Cartesian target.
+      // Refuse a table path for a robot without a configured table instead of
+      // silently replaying only its arm points and corrupting the example.
+      const hasTableAxes = validatedTrajectory.some((point) =>
+        ["tx", "ty", "trz"].some((field) => typeof point[field] === "number"),
+      );
+      if (hasTableAxes && (!targetRobot.hasXYTable || !targetRobot.xyTable?.pos)) {
+        return res.status(400).json({ error: "trajectory table axes require a configured XY table" });
+      }
+      if (params?.selectedWorkFile !== undefined) {
+        if (typeof params.selectedWorkFile !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.json$/.test(params.selectedWorkFile)) {
+          return res.status(400).json({ error: "selectedWorkFile must be a safe .json file name" });
+        }
+        validatedWorkFile = params.selectedWorkFile;
+      }
+      if (params?.selectedExample !== undefined) {
+        if (typeof params.selectedExample !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(params.selectedExample)) {
+          return res.status(400).json({ error: "selectedExample must be a safe example id" });
+        }
+        validatedExample = params.selectedExample;
+      }
+    }
     // Resolve pause once from the command target. Applying `!isPaused` to
     // each member separately lets a stale combined pair (for example A1/A2)
     // end in opposite states; every client must receive one desired group
@@ -1712,6 +1803,32 @@ async function startServer() {
               if (touched) patch = { playbackState: robot.playbackState };
               break;
             }
+            case "trajectory":
+              // validatedTrajectory exists because the endpoint validates it
+              // before iterating controllers. Reset the playback cursor so a
+              // subsequent Play always starts this newly selected Work.
+              robot.recordedPoints = validatedTrajectory;
+              if (validatedWorkFile !== undefined) robot.selectedWorkFile = validatedWorkFile;
+              if (validatedExample !== undefined) robot.selectedExample = validatedExample;
+              robot.playbackState = {
+                ...robot.playbackState,
+                isPlaying: false,
+                playing: false,
+                isPaused: false,
+                paused: false,
+                requestPause: false,
+                requestStop: false,
+                activeStep: -1,
+                isFinished: false,
+                finished: false,
+              };
+              patch = {
+                recordedPoints: robot.recordedPoints,
+                ...(validatedWorkFile !== undefined ? { selectedWorkFile: robot.selectedWorkFile } : {}),
+                ...(validatedExample !== undefined ? { selectedExample: robot.selectedExample } : {}),
+                playbackState: robot.playbackState,
+              };
+              break;
             // Lets a remote client (the Android app's own Camera
             // screen) toggle a robot's vision system without a full
             // POST /api/settings overwrite - mirrors the same 2 fields

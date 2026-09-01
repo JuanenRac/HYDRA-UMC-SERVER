@@ -157,7 +157,28 @@ async function main() {
     assert.equal(a1.visionEnabled, false);
     assert.equal(a1.camera.connected, false, "embedded robot camera must not retain a stale enabled state");
     assert.equal(settings.body.controllers[0].cameras[0].connected, false, "controller camera must match its robot command");
-    console.log("SERVER_ROBOT_COMMAND_CONTRACT=PASS combined-pause=2 camera-state=3");
+
+    const points = [
+      { motionType: "model-joints", j1: -10, j2: -25, j3: 20, j4: 0, j5: 0, j6: 0, x: 190, y: -30, z: 10 },
+      { motionType: "model-joints", j1: 10, j2: -20, j3: 25, j4: 0, j5: 0, j6: 0, x: 190, y: 30, z: 10 },
+    ];
+    const trajectory = await request(port, "/api/robot/1/command", {
+      method: "POST",
+      headers: authorization,
+      body: JSON.stringify({ command: "trajectory", params: { points, selectedWorkFile: "a1-circle.json", selectedExample: "example-2-circle" } }),
+    });
+    assert.equal(trajectory.response.status, 200);
+    assert.equal(trajectory.body.affectedCount, 1, "a loaded Work must not overwrite a combined sibling");
+
+    settings = await request(port, "/api/settings");
+    const trajectoryA1 = findRobot(settings.body, 1);
+    const trajectoryA2 = findRobot(settings.body, 2);
+    assert.deepEqual(trajectoryA1.recordedPoints, points, "Server must persist the selected Work before Play");
+    assert.equal(trajectoryA1.selectedWorkFile, "a1-circle.json");
+    assert.equal(trajectoryA1.selectedExample, "example-2-circle", "Server must persist the selected example with its atomic trajectory");
+    assert.equal(trajectoryA1.playbackState.activeStep, -1, "loading a Work must reset its playback cursor");
+    assert.deepEqual(trajectoryA2.recordedPoints ?? [], [], "combined sibling must retain its own trajectory");
+    console.log("SERVER_ROBOT_COMMAND_CONTRACT=PASS combined-pause=2 camera-state=3 trajectory-sync=5");
   } finally {
     if (child && child.exitCode === null) {
       child.kill("SIGTERM");

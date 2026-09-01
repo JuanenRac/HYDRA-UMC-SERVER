@@ -29,6 +29,47 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## Unreleased
+
+- **Atomic Work loading** - added `command: "trajectory"` to the authenticated
+  robot-command endpoint. Studio now persists and synchronizes a selected
+  Work before Play can reach the server, fixing the race that replayed the
+  preceding trajectory. The command validates bounded finite points, accepts
+  model-native `motionType: "model-joints"`, resets playback state and never
+  overwrites a combined sibling's own Work. Covered by the real temporary
+  Server contract fixture.
+- **Atomic example selection** - `trajectory` now optionally persists a safe
+  `selectedExample` id along with the model-native points. Examples and Works
+  therefore share one durable load/reset/broadcast contract instead of relying
+  on a delayed full-settings write.
+
+- **Independent XY-table playback** - a trajectory point's `tx`/`ty` now
+  moves `xyTable.pos` and mirrors that state in `robot.pos`, while the arm
+  continues to resolve only its own `x`/`y`/`z` pose. The Server rejects a
+  table trajectory for a robot without a configured table. The playback
+  contract now proves both arm and table move together without conflating
+  their coordinate systems.
+
+## [0.3.3]
+
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
+
+## [0.3.2]
+
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
+
+## [0.3.1]
+
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
+
+## [0.3.0]
+
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
+
+## [0.2.9]
+
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
+
 ## [0.2.8] - Real Tier 2 relay param (URTC Tool Head, through STACK A)
 
 - **`GET /api/hardware/canota/version`, `POST /api/hardware/canota/flash`**

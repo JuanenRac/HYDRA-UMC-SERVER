@@ -164,16 +164,28 @@ a separate one.
   per-field PATCH on this endpoint - a client that wants to change one
   robot's one joint angle still has to read the full state, mutate its own
   local copy, and POST the whole object back.
-- `POST /api/robot/:id/command` (body: e.g. `{ "type": "jog", "joint":
-  "j1", "value": 12.5 }` - see `src/store.tsx`'s own atomic command
-  senders for the full set of `type`s: stop/play/pause/jog/tool/valve/
-  pump/speed/vision) is the small-payload alternative: **any authenticated
+- `POST /api/robot/:id/command` (body: `{ "command": "jog", "params":
+  { "axis": "x", "amount": 12.5 } }`) is the small-payload alternative:
+  **any authenticated
   token, `admin` or `operator`**, can call it. The server computes which
   robot IDs are affected (the target plus anything `combinedWith` it)
   itself, persists to disk, and broadcasts a WS delta on its own - this is
   the primary way SUITE, the Android app, and the iOS app all write today,
   precisely because it doesn't require the admin role a full settings
   overwrite now does.
+
+  `command: "trajectory"` atomically loads a Work before playback. Its
+  `params` contains `points` (1 to 10,000 points, each with either finite
+  `j1`–`j6` native joints or finite `x`/`y`/`z`), plus an optional safe
+  `selectedWorkFile` basename ending in `.json` or `selectedExample` id. A
+  model-native point may set `motionType: "model-joints"`. Points may also
+  carry finite `tx`/`ty` (and optional `trz`) for an enabled XY table: these
+  move the table's own axes and are never folded into the arm's `x`/`y`/`z`
+  target. Such a trajectory is rejected for a robot without a configured
+  table. The command applies
+  only to the requested robot, clears its playback cursor and
+  persists/broadcasts both the trajectory and its selected source; it
+  deliberately does not replace a combined robot's independent Work.
 
 **Race condition to know about:** two clients (a browser tab and SUITE, or
 two SUITE instances) that both read, then both write moments apart, can
