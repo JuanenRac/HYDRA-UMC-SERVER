@@ -31,6 +31,30 @@ a change is actually worth summarizing for a human.
 
 ## Unreleased
 
+- **Real CPU temperature was silently mocked in production** - found live
+  while verifying the new Supervisor endpoint below against the real CM5:
+  `temp_is_real` was `false` (a random mocked value) even though
+  `vcgencmd measure_temp` worked fine when run directly over SSH as the
+  same service user. Two real, separate gaps, both from this repo's own
+  earlier systemd hardening pass:
+  1. The `hydra-umc-server` service user was never added to the `video`
+     group Raspberry Pi OS requires for `/dev/vcio` (the VideoCore
+     mailbox device `vcgencmd` needs) - real one-time host fix:
+     `sudo usermod -aG video hydra-umc-server`.
+  2. `PrivateDevices=true` hides `/dev/vcio` entirely inside a fresh
+     private `/dev`, with no working way to re-admit it - a same-looking
+     `DeviceAllow=/dev/vcio rw` line was tried first and made things
+     WORSE (any `DeviceAllow=` at all appears to tighten this systemd
+     version's default device cgroup policy, and the path-based rule
+     didn't resolve against a device outside `PrivateDevices`' own
+     remapped `/dev` anyway) - `PrivateDevices=true` removed instead, a
+     real, deliberate tradeoff since this unit has a genuine hardware
+     access need. Isolated via a byte-for-byte `systemd-run`
+     reproduction of the real unit's full directive set - see
+     `systemd/hydra-umc-server.service`'s own comment for the full
+     story. Same "verify live, not just syntax check" lesson as this
+     repo's earlier `AF_NETLINK`/mDNS regression - `systemd-analyze
+     verify` catches neither class of bug.
 - **`GET /api/system/supervisor`** - a real, Netdata-style deep-dive host
   monitor, distinct from the lighter `GET /api/system/metrics` (Overview
   footer). Real per-core CPU usage/frequency (a 1s background sampler

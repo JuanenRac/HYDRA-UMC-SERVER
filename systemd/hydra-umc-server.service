@@ -9,7 +9,30 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
+# The service user must also be in the "video" group (real, one-time host
+# setup: `sudo usermod -aG video hydra-umc-server`) - real feedback from
+# live testing: /dev/vcio (the VideoCore mailbox device `vcgencmd measure_temp`
+# needs for the real CPU temperature reading) is only accessible to root
+# plus the "video" group on Raspberry Pi OS, and this service's own
+# temp_is_real/rp1_temp fields go silently mocked/null without it, no
+# error surfaced anywhere short of comparing this endpoint's own output
+# against `vcgencmd` run directly.
+#
+# PrivateDevices= is deliberately NOT set here for the same reason, even
+# though it would otherwise be a real, meaningful hardening property for
+# this unit - a real production regression (found live, the same way as
+# the video-group gap above): it hides /dev/vcio entirely inside a fresh
+# private /dev, and unlike RestrictAddressFamilies= (which DOES support
+# an additive allow-list), there is no working way to re-admit ONE real
+# device node into that private /dev - a same-looking `DeviceAllow=
+# /dev/vcio rw` line was tried and made things WORSE, not better: adding
+# any DeviceAllow= at all appears to tighten this systemd version's
+# default device cgroup policy away from "allow everything", and the
+# path-based device rule didn't resolve against a device outside
+# PrivateDevices' own remapped /dev anyway - net result was vcgencmd
+# blocked entirely, silently, indistinguishable from the original gap
+# without a byte-for-byte systemd-run reproduction to isolate the exact
+# broken directive (see this repo's own CHANGELOG for the full story).
 User=hydra-umc-server
 Group=hydra-umc-server
 WorkingDirectory=/opt/hydra-umc/server
@@ -21,7 +44,6 @@ NoNewPrivileges=true
 CapabilityBoundingSet=
 LockPersonality=true
 PrivateTmp=true
-PrivateDevices=true
 ProtectHome=true
 ProtectSystem=full
 ProtectClock=true
