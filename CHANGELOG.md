@@ -34,11 +34,17 @@ a change is actually worth summarizing for a human.
 - **CM5 systemd resource and kernel-surface baseline** - the Server unit now
   drops all Linux capabilities, private device access and unneeded namespace,
   realtime and SUID/SGID operations; it restricts address families to local
-  Unix and IPv4/IPv6 networking, locks the personality and protects clock,
-  cgroups, kernel logs, modules and tunables. A 384 MiB soft / 512 MiB hard
-  memory budget protects the 4 GiB CM5 from a single Server process exhausting
-  the node. The service still uses its explicit writable data directory and
-  the narrowly-scoped polkit path for approved system actions.
+  Unix, IPv4/IPv6 and netlink networking, locks the personality and protects
+  clock, cgroups, kernel logs, modules and tunables. A 384 MiB soft / 512 MiB
+  hard memory budget protects the 4 GiB CM5 from a single Server process
+  exhausting the node. The service still uses its explicit writable data
+  directory and the narrowly-scoped polkit path for approved system actions.
+  `AF_NETLINK` is included alongside `AF_UNIX`/`AF_INET`/`AF_INET6` - a first
+  deploy against the real CM5 without it crash-looped on startup, since
+  Node's own `os.networkInterfaces()` (used by the mDNS advertiser to
+  enumerate real network interfaces) needs a netlink socket on Linux; caught
+  and fixed against the live service, not just `systemd-analyze verify`
+  (which only checks syntax, not runtime behavior under the restriction).
 
 ## [0.3.7] - Real per-project start/stop/restart, admin-only, real polkit-gated
 
