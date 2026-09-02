@@ -1842,10 +1842,22 @@ async function startServer() {
               // malformed/malicious atomic command.
               const MAX_JOG_AMOUNT = 1000;
               const validAmount = typeof params?.amount === "number" && Number.isFinite(params.amount) && Math.abs(params.amount) <= MAX_JOG_AMOUNT;
+              // STUDIO's own XY-table position sliders (RobotDetail.tsx,
+              // handleXYAxisChange) drag to an exact target position, not a
+              // relative nudge like the joystick/D-pad callers of this same
+              // case - `absolute: true` sets the axis to `amount` instead of
+              // adding it, reusing this case's existing validation/patch/
+              // broadcast plumbing instead of a bespoke command. Those
+              // sliders used to call updateRobot() directly (the
+              // optimistic-local + 500ms-debounced-full-tree-save path,
+              // which never broadcasts to any OTHER connected client) -
+              // real feedback from live testing: dragging the XY table from
+              // one client never appeared on another.
+              const isAbsolute = params?.absolute === true;
               if (typeof params?.axis === "string" && ROBOT_AXES.has(params.axis) && validAmount) {
                 const target = params.target || "robot";
                 if (target === "robot") {
-                  robot.pos[params.axis] += params.amount;
+                  robot.pos[params.axis] = isAbsolute ? params.amount : robot.pos[params.axis] + params.amount;
                   // An optional, client-supplied joints override -
                   // HYDRA-UMC-STUDIO's own browser UI resolves jog targets
                   // through resolveTargetJoints(), a PER-MODEL inverse-
@@ -1873,7 +1885,16 @@ async function startServer() {
                 } else if (target === "xytable" && robot.xyTable) {
                   const axis = params.axis === "x" ? "x" : (params.axis === "y" ? "y" : null);
                   if (axis) {
-                    robot.xyTable.pos[axis] += params.amount;
+                    robot.xyTable.pos[axis] = isAbsolute ? params.amount : robot.xyTable.pos[axis] + params.amount;
+                    // STUDIO's clients also keep a second, older
+                    // representation of this same position on robot.pos.tx/
+                    // ty (see handleXYAxisChange/XYTableOverlay) - only the
+                    // absolute (slider) callers ever touch it, matching
+                    // what those client call sites already did before this
+                    // fix; the joystick/D-pad's relative jog never has.
+                    if (isAbsolute) {
+                      robot.pos[axis === "x" ? "tx" : "ty"] = params.amount;
+                    }
                     // The FULL xyTable object, not just { pos: ... } - every
                     // client's own delta-merge (STUDIO's applyRobotDelta in
                     // store.tsx, Android's RobotViewModel.onDelta, iOS/DSI's
@@ -1893,12 +1914,70 @@ async function startServer() {
                     // crashed" report. Sending the complete object here
                     // means a shallow merge on the receiving end reconstructs
                     // the exact same xyTable instead of an amputated one.
-                    patch = { xyTable: robot.xyTable };
+                    // pos also included, but only for the absolute case -
+                    // that's the only branch that touches robot.pos.tx/ty
+                    // above, same reasoning as that comment.
+                    patch = isAbsolute ? { xyTable: robot.xyTable, pos: robot.pos } : { xyTable: robot.xyTable };
                   }
                 }
               }
               break;
             }
+            // Absolute pose reset ("HOME"/"RESET"/"HOME XY" on every
+            // client) - was each client's own updateRobot()/settings-save
+            // call, which never broadcasts to any OTHER connected client
+            // (a second STUDIO window, or the Android app's own embedded
+            // WebView copy of the same page). Real feedback from live
+            // testing: a reset on one client silently never appeared on
+            // another, in either direction. target === "robot" (default)
+            // resets pos+joints to home; target === "xytable" resets only
+            // xyTable.pos + pos.tx/ty, leaving the arm's own pose alone -
+            // same target convention the "jog" case above already uses.
+            case "reset": {
+              const target = params?.target === "xytable" ? "xytable" : "robot";
+              if (target === "robot") {
+                robot.pos = { x: 0, y: 0, z: 0, a: 0, b: 0, c: 0, tx: robot.pos?.tx, ty: robot.pos?.ty, trz: robot.pos?.trz };
+                // Same client-supplied-joints trust level as "jog" above
+                // (see that case's own comment) - the server has no
+                // per-model IK of its own, so a caller-supplied home pose
+                // (STUDIO's homePoseFor(robot.model)) is validated and
+                // trusted the same way; calculateJoints() is the fallback
+                // for any caller that doesn't send one.
+                const JOINT_KEYS_RESET = ["j1", "j2", "j3", "j4", "j5", "j6"];
+                const j = params?.joints;
+                const hasValidJoints = j && typeof j === "object" && JOINT_KEYS_RESET.every((k) => typeof j[k] === "number" && Number.isFinite(j[k]));
+                robot.joints = hasValidJoints ? { j1: j.j1, j2: j.j2, j3: j.j3, j4: j.j4, j5: j.j5, j6: j.j6 } : calculateJoints(robot.pos);
+                patch = { pos: robot.pos, joints: robot.joints };
+              } else if (robot.xyTable) {
+                robot.pos = { ...robot.pos, tx: 0, ty: 0 };
+                robot.xyTable.pos = { x: 0, y: 0 };
+                patch = { pos: robot.pos, xyTable: robot.xyTable };
+              }
+              break;
+            }
+            // Real, server-synced jog step (STUDIO's RobotDetail.tsx
+            // jogStep, Android's own FilterChip rows) - was
+            // component-local on every client, so the step shown/used on
+            // one never matched another. Bounded the same way "speed"
+            // below is: a real jog step never needs to be 0/negative/huge,
+            // and this value feeds directly into the next jog's amount
+            // calculation on whichever client sends it.
+            case "jogStep":
+              if (typeof params?.value === "number" && Number.isFinite(params.value) && params.value > 0 && params.value <= 1000) {
+                robot.jogStep = params.value;
+                patch = { jogStep: robot.jogStep };
+              }
+              break;
+            // "RESET 3D" only ever remounts the PRESSING client's own 3D
+            // camera view (no real robot motion/state involved) - bumping
+            // this timestamp and broadcasting it is only a signal for
+            // every other connected client's own effect to remount their
+            // own local camera view the same way, matching this robot's
+            // own centerCameraTrigger precedent just above it.
+            case "reset3D":
+              robot.reset3DTrigger = Date.now();
+              patch = { reset3DTrigger: robot.reset3DTrigger };
+              break;
             case "tool":
               if (params?.tool) {
                 robot.tool = params.tool;

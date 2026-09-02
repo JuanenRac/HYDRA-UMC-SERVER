@@ -31,6 +31,26 @@ a change is actually worth summarizing for a human.
 
 ## Unreleased
 
+- **Three new atomic `/api/robot/:id/command` commands, plus `absolute`
+  support for the existing `jog`** - `reset` (target-aware: resets
+  pos+joints to a caller-supplied home pose for `target: "robot"`, or
+  just `xyTable.pos`/`pos.tx`/`ty` for `target: "xytable"`), `jogStep`
+  (validated 0-1000, sets `robot.jogStep`), and `reset3D` (bumps
+  `robot.reset3DTrigger` - a pure broadcast signal, no real robot state,
+  for every client's own local camera-view remount). `jog`'s existing
+  `target: "robot"`/`"xytable"` branches now accept `absolute: true` to
+  SET an axis to `amount` instead of adding it (for a position slider
+  dragging to an exact target, as opposed to a joystick/D-pad's relative
+  nudge), reusing that case's existing axis/target validation rather than
+  a bespoke command. All four exist because HYDRA-UMC-STUDIO's own Reset/
+  HOME/HOME XY buttons, XY table sliders, and jog-step selector wrote
+  through `updateRobot()` - the optimistic-local + 500ms-debounced-
+  full-tree settings save, which this endpoint's own broadcast (every
+  other command already uses) never touches - so a reset/step/table-drag
+  on one connected client silently never appeared on another, in either
+  direction. Real feedback from live multi-client testing. See
+  HYDRA-UMC-STUDIO's and HYDRA-UMC-ANDROID-CONTROL's own `[Unreleased]`/
+  `[0.5.0]` for the client-side half of this fix.
 - **CM5 systemd resource and kernel-surface baseline** - the Server unit now
   drops all Linux capabilities, private device access and unneeded namespace,
   realtime and SUID/SGID operations; it restricts address families to local
