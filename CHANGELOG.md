@@ -126,6 +126,10 @@ a change is actually worth summarizing for a human.
   this host merely can't currently read. New Prometheus gauge
   `hydra_system_rp1_temp_celsius`.
 
+## [0.3.8]
+
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
+
 ## [0.3.7] - Real per-project start/stop/restart, admin-only, real polkit-gated
 
 - **`POST /api/ecosystem/service/:unit/:action`** (`start`/`stop`/
