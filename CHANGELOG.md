@@ -31,6 +31,19 @@ a change is actually worth summarizing for a human.
 
 ## Unreleased
 
+- **`GET /api/system/metrics`'s `cpu_load`/`memory_usage` disagreed with
+  the new Supervisor endpoint's own real numbers** - real feedback from
+  live testing: the dashboard footer showed 9% CPU while the Supervisor
+  panel showed 21% for the same instant. Root cause: `cpu_load` was
+  `Math.round(os.loadavg()[0] * 10)`, a "simplified load" heuristic that
+  isn't a percentage at all (`os.loadavg()[0]` is the 1-minute average
+  number of processes wanting CPU time, not CPU busy%), and `memory_usage`
+  used raw `os.freemem()`, which counts reclaimable page cache as "used"
+  and so runs high. Both now reuse the exact same real sources the
+  Supervisor endpoint computes from - `lastCpuUsage.overallPercent` (the
+  delta-sampled `os.cpus()` busy% background sampler) and
+  `readMemoryInfo()`'s `/proc/meminfo` `MemAvailable`-based used% - one
+  real measurement now, read from two places, never two competing guesses.
 - **Real CPU temperature was silently mocked in production** - found live
   while verifying the new Supervisor endpoint below against the real CM5:
   `temp_is_real` was `false` (a random mocked value) even though

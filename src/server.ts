@@ -545,9 +545,9 @@ async function getSupervisorSnapshot() {
 // UI's own StatusFooter) and GET /metrics (src/metrics.ts's own
 // hydra_system_* Prometheus gauges, wired up via setSystemMetricsSource()
 // below) - pulled out of the route handler it used to live in directly so
-// both call sites do the exact same vcgencmd read/os.loadavg() computation
-// instead of two copies drifting apart. See the original inline comment
-// (now here) for why this is execFile (async, no shell) and not execSync.
+// both call sites do the exact same vcgencmd read computation instead of
+// two copies drifting apart. See the original inline comment (now here)
+// for why this is execFile (async, no shell) and not execSync.
 async function getSystemMetrics(): Promise<{
   cpu_load: number;
   memory_usage: number;
@@ -580,9 +580,23 @@ async function getSystemMetrics(): Promise<{
     temp = 45 + Math.random() * 10; // Mock - vcgencmd isn't available on this host (not a Pi, or dev machine)
   }
 
+  // cpu_load/memory_usage reuse the exact same real sources GET
+  // /api/system/supervisor computes from (lastCpuUsage's delta-sampled
+  // os.cpus() busy%, readMemoryInfo()'s /proc/meminfo MemAvailable-based
+  // used%) - this used to be its own independent formula
+  // (os.loadavg()[0]*10, a 1-minute load-average heuristic that isn't a
+  // percentage at all, and raw freemem() which double-counts reclaimable
+  // page cache as "used"), which is exactly why the footer and the
+  // Supervisor panel could show two different numbers for what a user
+  // reasonably expects to be the same "CPU load" - real feedback: 21% in
+  // the Supervisor vs 9% in the footer for the same instant. One real
+  // measurement now, read from two places, never two competing guesses.
+  const memInfo = readMemoryInfo();
   return {
-    cpu_load: Math.round(os.loadavg()[0] * 10), // simplified load
-    memory_usage: Math.round((1 - os.freemem() / os.totalmem()) * 100),
+    cpu_load: Math.round(lastCpuUsage.overallPercent),
+    memory_usage: memInfo
+      ? Math.round((memInfo.usedBytes / memInfo.totalBytes) * 100)
+      : Math.round((1 - os.freemem() / os.totalmem()) * 100), // non-Linux fallback, no /proc/meminfo to read
     temp,
     temp_is_real: tempIsReal,
     rp1_temp: readRp1Temp(),
