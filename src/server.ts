@@ -346,6 +346,201 @@ function readNetworkStatus() {
   };
 }
 
+// =============================================================================
+// Supervisor (GET /api/system/supervisor) - a real, Netdata-style deep-dive
+// into this host's own live resource usage, distinct from the lighter
+// GET /api/system/metrics above (Overview footer's own coarse CPU/mem/temp
+// readout). Per-core CPU % needs a delta between two os.cpus() samples -
+// rather than block each HTTP request on a two-sample window (os.cpus()
+// timings only update roughly once a scheduler tick, so a request-scoped
+// delta would need an artificial sleep), a 1s background interval keeps a
+// rolling "current %" always ready to serve instantly, the same tradeoff
+// Netdata itself makes (a fixed collector interval, not per-request
+// sampling). Every value here is real - a field this host genuinely cannot
+// read (e.g. per-core frequency on a non-Linux dev box) is null, never a
+// mocked number, unlike vcgencmd's temp reading above (which mocks
+// specifically because "no CPU temperature at all" would be a confusing
+// gap in an otherwise-always-present field on a industrial monitoring
+// dashboard - the supervisor's own fields don't have that same precedent,
+// so they stay honestly absent instead).
+// =============================================================================
+
+interface CpuUsageSample {
+  overallPercent: number;
+  perCorePercent: number[];
+}
+
+let lastCpuTimes: os.CpuInfo[] | null = null;
+let lastCpuUsage: CpuUsageSample = { overallPercent: 0, perCorePercent: [] };
+
+function sampleCpuUsage(): void {
+  const cpus = os.cpus();
+  if (lastCpuTimes && lastCpuTimes.length === cpus.length) {
+    const perCorePercent = cpus.map((cpu, i) => {
+      const prev = lastCpuTimes![i].times;
+      const cur = cpu.times;
+      const prevTotal = prev.user + prev.nice + prev.sys + prev.idle + prev.irq;
+      const curTotal = cur.user + cur.nice + cur.sys + cur.idle + cur.irq;
+      const totalDelta = curTotal - prevTotal;
+      const idleDelta = cur.idle - prev.idle;
+      if (totalDelta <= 0) return 0;
+      return Math.round((1 - idleDelta / totalDelta) * 1000) / 10;
+    });
+    const overallPercent = perCorePercent.length
+      ? Math.round((perCorePercent.reduce((a, b) => a + b, 0) / perCorePercent.length) * 10) / 10
+      : 0;
+    lastCpuUsage = { overallPercent, perCorePercent };
+  }
+  lastCpuTimes = cpus;
+}
+sampleCpuUsage(); // primes lastCpuTimes immediately - first real delta lands on the next interval tick, 1s later
+const cpuSampleInterval = setInterval(sampleCpuUsage, 1000);
+cpuSampleInterval.unref(); // never keeps the process alive on its own (matches every other setInterval in this file)
+
+// Per-core clock speed - Linux-only (/sys/devices/system/cpu/cpuN/cpufreq),
+// absent on this file's own Windows dev machine and on any CM5 running a
+// governor/kernel build without cpufreq exposed - null per core rather than
+// guessing from a nominal spec.
+function readCpuFrequenciesMHz(coreCount: number): (number | null)[] {
+  const out: (number | null)[] = [];
+  for (let i = 0; i < coreCount; i++) {
+    try {
+      const khz = fs.readFileSync(`/sys/devices/system/cpu/cpu${i}/cpufreq/scaling_cur_freq`, "utf-8").trim();
+      const val = parseInt(khz, 10);
+      out.push(Number.isFinite(val) ? Math.round(val / 1000) : null);
+    } catch {
+      out.push(null);
+    }
+  }
+  return out;
+}
+
+// Real /proc/meminfo parse (Linux-only) - kB fields converted to bytes.
+// os.freemem()/totalmem() (used by the lighter /api/system/metrics above)
+// only ever gives 2 coarse numbers; this gives the actual breakdown a
+// Netdata-style memory panel needs (buffers/cache counted separately from
+// "used", matching how `free -h` itself reports it - naively treating
+// buffers/cache as "used" is the classic wrong-looking-full-RAM mistake).
+interface MemoryInfo {
+  totalBytes: number; usedBytes: number; freeBytes: number; availableBytes: number;
+  buffersBytes: number; cachedBytes: number; swapTotalBytes: number; swapUsedBytes: number;
+}
+function readMemoryInfo(): MemoryInfo | null {
+  try {
+    const text = fs.readFileSync("/proc/meminfo", "utf-8");
+    const kb = (key: string): number => {
+      const m = text.match(new RegExp(`^${key}:\\s+(\\d+)`, "m"));
+      return m ? parseInt(m[1], 10) * 1024 : 0;
+    };
+    const totalBytes = kb("MemTotal");
+    const freeBytes = kb("MemFree");
+    const availableBytes = kb("MemAvailable") || freeBytes;
+    const buffersBytes = kb("Buffers");
+    const cachedBytes = kb("Cached");
+    const swapTotalBytes = kb("SwapTotal");
+    const swapFreeBytes = kb("SwapFree");
+    return {
+      totalBytes,
+      usedBytes: Math.max(0, totalBytes - availableBytes),
+      freeBytes,
+      availableBytes,
+      buffersBytes,
+      cachedBytes,
+      swapTotalBytes,
+      swapUsedBytes: Math.max(0, swapTotalBytes - swapFreeBytes),
+    };
+  } catch {
+    return null; // non-Linux host (this file's own Windows dev machine, most CI runners)
+  }
+}
+
+// Real root-filesystem (the CM5's own eMMC/SD "flash") usage via `df`,
+// matching this file's own vcgencmd/ps convention: execFile (async, no
+// shell, no injection surface - fixed literal args), mock-free null on
+// failure rather than a guessed number.
+interface DiskInfo { totalBytes: number; usedBytes: number; freeBytes: number; mount: string }
+async function readDiskUsage(): Promise<DiskInfo | null> {
+  try {
+    const { stdout } = await execFileAsync("df", ["-k", "-P", "/"], { timeout: 1000 });
+    const line = stdout.trim().split("\n")[1];
+    const parts = line.trim().split(/\s+/);
+    // Filesystem 1024-blocks Used Available Capacity Mounted-on
+    const totalBytes = parseInt(parts[1], 10) * 1024;
+    const usedBytes = parseInt(parts[2], 10) * 1024;
+    const freeBytes = parseInt(parts[3], 10) * 1024;
+    if (![totalBytes, usedBytes, freeBytes].every(Number.isFinite)) return null;
+    return { totalBytes, usedBytes, freeBytes, mount: parts[5] || "/" };
+  } catch {
+    return null; // `df` not on PATH (Windows dev machine) or the read failed
+  }
+}
+
+// Real top-N processes by CPU%, via `ps` (same execFile convention as
+// above) - name only, no full command line/args, matching this endpoint's
+// own "no auth, but don't leak more than coarse host introspection" trust
+// tier (see this route's own registration comment).
+interface ProcessInfo { pid: number; name: string; cpuPercent: number; memPercent: number; rssBytes: number }
+async function readTopProcesses(limit: number): Promise<ProcessInfo[]> {
+  try {
+    const { stdout } = await execFileAsync(
+      "ps", ["-eo", "pid,comm,%cpu,%mem,rss", "--sort=-%cpu", "--no-headers"],
+      { timeout: 1000, maxBuffer: 1024 * 1024 },
+    );
+    return stdout
+      .trim()
+      .split("\n")
+      .slice(0, limit)
+      .map((line) => {
+        const parts = line.trim().split(/\s+/);
+        return {
+          pid: parseInt(parts[0], 10),
+          name: parts[1] || "?",
+          cpuPercent: parseFloat(parts[2]) || 0,
+          memPercent: parseFloat(parts[3]) || 0,
+          rssBytes: (parseInt(parts[4], 10) || 0) * 1024, // ps reports rss in kB
+        };
+      })
+      .filter((p) => Number.isFinite(p.pid));
+  } catch {
+    return []; // `ps --sort` isn't POSIX (BSD/macOS ps rejects it) or ps isn't on PATH
+  }
+}
+
+async function getSupervisorSnapshot() {
+  const cpus = os.cpus();
+  const [disk, processes] = await Promise.all([readDiskUsage(), readTopProcesses(20)]);
+  let cpuTemp: number | null = null;
+  let cpuTempIsReal = false;
+  try {
+    const { stdout } = await execFileAsync("vcgencmd", ["measure_temp"], { timeout: 500 });
+    const match = stdout.match(/temp=([\d.]+)/);
+    if (match) { cpuTemp = parseFloat(match[1]); cpuTempIsReal = true; }
+  } catch {
+    cpuTemp = null; // honest here, unlike getSystemMetrics()'s mocked fallback - see this section's own header comment
+  }
+  return {
+    timestamp: Date.now(),
+    cpu: {
+      model: cpus[0]?.model || null,
+      coreCount: cpus.length,
+      overallPercent: lastCpuUsage.overallPercent,
+      perCorePercent: lastCpuUsage.perCorePercent,
+      perCoreFrequencyMHz: readCpuFrequenciesMHz(cpus.length),
+      loadAvg: os.loadavg(),
+    },
+    memory: readMemoryInfo(),
+    disk,
+    temps: {
+      cpu: cpuTemp,
+      cpuIsReal: cpuTempIsReal,
+      rp1: readRp1Temp(),
+    },
+    processes,
+    uptimeSeconds: Math.round(os.uptime()),
+    network: readNetworkStatus(),
+  };
+}
+
 // Shared by GET /api/system/metrics (unchanged wire shape - the browser
 // UI's own StatusFooter) and GET /metrics (src/metrics.ts's own
 // hydra_system_* Prometheus gauges, wired up via setSystemMetricsSource()
@@ -2139,6 +2334,15 @@ async function startServer() {
   // route is just that function's own JSON wire shape, unchanged.
   app.get("/api/system/metrics", async (req, res) => {
     res.json(await getSystemMetrics());
+  });
+
+  // Netdata-style deep-dive - powers STUDIO's own Supervisor panel
+  // (System.tsx, under the HYDRA-UMC admin menu). Same "no auth" trust
+  // tier as /api/system/metrics right above (read-only host introspection;
+  // see getSupervisorSnapshot's own header comment for the full field
+  // list and what's real vs. honestly null on a non-Linux host).
+  app.get("/api/system/supervisor", async (req, res) => {
+    res.json(await getSupervisorSnapshot());
   });
 
   // Real, honest V0 of ecosystem-wide status - see getEcosystemStatus()'s

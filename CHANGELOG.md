@@ -31,6 +31,20 @@ a change is actually worth summarizing for a human.
 
 ## Unreleased
 
+- **`GET /api/system/supervisor`** - a real, Netdata-style deep-dive host
+  monitor, distinct from the lighter `GET /api/system/metrics` (Overview
+  footer). Real per-core CPU usage/frequency (a 1s background sampler
+  keeps a rolling delta always ready, avoiding a per-request blocking
+  sample window), real `/proc/meminfo` breakdown (used/cached/buffers/
+  swap, not just the 2 coarse numbers `os.freemem()/totalmem()` gives),
+  real root-filesystem (flash/eMMC) usage via `df`, real top-20 processes
+  by CPU% via `ps`, plus the existing CPU/RP1 temperature reads. Every
+  field is honestly `null`/empty on a host that can't supply it (this
+  repo's own Windows dev machine, a CM5 kernel without cpufreq exposed,
+  `ps`/`df` missing) - deliberately never mocked, unlike
+  `/api/system/metrics`'s own temp fallback (see that route's own
+  comment for why the two differ). Powers HYDRA-UMC STUDIO's new
+  Supervisor panel - see that repo's own `[Unreleased]`.
 - **Three new atomic `/api/robot/:id/command` commands, plus `absolute`
   support for the existing `jog`** - `reset` (target-aware: resets
   pos+joints to a caller-supplied home pose for `target: "robot"`, or
