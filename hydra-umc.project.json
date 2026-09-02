@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "ecosystem": "HYDRA-UMC",
   "name": "HYDRA-UMC-SERVER",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "role": "api",
   "stack": "node",
   "technologies": [

@@ -361,6 +361,40 @@ much longer, a real page-by-page transfer+verify genuinely takes a while)
 only from its runtime environment. Keep `spi_bridge` on loopback in a CM5
 deployment, same as Voice UI.
 
+## 2i. Ecosystem status & per-project service control
+
+- `GET /api/ecosystem/status` - no auth required (same trust tier as
+  `/api/system/metrics` above: local directory names and manifest
+  fields, nothing about credentials). Returns
+  `{ "available", "scannedAt", "projects": [...] }`. Each project comes
+  from a real, synchronous scan of `hydra-umc.project.json` manifests
+  under this repo's own parent directory (or `HYDRA_UMC_ECOSYSTEM_ROOT`
+  if set - a real CM5 deployment needs this, since its own
+  `WorkingDirectory`'s parent holds only build artifacts, not full
+  checkouts with manifests), plus real, concurrent probes for whichever
+  ones opt in: a manifest's own `service.port`/`service.health_path`
+  gets a real TCP/HTTP probe (`live: true|false`, `serviceHost`); a
+  manifest's own `service.systemd_unit` gets a real
+  `systemctl show <unit>` probe (`pid`, `activeState`, `subState`) -
+  independent signals, a project can have either, both, or neither.
+- `POST /api/ecosystem/service/:unit/:action` (`action` one of
+  `start`/`stop`/`restart`) - **`admin` only**. Backs the Ecosystem >
+  Services panel's per-project controls. `:unit` is never trusted from
+  the request - it must match a `systemdUnit` a **fresh**
+  `getEcosystemStatus()` scan actually returns right now, and this
+  server's own unit (`hydra-umc-server.service`) is refused
+  unconditionally (`403`) - a self-restart already has its own route
+  (`POST /api/admin/restart` above). `400` for an unrecognized action,
+  `404` if `:unit` isn't a currently known project unit. Even a
+  validated request only actually works with a real, narrowly-scoped
+  polkit rule installed on the host -
+  `HYDRA-UMC-OS/provisioning/polkit/50-hydra-umc-server-service-control.rules`
+  (installed by that repo's own `provisioning/install_server.sh`),
+  granting the unprivileged `hydra-umc-server` account start/stop/
+  restart for exactly the `hydra-umc-*.service` namespace, nothing else
+  on the host. Without that rule, `systemctl` itself refuses the call
+  and this answers a clean `503` rather than a silent no-op.
+
 ## 3. Live sync: `WebSocket /ws`
 
 Connect with `ws://<host>:3000/ws?token=<JWT_TOKEN>` (see section 2a for

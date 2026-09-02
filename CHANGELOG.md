@@ -31,6 +31,34 @@ a change is actually worth summarizing for a human.
 
 ## Unreleased
 
+## [0.3.7] - Real per-project start/stop/restart, admin-only, real polkit-gated
+
+- **`POST /api/ecosystem/service/:unit/:action`** (`start`/`stop`/
+  `restart`, `admin` only) - real feedback from live testing: the
+  Ecosystem > Services panel needed real per-project controls, not just
+  status. `:unit` is never trusted from the request - it must match a
+  `systemdUnit` a **fresh** `getEcosystemStatus()` scan actually returns
+  right now (never a string that merely matches the naming pattern),
+  and this server's own unit is refused unconditionally (self-restart
+  already has its own route, `POST /api/admin/restart`). Even a
+  validated request only actually works with a real, narrowly-scoped
+  polkit rule on the host - added
+  `HYDRA-UMC-OS/provisioning/polkit/50-hydra-umc-server-service-control.rules`
+  (installed by that repo's own `install_server.sh`), granting the
+  unprivileged `hydra-umc-server` account start/stop/restart for
+  exactly the `hydra-umc-*.service` namespace (verified: `unit ===
+  "hydra-umc-server.service"` and anything outside that namespace stay
+  refused even with the rule installed) - without it, `systemctl`
+  itself refuses the call and this answers a clean `503`. New contract
+  test (`verify_ecosystem_service_control_contract.mjs`) covers the
+  unauthenticated refusal, an invalid action name, the own-unit
+  refusal, an unknown-unit refusal, and a known unit resolving to a
+  real success-or-honest-failure outcome (this dev machine has no
+  `systemctl` at all, so `503` here is itself the correct, tested
+  result - a real CM5 with the polkit rule installed returns `200`).
+  Documented in `docs/REMOTE_API.md` section 2i alongside the
+  previously-undocumented `GET /api/ecosystem/status`.
+
 ## [0.3.6] - Real PID and systemd state per project, independent of whether it exposes a port
 
 - **Most running CM5 services never declared a `service.port` at all and
