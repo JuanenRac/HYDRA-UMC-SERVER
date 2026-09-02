@@ -78,20 +78,40 @@ HYDRA-UMC-SERVER/
 ├── src/
 │   ├── server.ts       # Express アプリ + WebSocketServer + 全 /api ルート
 │   ├── kinematics.ts   # 原子的ジョグエンドポイント用の逆運動学ヘルパー
+│   ├── metrics.ts      # GET /metrics を支える —— Prometheus テキスト形式（prom-client）
 │   └── users.ts        # アカウントストア（scrypt パスワードハッシュ化）
-├── data/                # ランタイム状態 —— 設定、ユーザー、ログ、ワークファイル
+├── admin-ui/            # この本サーバー自身のための独立した Vite/React 管理パネル
+│   │                      （接続デバイス、自身のログファイル、自身の設定、自身のユーザー——
+│   │                      意図的にロボット制御は含まない。それは引き続き STUDIO 専用）
+│   ├── src/
+│   │   ├── App.tsx, main.tsx, index.css, api.ts, LoginScreen.tsx
+│   │   └── tabs/AboutTab.tsx, ConfigTab.tsx, DevicesTab.tsx, LogsTab.tsx, UsersTab.tsx
+│   ├── package.json / tsconfig.json / vite.config.ts
+│   └── README.md
+├── data/                # ランタイム状態 —— 設定、ユーザー、ログ、ワークファイル、保存済みポイント
 │   ├── settings.json
 │   ├── users.json
 │   ├── logs/
+│   ├── points/
 │   └── WORKS/
 ├── docs/
 │   ├── REMOTE_API.md              # 完全な契約：ルート、WS プロトコル、認証
-│   └── PRODUCTION_BOOTSTRAP.md    # 必須の JWT と初期管理者設定
+│   ├── PRODUCTION_BOOTSTRAP.md    # 必須の JWT と初期管理者設定
+│   └── REMOTE_ACCESS_VPN.md       # 本物のリモートアクセス/VPN デプロイガイド
+├── images/               # メディアと図版
+├── systemd/
+│   └── hydra-umc-server.service # CM5 上のローカル systemd ユニット
 ├── tools/
-│   └── verify_production_bootstrap_contract.mjs # 本番環境での安全な失敗を検証
+│   ├── ci_validate.py                                   # CI が使用する manifest/CHANGELOG/docs の検証
+│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 実サーバーに対する 11 個の実際の契約/認証否定
+│                                                           チェック（CAN-OTA リレー、discovery、エコシステム
+│                                                           サービス制御/ステータス、統合の test-connection、
+│                                                           本番ブートストラップ、ロボットコマンド、再生、
+│                                                           テレメトリリレー、音声リレー）
 ├── monitoring/           # 任意の Prometheus + Grafana スタック —— monitoring/README.md 参照
 ├── scripts/
 │   └── bump-version.mjs # 旧式のネイティブ版ヘルパー。標準ビルドは bump_manifest_version.py を使用
+├── bump_manifest_version.py # hydra-umc.project.json のバージョンをネイティブ側と同期（--sync）
 ├── build.bat / build.sh # 依存関係のインストール + プロダクションビルド
 ├── dev.bat / dev.sh      # 依存関係のインストール + 開発サーバーの起動
 ├── package.json
@@ -99,6 +119,10 @@ HYDRA-UMC-SERVER/
 ├── CHANGELOG.md
 └── LICENSE
 ```
+
+`public/`（STUDIO のビルド済み静的フロントエンド。このサーバーの `/` に
+一緒にデプロイされる）は gitignore 対象——STUDIO 自身のビルド出力をコピー
+して生成され、新規クローンには含まれません。
 
 ## 🛠️ 開発環境
 

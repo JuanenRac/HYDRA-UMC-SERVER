@@ -78,20 +78,39 @@ HYDRA-UMC-SERVER/
 ├── src/
 │   ├── server.ts       # Express 应用 + WebSocketServer + 所有 /api 路由
 │   ├── kinematics.ts   # 原子点动端点使用的逆运动学辅助工具
+│   ├── metrics.ts      # 支撑 GET /metrics——Prometheus 文本格式输出（prom-client）
 │   └── users.ts        # 账户存储（scrypt 密码哈希）
-├── data/                # 运行时状态——设置、用户、日志、工作文件
+├── admin-ui/            # 为本服务器自身独立提供的 Vite/React 管理面板
+│   │                      （已连接设备、自身日志文件、自身配置、自身用户——刻意不包含
+│   │                      机器人控制，那始终仅属于 STUDIO）
+│   ├── src/
+│   │   ├── App.tsx, main.tsx, index.css, api.ts, LoginScreen.tsx
+│   │   └── tabs/AboutTab.tsx, ConfigTab.tsx, DevicesTab.tsx, LogsTab.tsx, UsersTab.tsx
+│   ├── package.json / tsconfig.json / vite.config.ts
+│   └── README.md
+├── data/                # 运行时状态——设置、用户、日志、工作文件、已保存的点位
 │   ├── settings.json
 │   ├── users.json
 │   ├── logs/
+│   ├── points/
 │   └── WORKS/
 ├── docs/
 │   ├── REMOTE_API.md              # 完整契约：路由、WS 协议、身份验证
-│   └── PRODUCTION_BOOTSTRAP.md    # 必需的 JWT 与初始管理员配置
+│   ├── PRODUCTION_BOOTSTRAP.md    # 必需的 JWT 与初始管理员配置
+│   └── REMOTE_ACCESS_VPN.md       # 真实的远程访问/VPN 部署指南
+├── images/               # 媒体与图示
+├── systemd/
+│   └── hydra-umc-server.service # CM5 本地 systemd 单元
 ├── tools/
-│   └── verify_production_bootstrap_contract.mjs # 验证生产环境安全失败
+│   ├── ci_validate.py                                   # CI 使用的 manifest/CHANGELOG/docs 校验
+│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 针对真实服务器的 11 项真实契约/负向认证
+│                                                           检查（CAN-OTA 中继、discovery、生态系统服务
+│                                                           控制/状态、集成 test-connection、生产环境
+│                                                           bootstrap、机器人指令、回放、遥测中继、语音中继）
 ├── monitoring/           # 可选的 Prometheus + Grafana 技术栈——见 monitoring/README.md
 ├── scripts/
 │   └── bump-version.mjs # 旧版仅原生版本辅助工具；标准构建使用 bump_manifest_version.py
+├── bump_manifest_version.py # 将 hydra-umc.project.json 的版本与原生版本同步（--sync）
 ├── build.bat / build.sh # 安装依赖 + 生产构建
 ├── dev.bat / dev.sh      # 安装依赖 + 启动开发服务器
 ├── package.json
@@ -99,6 +118,9 @@ HYDRA-UMC-SERVER/
 ├── CHANGELOG.md
 └── LICENSE
 ```
+
+`public/`（STUDIO 编译后的静态前端，与本服务器一同部署在 `/`）已加入
+gitignore——通过复制 STUDIO 自身的构建输出填充，不属于全新克隆的一部分。
 
 ## 🛠️ 开发环境
 

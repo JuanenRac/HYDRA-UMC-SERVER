@@ -163,20 +163,41 @@ HYDRA-UMC-SERVER/
 ├── src/
 │   ├── server.ts       # App Express + WebSocketServer + toutes les routes /api
 │   ├── kinematics.ts   # Aide de cinématique inverse pour le point de terminaison atomique de jog
+│   ├── metrics.ts      # Alimente GET /metrics - exposition texte Prometheus (prom-client)
 │   └── users.ts        # Magasin de comptes (hachage de mot de passe scrypt)
-├── data/                # État d'exécution - settings, users, logs, fichiers de travail
+├── admin-ui/            # Panneau d'administration Vite/React séparé pour CE serveur lui-même
+│   │                      (appareils connectés, son propre fichier de log, sa propre config, ses
+│   │                      propres utilisateurs - délibérément pas de contrôle robot, réservé à STUDIO)
+│   ├── src/
+│   │   ├── App.tsx, main.tsx, index.css, api.ts, LoginScreen.tsx
+│   │   └── tabs/AboutTab.tsx, ConfigTab.tsx, DevicesTab.tsx, LogsTab.tsx, UsersTab.tsx
+│   ├── package.json / tsconfig.json / vite.config.ts
+│   └── README.md
+├── data/                # État d'exécution - settings, users, logs, fichiers de travail, points enregistrés
 │   ├── settings.json
 │   ├── users.json
 │   ├── logs/
+│   ├── points/
 │   └── WORKS/
 ├── docs/
 │   ├── REMOTE_API.md              # Contrat complet : routes, protocole WS, auth
-│   └── PRODUCTION_BOOTSTRAP.md    # JWT et administrateur initial obligatoires
+│   ├── PRODUCTION_BOOTSTRAP.md    # JWT et administrateur initial obligatoires
+│   └── REMOTE_ACCESS_VPN.md       # Guide réel de déploiement accès distant/VPN
+├── images/               # Médias et diagrammes
+├── systemd/
+│   └── hydra-umc-server.service # Unité systemd locale sur la CM5
 ├── tools/
-│   └── verify_production_bootstrap_contract.mjs # Vérifie l'échec sûr en production
+│   ├── ci_validate.py                                   # Validation manifest/CHANGELOG/docs utilisée par la CI
+│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 11 vérifications réelles de contrat/auth négative
+│                                                           contre un serveur réel (relais CAN-OTA, discovery,
+│                                                           contrôle/statut des services de l'écosystème,
+│                                                           test-connection des intégrations, bootstrap de
+│                                                           production, commandes robot, playback, relais de
+│                                                           télémétrie, relais vocal)
 ├── monitoring/           # Stack Prometheus + Grafana optionnel - voir monitoring/README.md
 ├── scripts/
 │   └── bump-version.mjs # Aide native héritée ; les builds standard utilisent bump_manifest_version.py
+├── bump_manifest_version.py # Synchronise la version de hydra-umc.project.json avec la version native (--sync)
 ├── build.bat / build.sh # Installe les dépendances + build de production
 ├── dev.bat / dev.sh      # Installe les dépendances + démarre le serveur de dev
 ├── package.json
@@ -184,6 +205,10 @@ HYDRA-UMC-SERVER/
 ├── CHANGELOG.md
 └── LICENSE
 ```
+
+`public/` (le frontend statique compilé de STUDIO, déployé aux côtés de ce
+serveur sur `/`) est ignoré par git - rempli en copiant la sortie de build
+propre de STUDIO, ne fait pas partie d'un clone neuf.
 
 ## 🛠️ Environnement de Développement
 
