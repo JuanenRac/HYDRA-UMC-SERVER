@@ -132,6 +132,7 @@ export interface SystemMetricsSnapshot {
   memory_usage: number;
   temp: number | null;
   temp_is_real: boolean;
+  rp1_temp: number | null;
 }
 
 let systemMetricsSource: (() => Promise<SystemMetricsSnapshot>) | null = null;
@@ -154,6 +155,11 @@ const systemTempIsReal = new client.Gauge({
   help: "1 if hydra_system_temp_celsius came from a real vcgencmd read, 0 if it's a mocked value (vcgencmd unavailable - not a Pi/CM5 host, e.g. a Windows/macOS dev machine)",
   registers: [registry],
 });
+const systemRp1TempCelsius = new client.Gauge({
+  name: "hydra_system_rp1_temp_celsius",
+  help: "RP1 (CM5/Pi 5 family I/O controller) temperature in Celsius, from the real Linux hwmon rp1_adc sensor - absent (not exported) on any host without a real RP1 chip, never a mocked value",
+  registers: [registry],
+});
 
 // Only ONE of the 4 gauges in this group actually triggers the (potentially
 // vcgencmd-shelling-out, up to ~500ms) read, via its own collect() below -
@@ -171,5 +177,6 @@ new client.Gauge({
     systemMemoryUsagePercent.set(snapshot.memory_usage);
     if (snapshot.temp !== null) systemTempCelsius.set(snapshot.temp);
     systemTempIsReal.set(snapshot.temp_is_real ? 1 : 0);
+    if (snapshot.rp1_temp !== null) systemRp1TempCelsius.set(snapshot.rp1_temp);
   },
 });

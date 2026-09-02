@@ -45,6 +45,15 @@ a change is actually worth summarizing for a human.
   enumerate real network interfaces) needs a netlink socket on Linux; caught
   and fixed against the live service, not just `systemd-analyze verify`
   (which only checks syntax, not runtime behavior under the restriction).
+- **RP1 temperature in `GET /api/system/metrics` and `GET /metrics`** - the
+  CM5/Pi 5 family's own I/O controller chip (USB, Ethernet, GPIO) exposes a
+  real temperature reading via the standard Linux hwmon framework
+  (`rp1_adc`), independent of `vcgencmd`'s SoC-only reading. Found by hand
+  while investigating other real sensors exposed on the live CM5
+  (`hwmon1`), previously unused. `rp1_temp` is `null` (not a mocked value)
+  on any host without a real RP1 chip - a real hardware fact, not something
+  this host merely can't currently read. New Prometheus gauge
+  `hydra_system_rp1_temp_celsius`.
 
 ## [0.3.7] - Real per-project start/stop/restart, admin-only, real polkit-gated
 

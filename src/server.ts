@@ -311,6 +311,33 @@ function readBluetoothUp(): boolean | null {
   }
 }
 
+// RP1 (the CM5/Pi 5 family's own I/O controller chip - USB, Ethernet,
+// GPIO) exposes its own real temperature sensor via the standard Linux
+// hwmon framework, independent of vcgencmd's SoC-only reading above. There
+// is no fixed hwmonN index - it depends on registration order - so this
+// finds it by its own real driver name ("rp1_adc") rather than assuming a
+// number. Returns null (not a mock) on any older Pi/non-Pi host: unlike
+// the SoC itself, RP1 is real hardware that simply doesn't exist there,
+// not a value this host merely can't currently read.
+function readRp1Temp(): number | null {
+  try {
+    const hwmonRoot = "/sys/class/hwmon";
+    for (const entry of fs.readdirSync(hwmonRoot)) {
+      const namePath = `${hwmonRoot}/${entry}/name`;
+      let name: string;
+      try { name = fs.readFileSync(namePath, "utf-8").trim(); } catch { continue; }
+      if (name !== "rp1_adc") continue;
+      const raw = fs.readFileSync(`${hwmonRoot}/${entry}/temp1_input`, "utf-8").trim();
+      const millideg = parseInt(raw, 10);
+      if (Number.isNaN(millideg)) return null;
+      return Math.round((millideg / 1000) * 10) / 10; // millidegC -> degC, 1dp
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function readNetworkStatus() {
   return {
     wifi: readInterfaceUp("wlan0"),
@@ -331,6 +358,7 @@ async function getSystemMetrics(): Promise<{
   memory_usage: number;
   temp: number | null;
   temp_is_real: boolean;
+  rp1_temp: number | null;
   uptime: number;
   network: ReturnType<typeof readNetworkStatus>;
 }> {
@@ -362,6 +390,7 @@ async function getSystemMetrics(): Promise<{
     memory_usage: Math.round((1 - os.freemem() / os.totalmem()) * 100),
     temp,
     temp_is_real: tempIsReal,
+    rp1_temp: readRp1Temp(),
     uptime: Math.round(process.uptime()),
     network: readNetworkStatus(),
   };
