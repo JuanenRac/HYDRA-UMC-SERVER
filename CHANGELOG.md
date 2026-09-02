@@ -31,6 +31,15 @@ a change is actually worth summarizing for a human.
 
 ## Unreleased
 
+- **CM5 systemd resource and kernel-surface baseline** - the Server unit now
+  drops all Linux capabilities, private device access and unneeded namespace,
+  realtime and SUID/SGID operations; it restricts address families to local
+  Unix and IPv4/IPv6 networking, locks the personality and protects clock,
+  cgroups, kernel logs, modules and tunables. A 384 MiB soft / 512 MiB hard
+  memory budget protects the 4 GiB CM5 from a single Server process exhausting
+  the node. The service still uses its explicit writable data directory and
+  the narrowly-scoped polkit path for approved system actions.
+
 ## [0.3.7] - Real per-project start/stop/restart, admin-only, real polkit-gated
 
 - **`POST /api/ecosystem/service/:unit/:action`** (`start`/`stop`/

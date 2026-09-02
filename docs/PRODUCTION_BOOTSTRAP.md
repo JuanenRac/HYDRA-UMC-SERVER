@@ -38,3 +38,23 @@ assuming a reusable administrator password.
   restart.
 - Keep deployment secrets outside version control and restrict file access to
   the account that runs the server.
+
+## systemd CM5 resource and isolation baseline
+
+The supplied `systemd/hydra-umc-server.service` runs as a dedicated,
+unprivileged account and is intentionally constrained for a 4 GiB CM5:
+
+- `MemoryHigh=384M` and `MemoryMax=512M` keep one Server process from
+  exhausting the platform. Observe actual usage before raising either value.
+- No Linux capabilities or direct device access are granted. Server requests
+  approved host actions through the narrowly scoped polkit rules installed by
+  HYDRA-UMC-OS; it does not need root or broad capabilities.
+- Kernel, clock, cgroup, namespace and SUID/SGID protections reduce the
+  process surface without replacing Server's application-level RBAC.
+- `ReadWritePaths=/opt/hydra-umc/server/data` is the only application write
+  location under the otherwise protected deployment tree.
+
+Validate a changed unit with `systemd-analyze verify`, deploy it through the
+HYDRA-UMC-OS installer, then restart the service during a maintenance window
+and verify `/api/hydra-info`, authentication and the intended service-control
+flow. Remove a temporary override and restart if any required contract fails.

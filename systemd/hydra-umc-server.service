@@ -18,9 +18,25 @@ ExecStart=/usr/bin/node dist/server.cjs
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
+CapabilityBoundingSet=
+LockPersonality=true
 PrivateTmp=true
+PrivateDevices=true
 ProtectHome=true
 ProtectSystem=full
+ProtectClock=true
+ProtectControlGroups=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+UMask=0027
+MemoryHigh=384M
+MemoryMax=512M
 ReadWritePaths=/opt/hydra-umc/server/data
 
 [Install]
