@@ -760,8 +760,16 @@ function computeDeviceArg(camera: CameraSettings): string | null {
 
 interface RtspDescribeResult {
   ok: boolean;
-  path?: string;
-  status?: number;
+  // Every real candidate that answered 200 OK, in the order
+  // RTSP_PATH_CANDIDATES lists them - a real camera on this ecosystem's
+  // own network can expose more than one real stream at once, so this
+  // scan never stops at the first match. STUDIO/SUITE's own Config UI
+  // persists this full list client-side as a camera's own
+  // `discoveredStreamPaths`, to build an honest Main/Sub/Sub N stream
+  // picker. `paths[0]` is what a caller should treat as "the" path for
+  // backward compatibility with the single-path callers that predate
+  // this.
+  paths: string[];
   triedPaths: string[];
   error?: string;
 }
@@ -816,28 +824,34 @@ function rtspDescribeOnce(host: string, port: number, rtspPath: string, username
   });
 }
 
-// Tries each real candidate path in turn, one at a time with a short
-// pause between attempts - the same rate-limit caution already
-// documented in memory (a real camera on this ecosystem's own network
-// silently drops a connection after repeated authenticated attempts in
-// a tight loop) - stops at the first 200 OK. Never invents a path: an
-// exhausted list is reported honestly as "none of these answered",
-// listing exactly what was tried.
+// Tries EVERY real candidate path, one at a time with a short pause
+// between attempts - the same rate-limit caution already documented in
+// memory (a real camera on this ecosystem's own network silently drops
+// a connection after repeated authenticated attempts in a tight loop).
+// Deliberately does NOT stop at the first 200 OK: a real IP camera here
+// can expose more than one real stream at once (this ecosystem's own
+// Hipcam units really do answer both `/11` main and `/12` sub), and the
+// caller needs the REAL full set to build an honest Main/Sub/Sub N
+// stream picker, not just whichever one happened to be tried first.
+// Never invents a path: an exhausted list with nothing found is
+// reported honestly, listing exactly what was tried either way.
 async function discoverRtspPath(host: string, port: number, username: string, password: string): Promise<RtspDescribeResult> {
   const tried: string[] = [];
+  const found: string[] = [];
   for (const candidate of RTSP_PATH_CANDIDATES) {
     tried.push(candidate);
     try {
       const status = await rtspDescribeOnce(host, port, candidate, username, password);
       if (status === 200) {
-        return { ok: true, path: candidate, status, triedPaths: tried };
+        found.push(candidate);
       }
     } catch {
       // connection failure on this one candidate - move on to the next, not fatal to the scan
     }
     await new Promise((r) => setTimeout(r, 400));
   }
-  return { ok: false, triedPaths: tried, error: "none of the known real RTSP paths answered with 200 OK" };
+  if (found.length > 0) return { ok: true, paths: found, triedPaths: tried };
+  return { ok: false, paths: [], triedPaths: tried, error: "none of the known real RTSP paths answered with 200 OK" };
 }
 
 // Where every sibling HYDRA-UMC-* repo checkout actually lives - shared by

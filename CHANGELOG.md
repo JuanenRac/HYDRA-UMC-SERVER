@@ -33,6 +33,21 @@ a change is actually worth summarizing for a human.
 
 (nothing yet)
 
+## [0.4.5]
+
+- **Real multi-stream RTSP discovery - the actual fix for "an IP camera
+  can have more than one real stream, not just Main/Sub".** `discoverRtspPath()`
+  used to stop scanning the moment ANY candidate path answered `200 OK`,
+  so a camera exposing 2+ real streams at once only ever surfaced the
+  first one it happened to try. It now tries every real candidate in
+  `RTSP_PATH_CANDIDATES` (same 400ms-spaced, rate-limit-cautious scan as
+  before) and returns EVERY one that answered - `RtspDescribeResult.paths`
+  (a real array, `paths[0]` still the honest "main" default) replaces
+  the old single `path` field. STUDIO/SUITE's own Config UI persists the
+  full list client-side and builds a real Main/Sub/Sub N stream picker
+  from however many streams a given camera's own last discovery actually
+  found - never a fixed pair.
+
 ## [0.4.4]
 
 - **The 0.4.3 fixed-10s retry window still wasn't always enough** -
