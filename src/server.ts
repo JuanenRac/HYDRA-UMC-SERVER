@@ -861,9 +861,38 @@ function ecosystemRoot(): string {
 // pyproject.toml) inside HYDRA-UMC-VISION-STREAMER's own `.venv` -
 // Windows and Linux/CM5 use different real layouts for this
 // (`.venv/Scripts/*.exe` vs `.venv/bin/*`), same distinction every
-// per-platform path in this ecosystem already has to make.
+// per-platform path in this ecosystem already has to make. The
+// CONTAINING directory name is resolved dynamically via each sibling's
+// own `hydra-umc.project.json` `name` field (same real
+// manifest-driven-discovery this file's own getEcosystemStatus() already
+// uses - see [[project_manifest_dynamic_discovery]]) rather than a
+// hardcoded `"HYDRA-UMC-VISION-STREAMER"` literal - a real CM5
+// deployment's own directory naming (`/opt/hydra-umc/vision-streamer`,
+// no prefix, matching every other service under `/opt/hydra-umc/`)
+// doesn't match the Windows dev sibling-checkout convention this
+// literal used to assume, and silently never found it there. Falls back
+// to the literal sibling-checkout name if no manifest match is found
+// (keeps working unmodified for the one dev layout that never had this
+// problem in the first place).
 function visionStreamerExecutablePath(): string {
-  const repoDir = path.join(ecosystemRoot(), "HYDRA-UMC-VISION-STREAMER");
+  const root = ecosystemRoot();
+  let repoDir = path.join(root, "HYDRA-UMC-VISION-STREAMER");
+  try {
+    for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const manifestPath = path.join(root, entry.name, "hydra-umc.project.json");
+      if (!fs.existsSync(manifestPath)) continue;
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf-8"));
+      if (manifest?.name === "HYDRA-UMC-VISION-STREAMER") {
+        repoDir = path.join(root, entry.name);
+        break;
+      }
+    }
+  } catch {
+    // real read/parse failure scanning siblings - fall through to the
+    // literal-name default above rather than throwing out of a path
+    // resolution helper.
+  }
   return process.platform === "win32"
     ? path.join(repoDir, ".venv", "Scripts", "hydra-umc-vision-streamer.exe")
     : path.join(repoDir, ".venv", "bin", "hydra-umc-vision-streamer");
@@ -1540,6 +1569,7 @@ async function startServer() {
   function startCameraProcess(key: string, port: number, deviceArg: string, fingerprint: string): void {
     const exePath = visionStreamerExecutablePath();
     if (!fs.existsSync(exePath)) {
+      industrialLog(`[CAMERA] ${key}: HYDRA-UMC-VISION-STREAMER not found at ${exePath} - reporting error status, not spawning`);
       cameraProcesses.set(key, {
         proc: null, port, fingerprint, status: "error",
         lastError: `HYDRA-UMC-VISION-STREAMER not found at ${exePath} - is it checked out as a sibling repo with its own .venv installed (pip install -e .)?`,

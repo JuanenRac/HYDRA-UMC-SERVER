@@ -33,6 +33,31 @@ a change is actually worth summarizing for a human.
 
 (nothing yet)
 
+## [0.4.2]
+
+- **Fixed `visionStreamerExecutablePath()` never actually finding
+  HYDRA-UMC-VISION-STREAMER on a real CM5 deployment.** Caught live
+  while the user tested the new camera supervisor (0.4.1) against real
+  hardware on the real CM5: every camera showed a real, honest `error`
+  status instead of `running` - not a bug in the supervisor logic
+  itself, but in how it located the executable. The old code hardcoded
+  the containing directory name as the literal
+  `"HYDRA-UMC-VISION-STREAMER"` sibling-checkout convention this repo's
+  own Windows dev layout happens to use; the real CM5's own deployed
+  layout names every service directory without the `HYDRA-UMC-` prefix
+  (`/opt/hydra-umc/vision-streamer`, matching every other service under
+  `/opt/hydra-umc/`) - so the literal never matched there, and
+  `fs.existsSync()` silently returned false for every real camera every
+  time. Now resolved the same way `getEcosystemStatus()` already
+  resolves every OTHER sibling in this codebase: scan `ecosystemRoot()`'s
+  own subdirectories for whichever one's own `hydra-umc.project.json`
+  has `"name": "HYDRA-UMC-VISION-STREAMER"`, falling back to the old
+  literal only if no manifest match is found (keeps the Windows dev
+  layout working unmodified). Also added a `[CAMERA]` log line for the
+  "executable not found" path, previously completely silent in the
+  journal even though it's exactly the case an operator most needs
+  visibility into.
+
 ## [0.4.1]
 
 - **Real per-camera process supervisor - the actual fix for "I configured
