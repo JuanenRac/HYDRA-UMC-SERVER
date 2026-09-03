@@ -409,6 +409,14 @@ This project is part of the HYDRA-UMC robotics ecosystem by the same author (Jua
 
 ---
 
+## 📚 Documentation & Community
+
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — tech stack and coding guidelines for a pull request.
+- **[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)** — the standards of behavior expected in this community.
+- **[SECURITY.md](SECURITY.md)** — how to report a vulnerability, and this project's own real security focus areas.
+- **[SUPPORT.md](SUPPORT.md)** — where to ask questions and report bugs.
+- **[LICENSE.md](LICENSE.md)** — this project's own license.
+
 ## 👤 AUTHOR
 **JuanenRac** (Electro Hobby 3D)
 📧 electrohobby3d@gmail.com
