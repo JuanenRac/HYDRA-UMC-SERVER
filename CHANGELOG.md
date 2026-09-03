@@ -31,6 +31,10 @@ a change is actually worth summarizing for a human.
 
 ## Unreleased
 
+(nothing yet)
+
+## [0.4.1]
+
 - **Real per-camera process supervisor - the actual fix for "I configured
   an IP camera and nothing shows up".** STUDIO/SUITE's own camera config
   UI (`sourceType`/`ipHost`/`rtspPort`/`rtspPath`/`ipUsername`/
