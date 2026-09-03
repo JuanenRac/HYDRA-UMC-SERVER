@@ -33,6 +33,22 @@ a change is actually worth summarizing for a human.
 
 (nothing yet)
 
+## [0.4.6]
+
+- **A disconnected camera now really stops its real process, instead of
+  silently burning CPU/memory forever.** Real user feedback: toggling a
+  camera off in Vision Center left its `stream serve` process alive -
+  `connected` was deliberately never part of `cameraFingerprint()` (it
+  isn't a connection-config field), but nothing else ever checked it
+  either, so `reconcileCameraProcesses()` kept a camera's process
+  running purely because its config stayed valid, whether or not the
+  camera was actually switched on. Now checked explicitly, before the
+  fingerprint short-circuit: `connected !== true` stops the real
+  process (idempotent) and records the real, honest `"stopped"` status
+  - not an error, a deliberate off state; `connected === true` starts
+  or restarts it exactly as before. `GET /api/cameras/status` can now
+  report `"stopped"` alongside the existing `starting`/`running`/`error`.
+
 ## [0.4.5]
 
 - **Real multi-stream RTSP discovery - the actual fix for "an IP camera

@@ -714,6 +714,12 @@ interface CameraSettings {
   rtspPath?: string;
   ipUsername?: string;
   ipPassword?: string;
+  // The real on/off switch (Vision Center's own "toggle connection"
+  // button) - checked by reconcileCameraProcesses() itself, NOT by
+  // cameraFingerprint() below (this field toggling shouldn't count as
+  // "the connection config changed", it's a separate stop/start
+  // decision - see that function's own comment).
+  connected?: boolean;
 }
 
 // Real RTSP paths this ecosystem has actually seen work, in the order
@@ -1678,10 +1684,31 @@ async function startServer() {
         seenKeys.add(key);
         const fingerprint = cameraFingerprint(camera);
         const existing = cameraProcesses.get(key);
+        const port = cameraStreamPort(camera.id);
+
+        // The real on/off switch (Vision Center's own "toggle
+        // connection" button) - caught live from real user feedback: a
+        // camera toggled off kept its real stream serve process alive,
+        // silently burning CPU/memory for a feed nothing was even
+        // asking to see. `connected` is deliberately NOT part of
+        // cameraFingerprint() (see that function's own comment - it
+        // only tracks fields a respawn would actually need to react
+        // to), so this is checked here, before the fingerprint
+        // short-circuit below, not folded into it - toggling connected
+        // off/on needs a real stop/start regardless of whether the
+        // underlying connection config itself changed at the same time.
+        if (camera.connected !== true) {
+          if (existing?.proc) stopCameraProcess(key);
+          cameraProcesses.set(key, {
+            proc: null, port, fingerprint, status: "stopped", lastError: null,
+            recentOutput: existing?.recentOutput ?? [],
+          });
+          continue;
+        }
+
         if (existing && existing.fingerprint === fingerprint && existing.proc) {
           continue; // unchanged config, already has a real process running (or starting) - don't restart a healthy stream
         }
-        const port = cameraStreamPort(camera.id);
         const deviceArg = computeDeviceArg(camera);
         stopCameraProcess(key);
         if (deviceArg === null) {
