@@ -66,6 +66,32 @@ a change is actually worth summarizing for a human.
   video in a few seconds); the 6 other seeded-but-nonexistent camera
   slots correctly report a real, honest `error` status with the real
   OpenCV failure reason instead of silently doing nothing or crashing.
+- **Real orphaned camera-process reaping on startup.** Windows doesn't
+  take a spawned child down with its parent the way POSIX does - killing
+  this server by anything other than a clean SIGINT/SIGTERM that
+  actually reaches `gracefulShutdown()` (a debugger stopping the
+  process, `taskkill /F`, a crash) leaves its `stream serve` children
+  running forever, silently holding their camera device and TCP port.
+  Caught live on this dev machine: an earlier server incarnation's own
+  orphaned camera processes were still holding ports 8100/8101 - one
+  more `reconcileCameraProcesses()` at the next boot then had 2 real
+  processes fighting over the same webcam/RTSP stream. Fixed with a
+  small pidfile (`data/camera-process-pids.json`, gitignored - real
+  local runtime state, kept current by `writeCameraPidFile()` on every
+  spawn/stop/exit) read once at the very next startup, before this
+  incarnation reconciles (and so spawns) any camera process of its own -
+  `reapOrphanedCameraProcesses()` does a real liveness probe
+  (`process.kill(pid, 0)`, never a guess) and SIGTERMs anything still
+  alive from a previous run. New `[CAMERA] starting`/`[CAMERA] stopping`
+  log lines for real operational visibility into what this supervisor is
+  doing, matching this file's own existing `[STARTUP]` logging
+  convention. Separately confirmed while chasing this on this same dev
+  machine, for the record: a *working* camera legitimately shows up as
+  more than one OS process in Task Manager/`Get-Process` on Windows (the
+  installed console-script launcher re-execs a real Python interpreter
+  process under it) - that's normal, not a leak; `stopCameraProcess()`'s
+  own `proc.kill()` against the one PID Node itself tracks was verified
+  to cleanly take the whole real process tree down with it.
 - **Real RTSP path auto-discovery** - new `POST /api/camera/discover-rtsp-path`
   (`{host, port, username, password}`). A native Node RTSP DESCRIBE
   client (RFC 2617 Digest, no `qop` - the same real handshake already

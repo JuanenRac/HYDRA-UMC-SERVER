@@ -1467,6 +1467,7 @@ async function startServer() {
     const state = cameraProcesses.get(key);
     if (!state?.proc) return;
     const proc = state.proc;
+    industrialLog(`[CAMERA] stopping ${key} pid=${proc.pid}`);
     state.proc = null;
     proc.kill("SIGTERM");
     const killTimer = setTimeout(() => {
@@ -1474,6 +1475,66 @@ async function startServer() {
     }, 2000);
     killTimer.unref();
     proc.once("exit", () => clearTimeout(killTimer));
+    writeCameraPidFile();
+  }
+
+  // Real pidfile-based orphan reaping for camera child processes - unlike
+  // POSIX, killing this Node process by anything other than a clean
+  // SIGINT/SIGTERM that actually reaches gracefulShutdown() (window
+  // closed via taskkill /F, a debugger stopping the process, a crash)
+  // does NOT take its spawned children down with it on Windows - there's
+  // no process-group-wide kill happening automatically. An orphaned
+  // `stream serve` child just keeps running forever, silently holding
+  // its camera device and TCP port. Caught live on this same dev machine:
+  // 2 real orphaned vision-streamer processes still holding ports
+  // 8100/8101 from an earlier server incarnation, fighting the current
+  // server's own freshly-reconciled replacements over the same real
+  // webcam and RTSP stream. Fixed with a small pidfile
+  // (data/camera-process-pids.json), kept current by writeCameraPidFile()
+  // below every time cameraProcesses actually changes, and read back
+  // once here, before this incarnation reconciles (and so spawns) any
+  // camera process of its own - a real liveness probe (process.kill(pid,
+  // 0), never a guess) decides what's actually still running.
+  function cameraPidFilePath(): string {
+    return path.join(process.cwd(), "data", "camera-process-pids.json");
+  }
+
+  function writeCameraPidFile(): void {
+    const pids = Array.from(cameraProcesses.values())
+      .map((s) => s.proc?.pid)
+      .filter((pid): pid is number => typeof pid === "number");
+    try {
+      fs.mkdirSync(path.dirname(cameraPidFilePath()), { recursive: true });
+      fs.writeFileSync(cameraPidFilePath(), JSON.stringify(pids), "utf-8");
+    } catch {
+      // best-effort - losing this file only means a future orphan from
+      // THIS incarnation won't be reaped next boot, not a functional
+      // break today.
+    }
+  }
+
+  function reapOrphanedCameraProcesses(): void {
+    let pids: unknown;
+    try {
+      pids = JSON.parse(fs.readFileSync(cameraPidFilePath(), "utf-8"));
+    } catch {
+      return; // no pidfile yet (first run ever, or already empty) - nothing to reap
+    }
+    if (!Array.isArray(pids)) return;
+    let killed = 0;
+    for (const pid of pids) {
+      if (typeof pid !== "number") continue;
+      try {
+        process.kill(pid, 0); // real liveness probe - throws (ESRCH) if this PID is already gone, the common case
+        process.kill(pid, "SIGTERM");
+        killed++;
+      } catch {
+        // already gone - nothing to reap for this one
+      }
+    }
+    if (killed > 0) {
+      industrialLog(`[STARTUP] Reaped ${killed} orphaned camera process(es) left running by an earlier server instance (see reapOrphanedCameraProcesses's own comment).`);
+    }
   }
 
   function startCameraProcess(key: string, port: number, deviceArg: string, fingerprint: string): void {
@@ -1487,8 +1548,10 @@ async function startServer() {
       return;
     }
     const proc = spawn(exePath, ["stream", "serve", "--device", deviceArg, "--port", String(port)], { stdio: ["ignore", "pipe", "pipe"] });
+    industrialLog(`[CAMERA] starting ${key} on port ${port} (device=${deviceArg}) pid=${proc.pid}`);
     const state: CameraProcessState = { proc, port, fingerprint, status: "starting", lastError: null, recentOutput: [] };
     cameraProcesses.set(key, state);
+    writeCameraPidFile();
     const captureOutput = (data: Buffer) => {
       const lines = data.toString("utf-8").split(/\r?\n/).filter(Boolean);
       state.recentOutput.push(...lines);
@@ -1515,11 +1578,13 @@ async function startServer() {
       state.proc = null;
       state.status = "error";
       state.lastError = `stream serve exited (code=${code}, signal=${signal}) - ${state.recentOutput.slice(-3).join(" | ") || "no output captured"}`;
+      writeCameraPidFile();
     });
     proc.once("error", (err) => {
       state.proc = null;
       state.status = "error";
       state.lastError = `failed to launch stream serve: ${err.message}`;
+      writeCameraPidFile();
     });
   }
 
@@ -1554,6 +1619,7 @@ async function startServer() {
         cameraProcesses.delete(key);
       }
     }
+    writeCameraPidFile();
   }
 
   // The one real hook point both settings-write paths (REST POST and
@@ -1568,6 +1634,13 @@ async function startServer() {
     broadcastSettings(payload, false, originatorWs);
     reconcileCameraProcesses(payload);
   }
+
+  // Reap anything a PREVIOUS incarnation of this server left running
+  // (see reapOrphanedCameraProcesses's own comment) BEFORE this one
+  // spawns its own replacements below - otherwise the two fight over
+  // the same real camera device/port, which is exactly the real bug
+  // this was written to fix, caught live on this dev machine.
+  reapOrphanedCameraProcesses();
 
   // Real cameras already configured before this server process started
   // (like every existing one in data/settings.json) get their own
