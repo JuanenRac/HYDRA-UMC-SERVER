@@ -871,6 +871,73 @@ async function discoverRtspPath(host: string, port: number, username: string, pa
   return { ok: false, paths: [], triedPaths: tried, error: "none of the known real RTSP paths answered with 200 OK" };
 }
 
+interface PsiaResult {
+  ok: boolean;
+  statusCode: number;
+  body: string;
+  error?: string;
+}
+
+// One real HTTP Digest round trip (RFC 2617 - same real handshake
+// already verified by hand against this ecosystem's own PSIA-standard
+// camera firmware, see [[project_camera_plaintext_password_exposure]]):
+// a first request with no Authorization header, a real 401 challenge
+// parsed for realm/nonce, then a second request carrying the computed
+// digest response. Never assumes qop - this firmware's own challenge
+// doesn't send one (confirmed by hand against .203/.204), matching the
+// RTSP Digest handshake above.
+function psiaRequest(host: string, port: number, method: string, urlPath: string, username: string, password: string, body?: string): Promise<PsiaResult> {
+  return new Promise((resolve) => {
+    const doRequest = (authHeader?: string) => {
+      const headers: Record<string, string> = { "Content-Type": "application/xml" };
+      if (authHeader) headers["Authorization"] = authHeader;
+      if (body) headers["Content-Length"] = String(Buffer.byteLength(body));
+      const req = http.request({ host, port, method, path: urlPath, headers, timeout: 4000 }, (res) => {
+        let data = "";
+        res.on("data", (chunk) => { data += chunk; });
+        res.on("end", () => {
+          if (res.statusCode === 401 && !authHeader) {
+            const challenge = res.headers["www-authenticate"];
+            const challengeStr = Array.isArray(challenge) ? challenge[0] : challenge;
+            const realmMatch = challengeStr?.match(/realm="([^"]+)"/);
+            const nonceMatch = challengeStr?.match(/nonce="([^"]+)"/);
+            if (!realmMatch || !nonceMatch || !username) {
+              resolve({ ok: false, statusCode: res.statusCode ?? 401, body: data, error: "camera requires authentication and none (or no matching Digest challenge) was available" });
+              return;
+            }
+            const realm = realmMatch[1];
+            const nonce = nonceMatch[1];
+            const ha1 = crypto.createHash("md5").update(`${username}:${realm}:${password}`).digest("hex");
+            const ha2 = crypto.createHash("md5").update(`${method}:${urlPath}`).digest("hex");
+            const response = crypto.createHash("md5").update(`${ha1}:${nonce}:${ha2}`).digest("hex");
+            doRequest(`Digest username="${username}", realm="${realm}", nonce="${nonce}", uri="${urlPath}", response="${response}"`);
+            return;
+          }
+          resolve({ ok: (res.statusCode ?? 0) >= 200 && (res.statusCode ?? 0) < 300, statusCode: res.statusCode ?? 0, body: data });
+        });
+      });
+      req.on("error", (err) => resolve({ ok: false, statusCode: 0, body: "", error: err.message }));
+      req.on("timeout", () => { req.destroy(); resolve({ ok: false, statusCode: 0, body: "", error: "timeout" }); });
+      if (body) req.write(body);
+      req.end();
+    };
+    doRequest();
+  });
+}
+
+// Real PSIA PTZ continuous-move control - IP cameras only, this
+// ecosystem's own USB cameras have no pan/tilt/zoom hardware to speak
+// of. Sends the PSIA-standard <PTZData> body (pan/tilt/zoom each -100..
+// 100, 0/0/0 = stop) against this ecosystem's own real camera firmware
+// family's HTTP API (port 80, same one the plaintext-password finding
+// was made against). A camera without real PTZ hardware answers
+// honestly (this firmware returns a real HTTP error for a channel that
+// doesn't support it) - reported back as-is, never pretended to work.
+async function sendPtzCommand(host: string, httpPort: number, username: string, password: string, channel: number, pan: number, tilt: number, zoom: number): Promise<PsiaResult> {
+  const body = `<PTZData version="1.0" xmlns="urn:psialliance-org"><pan>${pan}</pan><tilt>${tilt}</tilt><zoom>${zoom}</zoom></PTZData>`;
+  return psiaRequest(host, httpPort, "PUT", `/PSIA/PTZ/channels/${channel}/continuous`, username, password, body);
+}
+
 // Where every sibling HYDRA-UMC-* repo checkout actually lives - shared by
 // getEcosystemStatus() (below) and the camera-process supervisor
 // (reconcileCameraProcesses(), inside startServer()), which needs it to
@@ -1508,6 +1575,13 @@ async function startServer() {
     status: "starting" | "running" | "error" | "stopped";
     lastError: string | null;
     recentOutput: string[];
+    // How many times in a row the self-heal below has had to kill and
+    // respawn THIS exact fingerprint without ever seeing it reach
+    // "running" - drives the escalating backoff between attempts (see
+    // the health check below) and resets to 0 the moment it actually
+    // comes up. Not persisted across a real fingerprint change/stop -
+    // a genuinely different config starts this back at 0.
+    restartAttempts: number;
   }
   const cameraProcesses = new Map<string, CameraProcessState>();
 
@@ -1597,20 +1671,48 @@ async function startServer() {
     }
   }
 
-  function startCameraProcess(key: string, port: number, deviceArg: string, fingerprint: string): void {
+  // Real self-heal, not just a status label: a process that's still
+  // technically alive but never answers (a hung RTSP reconnect - the
+  // exact real bug reported live: camera 4's own stream would freeze
+  // mid-switch and never come back) or one that genuinely exits on its
+  // own used to just sit in cameraProcesses forever marked "error" -
+  // reconcileCameraProcesses()'s own short-circuit only skips a camera
+  // when it already has a live `proc`, so once one went stuck, NOTHING
+  // touched it again until an unrelated settings save happened to come
+  // through. This schedules a real respawn of the exact same config
+  // instead, with an escalating backoff (5s/10s/20s, capped at 30s) so a
+  // genuinely broken camera (wrong credentials, unreachable host)
+  // doesn't hammer the OS or the real camera hardware with a spawn every
+  // few seconds forever.
+  function scheduleCameraRespawn(key: string, port: number, deviceArg: string, fingerprint: string, priorAttempts: number): void {
+    const delayMs = Math.min(5000 * Math.pow(2, priorAttempts), 30000);
+    const retryTimer = setTimeout(() => {
+      const current = cameraProcesses.get(key);
+      // Only respawn if this exact stuck config is still the one
+      // tracked - a real reconcile (config changed, camera disabled or
+      // deleted) may already have superseded it, and that always wins
+      // over this fallback.
+      if (current && current.proc === null && current.fingerprint === fingerprint && current.status === "error") {
+        startCameraProcess(key, port, deviceArg, fingerprint, priorAttempts + 1);
+      }
+    }, delayMs);
+    retryTimer.unref();
+  }
+
+  function startCameraProcess(key: string, port: number, deviceArg: string, fingerprint: string, restartAttempts: number = 0): void {
     const exePath = visionStreamerExecutablePath();
     if (!fs.existsSync(exePath)) {
       industrialLog(`[CAMERA] ${key}: HYDRA-UMC-VISION-STREAMER not found at ${exePath} - reporting error status, not spawning`);
       cameraProcesses.set(key, {
         proc: null, port, fingerprint, status: "error",
         lastError: `HYDRA-UMC-VISION-STREAMER not found at ${exePath} - is it checked out as a sibling repo with its own .venv installed (pip install -e .)?`,
-        recentOutput: [],
+        recentOutput: [], restartAttempts,
       });
       return;
     }
     const proc = spawn(exePath, ["stream", "serve", "--device", deviceArg, "--port", String(port)], { stdio: ["ignore", "pipe", "pipe"] });
-    industrialLog(`[CAMERA] starting ${key} on port ${port} (device=${deviceArg}) pid=${proc.pid}`);
-    const state: CameraProcessState = { proc, port, fingerprint, status: "starting", lastError: null, recentOutput: [] };
+    industrialLog(`[CAMERA] starting ${key} on port ${port} (device=${deviceArg}) pid=${proc.pid}${restartAttempts > 0 ? ` (self-heal retry #${restartAttempts})` : ""}`);
+    const state: CameraProcessState = { proc, port, fingerprint, status: "starting", lastError: null, recentOutput: [], restartAttempts };
     cameraProcesses.set(key, state);
     writeCameraPidFile();
     const captureOutput = (data: Buffer) => {
@@ -1660,29 +1762,47 @@ async function startServer() {
         consecutiveFailures = 0;
         state.status = "running";
         state.lastError = null;
+        state.restartAttempts = 0; // it recovered - the next real failure starts backoff over from 5s
         return;
       }
       consecutiveFailures++;
       if (consecutiveFailures >= HEALTH_CHECK_FAILURE_THRESHOLD) {
+        clearInterval(healthTimer);
+        const nextAttempt = state.restartAttempts + 1;
+        const retryInSec = Math.min(5 * Math.pow(2, state.restartAttempts), 30);
         state.status = "error";
         state.lastError =
-          state.recentOutput.slice(-3).join(" | ") ||
-          `stream serve has not answered on its own port for ${(HEALTH_CHECK_FAILURE_THRESHOLD * HEALTH_CHECK_INTERVAL_MS) / 1000}s`;
+          (state.recentOutput.slice(-3).join(" | ") ||
+            `stream serve has not answered on its own port for ${(HEALTH_CHECK_FAILURE_THRESHOLD * HEALTH_CHECK_INTERVAL_MS) / 1000}s`) +
+          ` - killing and retrying in ${retryInSec}s (attempt #${nextAttempt})`;
+        industrialLog(`[CAMERA] ${key}: unresponsive, killing pid=${proc.pid} and scheduling a real respawn in ${retryInSec}s`);
+        proc.kill("SIGTERM");
+        const killTimer = setTimeout(() => { try { proc.kill("SIGKILL"); } catch { /* already gone */ } }, 2000);
+        killTimer.unref();
+        state.proc = null;
+        writeCameraPidFile();
+        scheduleCameraRespawn(key, port, deviceArg, fingerprint, state.restartAttempts);
       }
     }, HEALTH_CHECK_INTERVAL_MS);
     healthTimer.unref();
     proc.once("exit", (code, signal) => {
       if (cameraProcesses.get(key)?.proc !== proc) return; // already replaced by a respawn
+      clearInterval(healthTimer);
       state.proc = null;
       state.status = "error";
-      state.lastError = `stream serve exited (code=${code}, signal=${signal}) - ${state.recentOutput.slice(-3).join(" | ") || "no output captured"}`;
+      const retryInSec = Math.min(5 * Math.pow(2, state.restartAttempts), 30);
+      state.lastError = `stream serve exited (code=${code}, signal=${signal}) - ${state.recentOutput.slice(-3).join(" | ") || "no output captured"} - retrying in ${retryInSec}s`;
       writeCameraPidFile();
+      scheduleCameraRespawn(key, port, deviceArg, fingerprint, state.restartAttempts);
     });
     proc.once("error", (err) => {
+      clearInterval(healthTimer);
       state.proc = null;
       state.status = "error";
-      state.lastError = `failed to launch stream serve: ${err.message}`;
+      const retryInSec = Math.min(5 * Math.pow(2, state.restartAttempts), 30);
+      state.lastError = `failed to launch stream serve: ${err.message} - retrying in ${retryInSec}s`;
       writeCameraPidFile();
+      scheduleCameraRespawn(key, port, deviceArg, fingerprint, state.restartAttempts);
     });
   }
 
@@ -1712,7 +1832,7 @@ async function startServer() {
           if (existing?.proc) stopCameraProcess(key);
           cameraProcesses.set(key, {
             proc: null, port, fingerprint, status: "stopped", lastError: null,
-            recentOutput: existing?.recentOutput ?? [],
+            recentOutput: existing?.recentOutput ?? [], restartAttempts: 0,
           });
           continue;
         }
@@ -1723,7 +1843,7 @@ async function startServer() {
         const deviceArg = computeDeviceArg(camera);
         stopCameraProcess(key);
         if (deviceArg === null) {
-          cameraProcesses.set(key, { proc: null, port, fingerprint, status: "error", lastError: "camera config is incomplete or in an unrecognized format", recentOutput: [] });
+          cameraProcesses.set(key, { proc: null, port, fingerprint, status: "error", lastError: "camera config is incomplete or in an unrecognized format", recentOutput: [], restartAttempts: 0 });
           continue;
         }
         startCameraProcess(key, port, deviceArg, fingerprint);
@@ -2941,6 +3061,42 @@ async function startServer() {
     const realPort = Number.isInteger(port) && port > 0 && port <= 65535 ? port : 554;
     const result = await discoverRtspPath(host.trim(), realPort, username || "", password || "");
     res.json(result);
+  });
+
+  // Real PTZ control - Vision Center's own pan/tilt/zoom control, IP
+  // cameras only. Takes the camera's own real ipHost/ipUsername/
+  // ipPassword directly from the request body (same convention already
+  // established by discover-rtsp-path above - the client already holds
+  // this camera's own config, no server-side lookup needed) rather than
+  // rtspPort (PTZ goes over the camera's real HTTP API, port 80 unless
+  // told otherwise - a genuinely different port from the RTSP stream
+  // itself). pan/tilt/zoom are each clamped to the real PSIA range
+  // (-100..100); omit all three (or send 0/0/0) to stop.
+  app.post("/api/camera/:id/ptz", authenticate, requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) {
+      return res.status(400).json({ error: "camera id must be a positive integer" });
+    }
+    const { host, port, username, password, pan, tilt, zoom, channel } = req.body || {};
+    if (typeof host !== "string" || !host.trim()) {
+      return res.status(400).json({ error: "host is required" });
+    }
+    const clamp = (n: unknown): number => {
+      const num = Number(n);
+      if (!Number.isFinite(num)) return 0;
+      return Math.max(-100, Math.min(100, Math.round(num)));
+    };
+    const httpPort = Number.isInteger(port) && port > 0 && port <= 65535 ? port : 80;
+    const ch = Number.isInteger(channel) && channel > 0 ? channel : 1;
+    const result = await sendPtzCommand(host.trim(), httpPort, username || "", password || "", ch, clamp(pan), clamp(tilt), clamp(zoom));
+    if (!result.ok) {
+      return res.status(502).json({
+        ok: false,
+        statusCode: result.statusCode,
+        error: result.error || `camera answered the PTZ request with HTTP ${result.statusCode} - this camera may genuinely have no motorized pan/tilt/zoom hardware`,
+      });
+    }
+    res.json({ ok: true });
   });
 
   // Real USB camera discovery - the "Discover USB Devices" button.

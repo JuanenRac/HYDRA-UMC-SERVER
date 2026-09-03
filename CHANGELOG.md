@@ -33,6 +33,43 @@ a change is actually worth summarizing for a human.
 
 (nothing yet)
 
+## [0.4.8]
+
+- **Real self-heal for a hung camera process, not just a status label.**
+  Found via a detailed live user report on camera 4 (2 real streams,
+  main/sub): switching between them worked for a while, then silently
+  stopped, needing a manual OS process kill to recover. Root cause: the
+  health check in `startCameraProcess()` already detected an
+  unresponsive `stream serve` child (10 consecutive missed TCP probes)
+  and flipped its own status to `"error"`, but never actually DID
+  anything about it - the process object was left alive and tracked, so
+  `reconcileCameraProcesses()`'s own "already has a proc, skip"
+  short-circuit treated it as fine forever after, until an unrelated
+  settings save happened to come through. Now a confirmed-unresponsive
+  process is killed (SIGTERM, SIGKILL fallback) and a real respawn of
+  the exact same config is scheduled automatically, with an escalating
+  backoff (5s/10s/20s, capped at 30s) so a genuinely broken camera
+  (wrong credentials, unreachable host) doesn't hammer the OS or the
+  real camera hardware. The same respawn-with-backoff now also covers a
+  `stream serve` process that exits on its own (a real crash) - that
+  path used to have the identical "stuck in error forever" gap.
+  `CameraProcessState` gained `restartAttempts`, reset to 0 the moment a
+  process actually reports healthy again.
+- **New real PTZ (pan/tilt/zoom) control - IP cameras only.** New
+  `POST /api/camera/:id/ptz`, taking the camera's own real
+  ipHost/ipUsername/ipPassword directly from the request body (same
+  convention as `discover-rtsp-path`) plus pan/tilt/zoom (-100..100,
+  0/0/0 = stop). Relays a real PSIA `continuous` move command over the
+  camera's own HTTP API (port 80 by default), using a new generic HTTP
+  Digest-auth client (`psiaRequest()`) - verified end to end against the
+  real `.203` camera: the digest handshake itself was confirmed working
+  by testing it against the already-known-good
+  `GET /PSIA/Security/AAA/users` endpoint, and the real PTZ command
+  itself came back with an honest `404` (this ecosystem's own real
+  cameras are fixed dual-lens units, no motorized PTZ hardware) - never
+  pretended to move a camera that can't.
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
+
 ## [0.4.7]
 
 - **Removed a real false-positive from `RTSP_PATH_CANDIDATES`.** Caught
