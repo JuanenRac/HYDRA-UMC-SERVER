@@ -31,6 +31,26 @@ a change is actually worth summarizing for a human.
 
 ## Unreleased
 
+- **`GET /api/camera/:id/stream` crashed the entire server, not just that
+  one request, whenever a real camera stream ran past 5 seconds** - real
+  bug hit live watching a real camera for the first time (see
+  HYDRA-UMC-VISION-STREAMER's own CHANGELOG for the cross-platform
+  capture fix that made a real stream possible to watch at all). Root
+  cause: the proxy's own `fetch()` to the local `mjpeg_server.py`
+  instance reused a single `AbortSignal.timeout(5000)` across the whole
+  request, but that signal fires once, 5000ms after creation, regardless
+  of whether the MJPEG body is still healthily streaming - it does not
+  reset per chunk. Once it fired mid-stream it aborted the piped
+  `Readable`, which had no `error` listener, so Node's default "throw on
+  unhandled 'error' event" behavior killed the whole process, taking
+  every open robot/WebSocket connection down with it, not just the
+  camera view. Fixed two ways: the abort timer now only bounds the
+  initial connect (cleared as soon as `fetch()` resolves, before any
+  body bytes are read) so a healthy stream is never killed by its own
+  age, and both the piped `Readable` and the client `res` now have real
+  `error` handlers so a genuinely dropped connection (closed tab,
+  network blip, upstream restart) ends that one stream cleanly instead
+  of ever taking the server down again.
 - **`GET /api/system/metrics`'s `cpu_load`/`memory_usage` disagreed with
   the new Supervisor endpoint's own real numbers** - real feedback from
   live testing: the dashboard footer showed 9% CPU while the Supervisor
@@ -125,6 +145,10 @@ a change is actually worth summarizing for a human.
   on any host without a real RP1 chip - a real hardware fact, not something
   this host merely can't currently read. New Prometheus gauge
   `hydra_system_rp1_temp_celsius`.
+
+## [0.3.9]
+
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
 
 ## [0.3.8]
 

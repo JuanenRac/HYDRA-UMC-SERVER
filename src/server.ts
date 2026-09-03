@@ -2323,10 +2323,23 @@ async function startServer() {
     }
     const port = cameraStreamPort(id);
     let upstream: Response;
+    // Bounds only the initial connect to the local mjpeg_server.py instance.
+    // AbortSignal.timeout(N) fires N ms after it was created, full stop - it
+    // does NOT reset per chunk received, so reusing the same signal past the
+    // fetch() call (which resolves as soon as headers arrive, before the
+    // real MJPEG body has streamed a single frame) aborts every stream dead
+    // at exactly 5s regardless of whether it's still healthy. Confirmed real
+    // in production: this crashed the entire server, not just this route,
+    // the first time a real camera stream was actually watched for more
+    // than 5s (see CHANGELOG for the DOMException [TimeoutError] trace).
+    const connectController = new AbortController();
+    const connectTimeout = setTimeout(() => connectController.abort(), 5000);
     try {
-      upstream = await fetch(`http://127.0.0.1:${port}/stream`, { signal: AbortSignal.timeout(5000) });
+      upstream = await fetch(`http://127.0.0.1:${port}/stream`, { signal: connectController.signal });
     } catch {
       return res.status(503).json({ error: `No camera stream running locally for camera ${id} (expected on 127.0.0.1:${port}) - see HYDRA-UMC-VISION-STREAMER's own "stream serve" command.`, available: false });
+    } finally {
+      clearTimeout(connectTimeout);
     }
     if (!upstream.ok || !upstream.body) {
       return res.status(502).json({ error: `Local camera stream for camera ${id} answered with an unexpected response.` });
@@ -2337,6 +2350,19 @@ async function startServer() {
       "Pragma": "no-cache",
     });
     const nodeStream = Readable.fromWeb(upstream.body as any);
+    // A client disconnecting mid-stream (closed tab, page navigation, a
+    // flaky network) is the normal, expected way this route ends, and an
+    // upstream mjpeg_server.py restarting is a normal, expected transient
+    // failure - neither may ever surface as an uncaught 'error' event again
+    // (Node's default behavior for one is to crash the whole process; this
+    // is the exact bug above, kept fixed here in general, not just for the
+    // one cause found today).
+    nodeStream.on("error", () => {
+      if (!res.writableEnded) res.end();
+    });
+    res.on("error", () => {
+      nodeStream.destroy();
+    });
     nodeStream.pipe(res);
     req.on("close", () => nodeStream.destroy());
   });
