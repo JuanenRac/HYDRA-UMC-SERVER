@@ -1595,14 +1595,34 @@ async function startServer() {
     // own - a short real TCP probe against its own port is a more
     // honest "is this actually up" signal than "the process object
     // still exists".
-    const readyTimer = setTimeout(async () => {
-      if (cameraProcesses.get(key)?.proc !== proc) return; // superseded by a respawn or a stop already
-      const up = await probeTcp(port);
+    // Real retries, not one shot: a cold RTSP connect (real network round
+    // trip to the camera, real GStreamer/OpenCV backend init) genuinely
+    // took longer than a single 1.5s check allowed for on the real CM5 -
+    // caught live testing this against real hardware there: all 4
+    // configured cameras' own HTTP servers came up and answered real
+    // frames within a few seconds, but the old one-shot probe had
+    // already permanently marked every one of them "error" by the time
+    // they did, since nothing ever re-checked afterward. Polls once a
+    // second for up to READY_PROBE_MAX_ATTEMPTS seconds, flips to
+    // "running" the moment it actually answers, and only settles on
+    // "error" once every attempt is exhausted.
+    const READY_PROBE_MAX_ATTEMPTS = 10;
+    const unrefDelay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref());
+    (async () => {
+      for (let attempt = 1; attempt <= READY_PROBE_MAX_ATTEMPTS; attempt++) {
+        await unrefDelay(1000);
+        if (cameraProcesses.get(key)?.proc !== proc) return; // superseded by a respawn or a stop already
+        const up = await probeTcp(port);
+        if (cameraProcesses.get(key)?.proc !== proc) return;
+        if (up) {
+          state.status = "running";
+          return;
+        }
+      }
       if (cameraProcesses.get(key)?.proc !== proc) return;
-      state.status = up ? "running" : "error";
-      if (!up) state.lastError = state.recentOutput.slice(-3).join(" | ") || "stream serve did not start listening in time";
-    }, 1500);
-    readyTimer.unref();
+      state.status = "error";
+      state.lastError = state.recentOutput.slice(-3).join(" | ") || `stream serve did not start listening within ${READY_PROBE_MAX_ATTEMPTS}s`;
+    })();
     proc.once("exit", (code, signal) => {
       if (cameraProcesses.get(key)?.proc !== proc) return; // already replaced by a respawn
       state.proc = null;

@@ -33,6 +33,22 @@ a change is actually worth summarizing for a human.
 
 (nothing yet)
 
+## [0.4.3]
+
+- **Fixed a real false-negative "error" status on every camera, caught
+  live testing 0.4.2 against real hardware on the real CM5.** All 4
+  cameras the user configured came up correctly (their real
+  `stream serve` process alive, their real HTTP port actually
+  answering `200`) but the status badge still showed a permanent
+  "Stream Error" - a cold RTSP connect over a real network plus real
+  ARM CPU startup overhead genuinely took longer than the one-shot
+  1.5s readiness probe allowed for, and nothing ever re-checked
+  afterward once that single check said "not yet". The probe is now a
+  real retry loop - polls once a second for up to 10s, flips to
+  `running` the moment it actually answers, and only settles on
+  `error` once every attempt is exhausted (each poll's own timer is
+  unref'd, so a pending retry never delays a graceful shutdown).
+
 ## [0.4.2]
 
 - **Fixed `visionStreamerExecutablePath()` never actually finding
