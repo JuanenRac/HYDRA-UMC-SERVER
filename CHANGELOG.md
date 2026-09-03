@@ -33,6 +33,25 @@ a change is actually worth summarizing for a human.
 
 (nothing yet)
 
+## [0.4.4]
+
+- **The 0.4.3 fixed-10s retry window still wasn't always enough** -
+  caught immediately re-testing 0.4.3 live against the same real CM5
+  hardware: some of this ecosystem's own real cameras genuinely took a
+  little past 10s to answer (this session's own memory already
+  documented these cameras as prone to slow/rate-limited responses
+  under load - see `project_ip_cameras_investigation`), and a bounded
+  window still has no way to notice a camera that WAS running and then
+  genuinely drops. Replaced the bounded retry with a real persistent
+  health check: ticks every 2s for the lifetime of the process (not a
+  fixed count), flips to `running` the instant it answers, and only
+  settles on `error` after 10 CONSECUTIVE misses (~20s) - and keeps
+  ticking after that too, so a camera that eventually does come up
+  self-corrects back to `running` without needing another settings
+  write to re-trigger reconciliation. `status: "starting"` (the real
+  initial value) is left alone rather than forced to a premature
+  `error` during a normal, if slow, cold start.
+
 ## [0.4.3]
 
 - **Fixed a real false-negative "error" status on every camera, caught

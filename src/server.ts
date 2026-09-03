@@ -1598,31 +1598,48 @@ async function startServer() {
     // Real retries, not one shot: a cold RTSP connect (real network round
     // trip to the camera, real GStreamer/OpenCV backend init) genuinely
     // took longer than a single 1.5s check allowed for on the real CM5 -
-    // caught live testing this against real hardware there: all 4
-    // configured cameras' own HTTP servers came up and answered real
-    // frames within a few seconds, but the old one-shot probe had
-    // already permanently marked every one of them "error" by the time
-    // they did, since nothing ever re-checked afterward. Polls once a
-    // second for up to READY_PROBE_MAX_ATTEMPTS seconds, flips to
-    // "running" the moment it actually answers, and only settles on
-    // "error" once every attempt is exhausted.
-    const READY_PROBE_MAX_ATTEMPTS = 10;
-    const unrefDelay = (ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref());
-    (async () => {
-      for (let attempt = 1; attempt <= READY_PROBE_MAX_ATTEMPTS; attempt++) {
-        await unrefDelay(1000);
-        if (cameraProcesses.get(key)?.proc !== proc) return; // superseded by a respawn or a stop already
-        const up = await probeTcp(port);
-        if (cameraProcesses.get(key)?.proc !== proc) return;
-        if (up) {
-          state.status = "running";
-          return;
-        }
+    // caught live testing this against real hardware on the real CM5: a
+    // cold RTSP connect over a real network plus real ARM CPU startup
+    // overhead can genuinely take well past what any single fixed
+    // window covers (10s still wasn't always enough for some of this
+    // ecosystem's own real cameras) - and a one-shot check that never
+    // runs again also can't ever notice a camera that WAS running and
+    // then genuinely dropped. So this is a persistent health check, not
+    // a bounded startup probe: ticks every HEALTH_CHECK_INTERVAL_MS for
+    // as long as this exact process is the one tracked for `key`,
+    // flipping to "running" the moment it answers and to "error" only
+    // after HEALTH_CHECK_FAILURE_THRESHOLD consecutive misses (avoids
+    // flapping the badge between "starting"/"error" during a normal,
+    // if slow, cold start - "starting" is the honest state to show
+    // until that many misses actually happen).
+    const HEALTH_CHECK_INTERVAL_MS = 2000;
+    const HEALTH_CHECK_FAILURE_THRESHOLD = 10; // ~20s of misses before calling it an error
+    let consecutiveFailures = 0;
+    const healthTimer = setInterval(async () => {
+      if (cameraProcesses.get(key)?.proc !== proc) {
+        clearInterval(healthTimer); // superseded by a respawn or a stop already
+        return;
       }
-      if (cameraProcesses.get(key)?.proc !== proc) return;
-      state.status = "error";
-      state.lastError = state.recentOutput.slice(-3).join(" | ") || `stream serve did not start listening within ${READY_PROBE_MAX_ATTEMPTS}s`;
-    })();
+      const up = await probeTcp(port);
+      if (cameraProcesses.get(key)?.proc !== proc) {
+        clearInterval(healthTimer);
+        return;
+      }
+      if (up) {
+        consecutiveFailures = 0;
+        state.status = "running";
+        state.lastError = null;
+        return;
+      }
+      consecutiveFailures++;
+      if (consecutiveFailures >= HEALTH_CHECK_FAILURE_THRESHOLD) {
+        state.status = "error";
+        state.lastError =
+          state.recentOutput.slice(-3).join(" | ") ||
+          `stream serve has not answered on its own port for ${(HEALTH_CHECK_FAILURE_THRESHOLD * HEALTH_CHECK_INTERVAL_MS) / 1000}s`;
+      }
+    }, HEALTH_CHECK_INTERVAL_MS);
+    healthTimer.unref();
     proc.once("exit", (code, signal) => {
       if (cameraProcesses.get(key)?.proc !== proc) return; // already replaced by a respawn
       state.proc = null;
