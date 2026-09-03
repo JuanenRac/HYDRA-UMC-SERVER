@@ -29,8 +29,9 @@ import http from "http";
 import https from "https";
 import net from "net";
 import os from "os";
+import crypto from "crypto";
 import { Readable } from "stream";
-import { execFile } from "child_process";
+import { execFile, spawn, type ChildProcess } from "child_process";
 import { promisify } from "util";
 import { WebSocketServer, WebSocket } from "ws";
 import { calculateJoints } from "./kinematics";
@@ -694,6 +695,180 @@ function probeService(port: number, healthPath: string | null): Promise<boolean>
   return healthPath ? probeHttp(port, healthPath) : probeTcp(port);
 }
 
+// --- Camera capture: real per-camera --device argument, RTSP path
+// discovery, and USB device discovery for the process supervisor
+// (reconcileCameraProcesses(), inside startServer()) ------------------
+
+// The exact shape HYDRA-UMC-STUDIO's own Config.tsx (configTab ===
+// 'cameras') and HYDRA-UMC-SUITE's own CameraCard already write into
+// controller.cameras[] - see store.tsx's own CameraState interface and
+// models.py's own CameraView, both already field-complete and
+// camelCase-matched to this. Loosely typed here (matching the rest of
+// this file's own settings handling, which is `any` throughout) rather
+// than introducing a stricter type only this one function would honor.
+interface CameraSettings {
+  sourceType?: "usb" | "ip";
+  hardwareSource?: string;
+  ipHost?: string;
+  rtspPort?: number;
+  rtspPath?: string;
+  ipUsername?: string;
+  ipPassword?: string;
+}
+
+// Real RTSP paths this ecosystem has actually seen work, in the order
+// worth trying - see [[project_ip_cameras_investigation]]: `/11`/`/12`
+// (Hipcam RealServer, verified against .210/.211) and `/profile0`
+// (YGTek RTSP Server, verified against .203/.204) are both real,
+// confirmed paths from THIS ecosystem's own hardware, not guessed;
+// the rest are common real paths from other OEM firmware families,
+// tried after those two so the already-proven ones win first.
+const RTSP_PATH_CANDIDATES = [
+  "/11", "/12", "/profile0", "/live", "/h264", "/stream1",
+  "/Streaming/Channels/1", "/cam/realmonitor?channel=1&subtype=0", "/",
+];
+
+// Translates a camera's real config into the exact string
+// `hydra-umc-vision-streamer stream serve --device <this>` expects -
+// see that project's own config.py CameraConfig/rtsp_url(). Returns
+// null (never throws, never guesses) when the config can't honestly be
+// turned into a real device argument, so the caller can report a real
+// "unrecognized device" status instead of spawning something wrong.
+function computeDeviceArg(camera: CameraSettings): string | null {
+  if (camera.sourceType === "ip") {
+    const host = (camera.ipHost || "").trim();
+    if (!host) return null;
+    const port = Number.isInteger(camera.rtspPort) && camera.rtspPort! > 0 ? camera.rtspPort! : 554;
+    const rawPath = (camera.rtspPath || "/").trim();
+    const path = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
+    const user = camera.ipUsername ? encodeURIComponent(camera.ipUsername) : "";
+    const pass = camera.ipPassword ? encodeURIComponent(camera.ipPassword) : "";
+    const auth = user || pass ? `${user}:${pass}@` : "";
+    return `rtsp://${auth}${host}:${port}${path}`;
+  }
+  // "usb", or sourceType absent (every pre-existing camera entry from
+  // before this field existed defaults to usb, matching STUDIO/SUITE's
+  // own `sourceType ?? "usb"` fallback).
+  const raw = (camera.hardwareSource || "").trim();
+  if (!raw) return null;
+  if (/^\/dev\/video\d+$/.test(raw)) return raw; // real V4L2 path (Linux/CM5)
+  if (/^\d+$/.test(raw)) return raw; // already a bare device index (Windows/OpenCV)
+  const seedMatch = raw.match(/^USB_DEV_(\d+)$/);
+  if (seedMatch) return seedMatch[1]; // this app's own default-seed placeholder (createDefaultCameras()), not a real path - the index it encodes IS real
+  return null; // genuinely unrecognized format - don't guess
+}
+
+interface RtspDescribeResult {
+  ok: boolean;
+  path?: string;
+  status?: number;
+  triedPaths: string[];
+  error?: string;
+}
+
+// One real RTSP OPTIONS+DESCRIBE round trip (RFC 2617 Digest, no `qop` -
+// the exact real handshake already verified by hand against this
+// ecosystem's own cameras, see [[project_ip_cameras_investigation]]) for
+// a single candidate path. Returns the response status line's code, or
+// throws/rejects on a real connection failure (caller treats that as
+// "this path didn't answer", not fatal to the overall discovery scan).
+function rtspDescribeOnce(host: string, port: number, rtspPath: string, username: string, password: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const url = `rtsp://${host}:${port}${rtspPath}`;
+    const socket = net.createConnection({ host, port });
+    const timer = setTimeout(() => { socket.destroy(); reject(new Error("timeout")); }, 2500);
+    let stage: "unauth" | "auth" = "unauth";
+    let buffer = "";
+    socket.once("connect", () => {
+      socket.write(`DESCRIBE ${url} RTSP/1.0\r\nCSeq: 1\r\nAccept: application/sdp\r\n\r\n`);
+    });
+    socket.on("data", (chunk) => {
+      buffer += chunk.toString("latin1");
+      if (!buffer.includes("\r\n\r\n")) return; // wait for the full header block
+      const statusMatch = buffer.match(/^RTSP\/1\.0 (\d{3})/);
+      const status = statusMatch ? Number(statusMatch[1]) : 0;
+      if (stage === "unauth" && status === 401) {
+        const challenge = buffer.match(/WWW-Authenticate:\s*Digest\s+(.+)/i);
+        const realmMatch = challenge?.[1].match(/realm="([^"]+)"/);
+        const nonceMatch = challenge?.[1].match(/nonce="([^"]+)"/);
+        if (!realmMatch || !nonceMatch || !username) {
+          clearTimeout(timer);
+          socket.destroy();
+          resolve(status); // no real credentials to retry with, or camera doesn't use Digest - report the 401 as-is
+          return;
+        }
+        const realm = realmMatch[1];
+        const nonce = nonceMatch[1];
+        const ha1 = crypto.createHash("md5").update(`${username}:${realm}:${password}`).digest("hex");
+        const ha2 = crypto.createHash("md5").update(`DESCRIBE:${url}`).digest("hex");
+        const response = crypto.createHash("md5").update(`${ha1}:${nonce}:${ha2}`).digest("hex");
+        const authHeader = `Digest username="${username}", realm="${realm}", nonce="${nonce}", uri="${url}", response="${response}"`;
+        stage = "auth";
+        buffer = "";
+        socket.write(`DESCRIBE ${url} RTSP/1.0\r\nCSeq: 2\r\nAuthorization: ${authHeader}\r\nAccept: application/sdp\r\n\r\n`);
+        return;
+      }
+      clearTimeout(timer);
+      socket.destroy();
+      resolve(status);
+    });
+    socket.once("error", (err) => { clearTimeout(timer); reject(err); });
+  });
+}
+
+// Tries each real candidate path in turn, one at a time with a short
+// pause between attempts - the same rate-limit caution already
+// documented in memory (a real camera on this ecosystem's own network
+// silently drops a connection after repeated authenticated attempts in
+// a tight loop) - stops at the first 200 OK. Never invents a path: an
+// exhausted list is reported honestly as "none of these answered",
+// listing exactly what was tried.
+async function discoverRtspPath(host: string, port: number, username: string, password: string): Promise<RtspDescribeResult> {
+  const tried: string[] = [];
+  for (const candidate of RTSP_PATH_CANDIDATES) {
+    tried.push(candidate);
+    try {
+      const status = await rtspDescribeOnce(host, port, candidate, username, password);
+      if (status === 200) {
+        return { ok: true, path: candidate, status, triedPaths: tried };
+      }
+    } catch {
+      // connection failure on this one candidate - move on to the next, not fatal to the scan
+    }
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  return { ok: false, triedPaths: tried, error: "none of the known real RTSP paths answered with 200 OK" };
+}
+
+// Where every sibling HYDRA-UMC-* repo checkout actually lives - shared by
+// getEcosystemStatus() (below) and the camera-process supervisor
+// (reconcileCameraProcesses(), inside startServer()), which needs it to
+// locate HYDRA-UMC-VISION-STREAMER's own installed console script. Real
+// bug this env var exists to fix, reproduced on the CM5: `../` from
+// process.cwd() is correct for local dev (every HYDRA-UMC-* repo checked
+// out flat next to this one), but a real CM5 deployment's own
+// WorkingDirectory is /opt/hydra-umc/server, whose parent holds only
+// build ARTIFACTS, not full source checkouts - HYDRA_UMC_ECOSYSTEM_ROOT
+// lets a real deployment point this at wherever its own checkouts
+// actually live; unset (every existing dev setup) keeps `../`.
+function ecosystemRoot(): string {
+  return process.env.HYDRA_UMC_ECOSYSTEM_ROOT
+    ? path.resolve(process.env.HYDRA_UMC_ECOSYSTEM_ROOT)
+    : path.resolve(process.cwd(), "..");
+}
+
+// Real installed console script (`[project.scripts]` in that repo's own
+// pyproject.toml) inside HYDRA-UMC-VISION-STREAMER's own `.venv` -
+// Windows and Linux/CM5 use different real layouts for this
+// (`.venv/Scripts/*.exe` vs `.venv/bin/*`), same distinction every
+// per-platform path in this ecosystem already has to make.
+function visionStreamerExecutablePath(): string {
+  const repoDir = path.join(ecosystemRoot(), "HYDRA-UMC-VISION-STREAMER");
+  return process.platform === "win32"
+    ? path.join(repoDir, ".venv", "Scripts", "hydra-umc-vision-streamer.exe")
+    : path.join(repoDir, ".venv", "bin", "hydra-umc-vision-streamer");
+}
+
 interface SystemdProbeResult {
   pid: number | null;
   activeState: string | null;
@@ -773,24 +948,7 @@ async function getEcosystemStatus(): Promise<{
 }> {
   const scannedAt = new Date().toISOString();
   try {
-    // Real bug, live-reproduced on the CM5: `../` from process.cwd() is
-    // correct for local dev, where every HYDRA-UMC-* repo is checked out
-    // flat next to this one (e.g. C:\...\GitHub\HYDRA-UMC-SERVER,
-    // HYDRA-UMC-ANOMALY-DETECTOR, ... all siblings) - but a real CM5
-    // deployment's own WorkingDirectory is /opt/hydra-umc/server, whose
-    // parent (/opt/hydra-umc/) holds only each service's build ARTIFACTS
-    // (dist/, package.json - no hydra-umc.project.json at all), not the
-    // full source checkouts with manifests that live instead under this
-    // deployment's own staging tree (~/hydra-umc/HYDRA-UMC-*). Every
-    // manifest existsSync() check below silently failed there, so the
-    // scan always returned zero projects - the panel wasn't broken, it
-    // was scanning an empty directory. HYDRA_UMC_ECOSYSTEM_ROOT lets a
-    // real deployment point this at wherever its own manifests actually
-    // live; unset (every existing dev setup) keeps today's exact `../`
-    // behavior.
-    const parentDir = process.env.HYDRA_UMC_ECOSYSTEM_ROOT
-      ? path.resolve(process.env.HYDRA_UMC_ECOSYSTEM_ROOT)
-      : path.resolve(process.cwd(), "..");
+    const parentDir = ecosystemRoot();
     const entries = fs.readdirSync(parentDir, { withFileTypes: true });
     const projects: EcosystemProjectStatus[] = [];
     for (const entry of entries) {
@@ -1008,6 +1166,8 @@ const loginRateLimiter = rateLimit({
 });
 
 async function startServer() {
+  sweepOrphanedTmpFiles(path.join(process.cwd(), "data"));
+
   const app = express();
   const PORT = resolvePort();
   currentPort = PORT;
@@ -1147,11 +1307,64 @@ async function startServer() {
   // killed, power loss) never leaves `finalPath` itself truncated/corrupt -
   // it's either the complete new content or untouched, never in between.
   // Shared now that queueSettingsWrite writes more than one file per call.
+  //
+  // Real bug found and fixed here: unlike POSIX rename(2), Windows'
+  // rename-over-an-existing-destination isn't guaranteed atomic and can
+  // fail with EPERM/EBUSY if the destination is transiently open by
+  // something else for a moment (an AV scanner, a backup/sync agent, a
+  // file watcher) - and with no retry or cleanup, that left the real
+  // tmpPath orphaned forever. Found 16 real orphaned
+  // `data/settings.json.<pid>.<timestamp>.tmp` files on this same dev
+  // machine, spanning 7 different server runs (see
+  // sweepOrphanedTmpFiles(), below, for the cleanup of what already
+  // accumulated). Fixed with a few short retries on ENOENT/EPERM/EBUSY
+  // (the transient-lock case actually clears almost always within a few
+  // ms) and a real cleanup of tmpPath if every retry still fails, so a
+  // genuine failure at least doesn't leave garbage behind too.
   async function writeFileAtomic(finalPath: string, json: string): Promise<void> {
     const tmpPath = `${finalPath}.${process.pid}.${Date.now()}.tmp`;
     await fs.promises.mkdir(path.dirname(finalPath), { recursive: true });
     await fs.promises.writeFile(tmpPath, json, "utf-8");
-    await fs.promises.rename(tmpPath, finalPath);
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        await fs.promises.rename(tmpPath, finalPath);
+        return;
+      } catch (err) {
+        lastError = err;
+        await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
+      }
+    }
+    try { await fs.promises.unlink(tmpPath); } catch { /* best-effort - don't mask the real error below with a cleanup failure */ }
+    throw lastError;
+  }
+
+  // Real, honest cleanup for whatever writeFileAtomic() failures already
+  // left behind before the fix above existed - a *.tmp sibling of
+  // data/settings.json or a data/points/**/*.json file that's still
+  // here at startup was never mid-rename (that always completes or gets
+  // cleaned up within milliseconds, never across a process restart), so
+  // it's real garbage, safe to remove unconditionally.
+  function sweepOrphanedTmpFiles(dataDir: string): void {
+    let removed = 0;
+    const walk = (dir: string) => {
+      let entries: fs.Dirent[];
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+        } else if (entry.name.endsWith(".tmp")) {
+          try { fs.unlinkSync(full); removed++; } catch { /* best-effort */ }
+        }
+      }
+    };
+    walk(dataDir);
+    if (removed > 0) industrialLog(`[STARTUP] Removed ${removed} orphaned .tmp file(s) under ${dataDir} left over from an earlier interrupted write.`);
   }
 
   // Reassembles the full in-memory settings shape (recordedPoints inline,
@@ -1215,6 +1428,151 @@ async function startServer() {
   } catch {
     // corrupt/unreadable settings.json - start from an empty object rather than crash the server
   }
+
+  // --- Real per-camera process supervisor -------------------------------
+  //
+  // GET /api/camera/:id/stream (below) is a pure proxy to a local
+  // hydra-umc-vision-streamer "stream serve" instance on
+  // 127.0.0.1:8100+(id-1) - it never launches one itself. Before this,
+  // NOTHING did: STUDIO/SUITE's own camera config UI (sourceType/
+  // ipHost/rtspPort/rtspPath/ipUsername/ipPassword, already
+  // field-complete on both) only ever persisted JSON here - saving a
+  // camera's real IP config had zero effect on whether any video
+  // actually showed up. This reconciles the real child process for
+  // every camera against its real current config, every time settings
+  // are saved (via applySettingsUpdate(), below) and once at startup.
+  interface CameraProcessState {
+    proc: ChildProcess | null;
+    port: number;
+    fingerprint: string;
+    status: "starting" | "running" | "error" | "stopped";
+    lastError: string | null;
+    recentOutput: string[];
+  }
+  const cameraProcesses = new Map<string, CameraProcessState>();
+
+  function cameraFingerprint(camera: CameraSettings): string {
+    return JSON.stringify({
+      sourceType: camera.sourceType ?? "usb",
+      hardwareSource: camera.hardwareSource ?? null,
+      ipHost: camera.ipHost ?? null,
+      rtspPort: camera.rtspPort ?? null,
+      rtspPath: camera.rtspPath ?? null,
+      ipUsername: camera.ipUsername ?? null,
+      ipPassword: camera.ipPassword ?? null,
+    });
+  }
+
+  function stopCameraProcess(key: string): void {
+    const state = cameraProcesses.get(key);
+    if (!state?.proc) return;
+    const proc = state.proc;
+    state.proc = null;
+    proc.kill("SIGTERM");
+    const killTimer = setTimeout(() => {
+      try { proc.kill("SIGKILL"); } catch { /* already gone */ }
+    }, 2000);
+    killTimer.unref();
+    proc.once("exit", () => clearTimeout(killTimer));
+  }
+
+  function startCameraProcess(key: string, port: number, deviceArg: string, fingerprint: string): void {
+    const exePath = visionStreamerExecutablePath();
+    if (!fs.existsSync(exePath)) {
+      cameraProcesses.set(key, {
+        proc: null, port, fingerprint, status: "error",
+        lastError: `HYDRA-UMC-VISION-STREAMER not found at ${exePath} - is it checked out as a sibling repo with its own .venv installed (pip install -e .)?`,
+        recentOutput: [],
+      });
+      return;
+    }
+    const proc = spawn(exePath, ["stream", "serve", "--device", deviceArg, "--port", String(port)], { stdio: ["ignore", "pipe", "pipe"] });
+    const state: CameraProcessState = { proc, port, fingerprint, status: "starting", lastError: null, recentOutput: [] };
+    cameraProcesses.set(key, state);
+    const captureOutput = (data: Buffer) => {
+      const lines = data.toString("utf-8").split(/\r?\n/).filter(Boolean);
+      state.recentOutput.push(...lines);
+      if (state.recentOutput.length > 20) state.recentOutput.splice(0, state.recentOutput.length - 20);
+    };
+    proc.stdout?.on("data", captureOutput);
+    proc.stderr?.on("data", captureOutput);
+    // Real check, not a guess: mjpeg_server.py's own stream serve binds
+    // and starts serving HTTP as soon as it opens the real camera/RTSP
+    // device, before the child process would otherwise ever exit on its
+    // own - a short real TCP probe against its own port is a more
+    // honest "is this actually up" signal than "the process object
+    // still exists".
+    const readyTimer = setTimeout(async () => {
+      if (cameraProcesses.get(key)?.proc !== proc) return; // superseded by a respawn or a stop already
+      const up = await probeTcp(port);
+      if (cameraProcesses.get(key)?.proc !== proc) return;
+      state.status = up ? "running" : "error";
+      if (!up) state.lastError = state.recentOutput.slice(-3).join(" | ") || "stream serve did not start listening in time";
+    }, 1500);
+    readyTimer.unref();
+    proc.once("exit", (code, signal) => {
+      if (cameraProcesses.get(key)?.proc !== proc) return; // already replaced by a respawn
+      state.proc = null;
+      state.status = "error";
+      state.lastError = `stream serve exited (code=${code}, signal=${signal}) - ${state.recentOutput.slice(-3).join(" | ") || "no output captured"}`;
+    });
+    proc.once("error", (err) => {
+      state.proc = null;
+      state.status = "error";
+      state.lastError = `failed to launch stream serve: ${err.message}`;
+    });
+  }
+
+  function reconcileCameraProcesses(payload: any): void {
+    const seenKeys = new Set<string>();
+    for (const controller of payload?.controllers ?? []) {
+      for (const camera of controller?.cameras ?? []) {
+        if (!Number.isInteger(camera?.id)) continue;
+        const key = `${controller.id}:${camera.id}`;
+        seenKeys.add(key);
+        const fingerprint = cameraFingerprint(camera);
+        const existing = cameraProcesses.get(key);
+        if (existing && existing.fingerprint === fingerprint && existing.proc) {
+          continue; // unchanged config, already has a real process running (or starting) - don't restart a healthy stream
+        }
+        const port = cameraStreamPort(camera.id);
+        const deviceArg = computeDeviceArg(camera);
+        stopCameraProcess(key);
+        if (deviceArg === null) {
+          cameraProcesses.set(key, { proc: null, port, fingerprint, status: "error", lastError: "camera config is incomplete or in an unrecognized format", recentOutput: [] });
+          continue;
+        }
+        startCameraProcess(key, port, deviceArg, fingerprint);
+      }
+    }
+    // A camera that existed before but is gone from this payload
+    // (deleted, or its controller was removed) - stop its process too,
+    // don't leave it running with no config backing it anymore.
+    for (const key of cameraProcesses.keys()) {
+      if (!seenKeys.has(key)) {
+        stopCameraProcess(key);
+        cameraProcesses.delete(key);
+      }
+    }
+  }
+
+  // The one real hook point both settings-write paths (REST POST and
+  // the WS "settings" message, see their own two call sites below) were
+  // already calling in the exact same 2-step sequence
+  // (queueSettingsWrite then broadcastSettings) - folded into one
+  // function that also reconciles camera processes, so both paths stay
+  // in sync by construction instead of by remembering to update two
+  // call sites identically.
+  async function applySettingsUpdate(payload: any, originatorWs?: WebSocket): Promise<void> {
+    await queueSettingsWrite(payload);
+    broadcastSettings(payload, false, originatorWs);
+    reconcileCameraProcesses(payload);
+  }
+
+  // Real cameras already configured before this server process started
+  // (like every existing one in data/settings.json) get their own
+  // stream serve process without needing a fresh settings save first.
+  reconcileCameraProcesses(lastKnownSettings);
 
   // Every open WebSocket client (the browser UI itself, plus any remote
   // clients - HYDRA-UMC SUITE, the mobile control apps) - broadcastSettings()
@@ -1789,8 +2147,7 @@ async function startServer() {
   app.post("/api/settings", authenticate, requireAdmin, async (req, res) => {
     try {
       const payload = req.body;
-      await queueSettingsWrite(payload);
-      broadcastSettings(payload);
+      await applySettingsUpdate(payload);
       res.json({ success: true });
     } catch (e) {
       console.error("Error writing settings", e);
@@ -2365,6 +2722,55 @@ async function startServer() {
     });
     nodeStream.pipe(res);
     req.on("close", () => nodeStream.destroy());
+  });
+
+  // Real, live status of every camera's own local stream serve process
+  // (reconcileCameraProcesses(), above) - what a real "did Apply work"
+  // indicator in STUDIO/SUITE's own Cameras UI reads, instead of the
+  // config UI being a black box that silently does nothing.
+  app.get("/api/cameras/status", authenticate, (req, res) => {
+    const result: Record<string, { status: string; lastError: string | null; port: number }> = {};
+    for (const [key, state] of cameraProcesses.entries()) {
+      result[key] = { status: state.status, lastError: state.lastError, port: state.port };
+    }
+    res.json(result);
+  });
+
+  // Real RTSP path auto-discovery - the "Discover Path" button in the
+  // camera config UI. Never invents a path: tries this ecosystem's own
+  // known-real paths (RTSP_PATH_CANDIDATES, module scope) one at a time
+  // with a real pause between attempts, and reports exactly which ones
+  // it tried either way.
+  app.post("/api/camera/discover-rtsp-path", authenticate, requireAdmin, async (req, res) => {
+    const { host, port, username, password } = req.body || {};
+    if (typeof host !== "string" || !host.trim()) {
+      return res.status(400).json({ error: "host is required" });
+    }
+    const realPort = Number.isInteger(port) && port > 0 && port <= 65535 ? port : 554;
+    const result = await discoverRtspPath(host.trim(), realPort, username || "", password || "");
+    res.json(result);
+  });
+
+  // Real USB camera discovery - the "Discover USB Devices" button.
+  // Shells out to HYDRA-UMC-VISION-STREAMER's own "discover-usb"
+  // subcommand (same real cv2.VideoCapture backend that actually
+  // captures frames, so a device this reports as available is the same
+  // one "stream serve" would actually be able to open) rather than
+  // re-implementing device enumeration a second time in Node, where
+  // there's no reliable cross-platform way to do it without a native
+  // dependency.
+  app.get("/api/camera/discover-usb-devices", authenticate, async (req, res) => {
+    const exePath = visionStreamerExecutablePath();
+    if (!fs.existsSync(exePath)) {
+      return res.status(503).json({ error: `HYDRA-UMC-VISION-STREAMER not found at ${exePath}`, devices: [] });
+    }
+    try {
+      const { stdout } = await execFileAsync(exePath, ["discover-usb", "--max", "10"], { timeout: 15000 });
+      const devices = JSON.parse(stdout);
+      res.json({ devices });
+    } catch (e) {
+      res.status(500).json({ error: `USB device discovery failed: ${e instanceof Error ? e.message : String(e)}`, devices: [] });
+    }
   });
 
   // System Metrics API for industrial monitoring - powers the Overview
@@ -3057,8 +3463,7 @@ async function startServer() {
               ws.send(JSON.stringify({ error: "Access denied: admin privileges required" }));
               return;
             }
-            await queueSettingsWrite(msg.payload);
-            broadcastSettings(msg.payload, false, ws); // Skip originator to avoid echo
+            await applySettingsUpdate(msg.payload, ws); // Skip originator to avoid echo
           }
         } catch (e) {
           console.error("Malformed WebSocket message", e);
@@ -3122,6 +3527,12 @@ async function startServer() {
     shuttingDown = true;
     industrialLog(`[SHUTDOWN] ${signal} received - unpublishing mDNS and closing cleanly...`);
     try { bonjour.unpublishAll(() => bonjour.destroy()); } catch { /* best-effort */ }
+    // Every real per-camera stream serve child process this server itself
+    // launched - without this they survive this process exiting (real,
+    // reproduced today: a stuck one had to be killed by hand from outside
+    // this app entirely) and keep holding the real camera device open,
+    // so a fresh server start can't reopen it either.
+    for (const key of cameraProcesses.keys()) stopCameraProcess(key);
     logStream.end();
     httpServer.close(() => process.exit(0));
     // httpServer.close() waits for in-flight HTTP requests but not for

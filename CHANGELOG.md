@@ -31,6 +31,78 @@ a change is actually worth summarizing for a human.
 
 ## Unreleased
 
+- **Real per-camera process supervisor - the actual fix for "I configured
+  an IP camera and nothing shows up".** STUDIO/SUITE's own camera config
+  UI (`sourceType`/`ipHost`/`rtspPort`/`rtspPath`/`ipUsername`/
+  `ipPassword`) was already field-complete and already persisting
+  correctly - but `GET /api/camera/:id/stream` has only ever been a pure
+  proxy to a local `hydra-umc-vision-streamer stream serve` instance on
+  `127.0.0.1:8100+(id-1)`, and nothing anywhere ever launched one. Saving
+  a camera's real config had zero effect on whether video actually
+  appeared - confirmed live: a real camera already configured with
+  `.203`'s own real RTSP path sat there doing nothing until this fix.
+  New `reconcileCameraProcesses()` (hooked into the one shared point both
+  `POST /api/settings` and the WS `"settings"` message already called -
+  folded into a new `applySettingsUpdate()` both now call instead of
+  duplicating the same 2-step sequence) diffs every camera's real
+  connection-relevant fields against a fingerprint of what's currently
+  running, and spawns/kills/respawns a real `stream serve` child process
+  per camera as needed - also runs once at startup, so an already-
+  configured camera comes up on its own without any user action.
+  `computeDeviceArg()` translates real config into the exact `--device`
+  argument `stream serve` expects (a real `rtsp://user:pass@host:port/path`
+  for `sourceType: "ip"`; a real V4L2 path, a bare index, or this app's
+  own `USB_DEV_N` seed-data symbol translated to its real index, for
+  `"usb"`). New `GET /api/cameras/status` exposes each camera's real
+  live status (`starting`/`running`/`error` + the real last error) so
+  the config UI can show honest feedback instead of being a black box.
+  Every process this server itself launches is killed on graceful
+  shutdown (fixes a real stuck orphan found and killed by hand today).
+  **Verified live, end to end, against real hardware on this dev
+  machine**: camera 1 (this machine's own real integrated USB camera)
+  and camera 2 (a real IP camera, `192.168.0.203:8554/profile0`) both
+  auto-started at server boot with zero manual action and served real
+  MJPEG/JPEG frames through the complete real proxy path (13MB+ of real
+  video in a few seconds); the 6 other seeded-but-nonexistent camera
+  slots correctly report a real, honest `error` status with the real
+  OpenCV failure reason instead of silently doing nothing or crashing.
+- **Real RTSP path auto-discovery** - new `POST /api/camera/discover-rtsp-path`
+  (`{host, port, username, password}`). A native Node RTSP DESCRIBE
+  client (RFC 2617 Digest, no `qop` - the same real handshake already
+  hand-verified against this ecosystem's own cameras) tries a curated
+  list of real, previously-confirmed paths one at a time with a real
+  pause between attempts (this ecosystem's own cameras are known to
+  rate-limit repeated authenticated attempts - see
+  `[[project_ip_cameras_investigation]]`), starting with `/11`/`/12`
+  (Hipcam) and `/profile0` (YGTek) - both real, already-verified paths
+  from this ecosystem's own hardware - before falling back to other
+  common real OEM paths. Never invents a path: an exhausted list reports
+  honestly which ones were actually tried. **Verified live** against
+  both real YGTek cameras (`.203`/`.204`) - correctly tried `/11`/`/12`
+  first, found the real `/profile0` on the third attempt, matching
+  exactly what manual investigation found earlier today.
+- **Real USB camera discovery** - new `GET /api/camera/discover-usb-devices`,
+  shelling out to `HYDRA-UMC-VISION-STREAMER`'s own new `discover-usb`
+  CLI subcommand (`execFile`, same pattern already used in this file for
+  `systemctl`/`vcgencmd`) rather than re-implementing device enumeration
+  in Node, where there's no reliable cross-platform way to do it without
+  a native dependency - reuses the exact same `cv2.VideoCapture` backend
+  that actually captures frames, so a reported device is genuinely
+  openable. **Verified live** against this dev machine's own real
+  integrated camera (found at index 0, 1280x720).
+- **Fixed a real orphaned-file leak in `writeFileAtomic()`.** Windows'
+  `fs.rename`-over-an-existing-destination isn't guaranteed atomic like
+  POSIX `rename(2)` and can fail with `EPERM`/`EBUSY` if the destination
+  is transiently locked (an AV scanner, a backup/sync agent, a file
+  watcher) - with no retry and no cleanup, a failed rename left its real
+  temp file behind forever. Found 16 real orphaned
+  `data/settings.json.<pid>.<timestamp>.tmp` files on this dev machine
+  spanning 7 different server runs. Fixed with a few short retries on
+  failure plus a real cleanup of the temp file if every retry still
+  fails, and a new startup sweep (`sweepOrphanedTmpFiles()`) that removes
+  whatever already accumulated before this fix existed - **removed 102
+  real orphaned `.tmp` files** on this same dev machine's own first
+  restart with the fix in place.
 - **`GET /api/camera/:id/stream` crashed the entire server, not just that
   one request, whenever a real camera stream ran past 5 seconds** - real
   bug hit live watching a real camera for the first time (see
@@ -145,6 +217,10 @@ a change is actually worth summarizing for a human.
   on any host without a real RP1 chip - a real hardware fact, not something
   this host merely can't currently read. New Prometheus gauge
   `hydra_system_rp1_temp_celsius`.
+
+## [0.4.0]
+
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
 
 ## [0.3.9]
 
