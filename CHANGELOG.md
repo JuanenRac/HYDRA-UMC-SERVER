@@ -33,6 +33,20 @@ a change is actually worth summarizing for a human.
 
 (nothing yet)
 
+## [0.4.7]
+
+- **Removed a real false-positive from `RTSP_PATH_CANDIDATES`.** Caught
+  live via real user feedback on the multi-stream picker this list
+  feeds: a bare `/` was answering a real 200 OK on a real Hipcam unit
+  here ALONGSIDE the genuine `/11`/`/12` pair - not a third real
+  distinct stream, just a generic default/catch-all most RTSP servers
+  answer on the root path, aliasing whatever `/11` already serves. A
+  camera with 2 real streams was showing 3 selectable options in
+  STUDIO/SUITE's own picker, two of which displayed the identical
+  feed. Verified live against the same real camera: discovery now
+  correctly returns exactly `["/11", "/12"]`, not
+  `["/11", "/12", "/"]`.
+
 ## [0.4.6]
 
 - **A disconnected camera now really stops its real process, instead of

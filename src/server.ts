@@ -729,9 +729,20 @@ interface CameraSettings {
 // confirmed paths from THIS ecosystem's own hardware, not guessed;
 // the rest are common real paths from other OEM firmware families,
 // tried after those two so the already-proven ones win first.
+//
+// Deliberately does NOT include a bare `/` - caught live via real user
+// feedback on the multi-stream picker this list also feeds (see
+// discoverRtspPath()'s own comment): on a real Hipcam unit here, `/`
+// answered a real 200 OK ALONGSIDE the genuine `/11`/`/12` pair, not a
+// third real distinct stream - a bare root path is effectively a
+// generic default/catch-all on many RTSP servers, prone to aliasing
+// whatever `/11` already serves rather than naming anything new. Real,
+// specific paths belonging to an actual named vendor convention
+// (`/Streaming/Channels/1`, the Dahua-style query string, etc.) don't
+// have that same "matches everything" failure mode, so they stay.
 const RTSP_PATH_CANDIDATES = [
   "/11", "/12", "/profile0", "/live", "/h264", "/stream1",
-  "/Streaming/Channels/1", "/cam/realmonitor?channel=1&subtype=0", "/",
+  "/Streaming/Channels/1", "/cam/realmonitor?channel=1&subtype=0",
 ];
 
 // Translates a camera's real config into the exact string
