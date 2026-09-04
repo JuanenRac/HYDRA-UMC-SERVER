@@ -33,6 +33,25 @@ a change is actually worth summarizing for a human.
 
 (nothing yet)
 
+## [0.5.0]
+
+- **Fixed a real PTZ auth/protocol bug, found live against this
+  ecosystem's own real PTZ-capable cameras (.210/.211).** `POST
+  /api/camera/:id/ptz` always spoke the PSIA XML API (HTTP Digest) -
+  live testing against the real hardware showed that never actually
+  worked: those cameras answer with `Server: Hipcam` and a genuine
+  Hi3510 chipset web UI, and their own `WWW-Authenticate: Basic` on the
+  PSIA path turned out to be their generic login wall guarding an
+  unimplemented route, not a real PSIA challenge - every PTZ command
+  against real hardware surfaced as a permanent 401/auth-failure to
+  STUDIO/SUITE regardless of how correct the configured password was.
+  `sendPtzCommand()` now tries the real, live-verified Hi3510 CGI
+  convention first (`/cgi-bin/hi3510/ptzctrl.cgi`, HTTP Basic, confirmed
+  live with a real `[Succeed]set ok.` response and real camera movement),
+  falling back to the original PSIA attempt for a camera that genuinely
+  doesn't answer the Hi3510 path.
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
+
 ## [0.4.9]
 
 - **Fixed a real wrong-error-message bug in the admin UI's login screen,
