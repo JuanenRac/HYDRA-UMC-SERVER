@@ -33,6 +33,23 @@ a change is actually worth summarizing for a human.
 
 (nothing yet)
 
+## [0.5.1]
+
+- **Fixed a real remote-access gate gap, found in an ecosystem roadmap
+  audit: HYDRA-UMC-DSI's own client already sent
+  `X-Hydra-Client: dsi`, but `remoteAccessAllowed()` never recognized
+  "dsi" as one of the gated client types.** A DSI request fell into the
+  same bucket as an ungated plain browser tab (any unrecognized header
+  value passes unconditionally, by design, since that's also how this
+  same server's own browser UI reaches these routes) and always passed
+  regardless of the Remote Access toggle state - the toggle itself
+  didn't even exist yet (added to STUDIO's Config.tsx/store.tsx in the
+  same pass, see that repo's own changelog). `remoteAccessAllowed()` now
+  recognizes 5 client types (`suite`/`android`/`ios`/`watch`/`dsi`)
+  instead of 4. `npm run typecheck`: clean. `npm test`: 11/11 contract
+  suites pass.
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
+
 ## [0.5.0]
 
 - **Fixed a real PTZ auth/protocol bug, found live against this

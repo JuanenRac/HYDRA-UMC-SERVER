@@ -1246,23 +1246,34 @@ function realSettings(payload: any): any {
 }
 
 // Per-client remote-access toggles (Config > Remote Access in the browser
-// UI, src/store.tsx's own SystemSettings.remoteAccess) - 4 independent
-// toggles (SUITE/Android/iOS/Watch) instead of one combined switch, so e.g.
-// Android access can be revoked without also blocking SUITE. Each of the 4 real clients sends its
-// own `X-Hydra-Client: suite|android|ios|watch` request header (see each
-// project's own network client) - a request with NO such header (a plain
-// browser tab, curl, or any other unidentified caller) is never gated here,
-// since this check only exists to control the 4 named remote apps, not
-// this same server's own browser UI (which never sends that header and
-// reaches this same route from About.tsx's own version check). "watch"
-// is distinct from "android": HYDRA-UMC-WATCH has no direct connection of
-// its own - it relays through the paired phone's own HydraApiClient,
-// which sends this specific header only for the 2 real Watch-relay calls
-// (POST /api/voice/turn, GET /api/watch/system-status), not for the
-// phone app's own ordinary traffic - so Watch access can be revoked
-// without also blocking that same phone's direct Android access.
+// UI, src/store.tsx's own SystemSettings.remoteAccess) - 5 independent
+// toggles (SUITE/Android/iOS/Watch/DSI) instead of one combined switch, so
+// e.g. Android access can be revoked without also blocking SUITE. Each of
+// the 5 real clients sends its own `X-Hydra-Client: suite|android|ios|
+// watch|dsi` request header (see each project's own network client) - a
+// request with NO such header (a plain browser tab, curl, or any other
+// unidentified caller) is never gated here, since this check only exists
+// to control the 5 named remote apps, not this same server's own browser
+// UI (which never sends that header and reaches this same route from
+// About.tsx's own version check). "watch" is distinct from "android":
+// HYDRA-UMC-WATCH has no direct connection of its own - it relays through
+// the paired phone's own HydraApiClient, which sends this specific header
+// only for the 2 real Watch-relay calls (POST /api/voice/turn, GET
+// /api/watch/system-status), not for the phone app's own ordinary traffic
+// - so Watch access can be revoked without also blocking that same
+// phone's direct Android access.
+//
+// Real gap found and fixed here (2026-09-04, ecosystem roadmap audit):
+// HYDRA-UMC-DSI's own hydra_api_client.dart already sends
+// `X-Hydra-Client: dsi` on every request (see that file's own header
+// comment - it was written anticipating this gate) but this function
+// never recognized "dsi" as one of the gated client types, so a DSI kiosk
+// request fell into the same "no such header" bucket as an ungated
+// browser tab and always passed regardless of the Remote Access toggle
+// state - the toggle for DSI (added to store.tsx/Config.tsx in the same
+// pass) previously had no server-side enforcement whatsoever.
 function remoteAccessAllowed(settings: any, clientType: string | undefined): boolean {
-  if (clientType !== "suite" && clientType !== "android" && clientType !== "ios" && clientType !== "watch") return true;
+  if (clientType !== "suite" && clientType !== "android" && clientType !== "ios" && clientType !== "watch" && clientType !== "dsi") return true;
   const ra = settings?.remoteAccess;
   if (!ra) return true; // no config saved at all yet - matches this feature's own original always-on default
   const specific = ra[clientType];
