@@ -52,7 +52,15 @@ export async function apiFetch<T = any>(path: string, init?: RequestInit): Promi
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const res = await fetch(path, { ...init, headers });
-  if (res.status === 401) {
+  // Real bug found by an ecosystem-wide audit: a 401 from /api/login
+  // itself means "wrong credentials" (server.ts's own real response,
+  // {"error": "Invalid credentials"}) - there is no prior session for a
+  // fresh login attempt to have "expired". This global 401 handler is
+  // for every OTHER call, where a 401 really does mean an
+  // already-authenticated request's token stopped being valid - LoginScreen
+  // itself must fall through to the generic !res.ok handling below
+  // instead, which surfaces the server's own real error message.
+  if (res.status === 401 && path !== '/api/login') {
     setToken(null);
     throw new ApiError(401, 'Session expired - please log in again.');
   }

@@ -33,6 +33,23 @@ a change is actually worth summarizing for a human.
 
 (nothing yet)
 
+## [0.4.9]
+
+- **Fixed a real wrong-error-message bug in the admin UI's login screen,
+  found by an ecosystem-wide bug audit.** `admin-ui/src/api.ts`'s own
+  `apiFetch()` intercepted every real `401` response globally and
+  rewrote it to `"Session expired - please log in again."` - correct for
+  an already-authenticated call whose token stopped being valid, but
+  `LoginScreen.tsx`'s own `POST /api/login` goes through that exact same
+  helper, so a genuinely wrong username/password (the server's real,
+  honest `401 {"error": "Invalid credentials"}`) showed the nonsensical
+  "session expired" message instead on someone's very first sign-in
+  attempt, before any session ever existed to expire. `apiFetch()` now
+  only applies the forced-logout rewrite to every endpoint EXCEPT
+  `/api/login` itself, letting the login screen's own request fall
+  through to the generic error handling that already correctly surfaces
+  the server's real message.
+
 ## [0.4.8]
 
 - **Real self-heal for a hung camera process, not just a status label.**
