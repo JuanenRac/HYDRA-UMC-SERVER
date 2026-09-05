@@ -1263,7 +1263,7 @@ function realSettings(payload: any): any {
 // - so Watch access can be revoked without also blocking that same
 // phone's direct Android access.
 //
-// Real gap found and fixed here (2026-09-04, ecosystem roadmap audit):
+// Real gap found and fixed here (ecosystem roadmap audit):
 // HYDRA-UMC-DSI's own hydra_api_client.dart already sends
 // `X-Hydra-Client: dsi` on every request (see that file's own header
 // comment - it was written anticipating this gate) but this function
