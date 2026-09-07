@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "strict": false,
+    // Discriminated-union narrowing (users.ts's own UserResult, consumed in
+    // server.ts's /api/users routes) needs this specifically - without it
+    // TypeScript doesn't exclude the { ok: true } member when checking
+    // `if (!result.ok) result.error`, a real TS quirk independent of the
+    // rest of strict mode. Not enabling full "strict" here since this file
+    // was never type-checked before this project existed (server.ts lived
+    // outside any tsconfig's "include" in HYDRA-UMC-STUDIO) and a full
+    // strict pass is a separate, larger audit, not part of this move.
+    "strictNullChecks": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src"]
+}

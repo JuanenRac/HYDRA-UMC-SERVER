@@ -1,0 +1,33 @@
+# =============================================================================
+# HYDRA-UMC SERVER - Prometheus scrape config (used by docker-compose.yml)
+# =============================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "hydra-umc-server"
+    static_configs:
+      # host.docker.internal: Docker's own DNS name for "the machine running
+      # Docker", from INSIDE a container - needed here because Prometheus
+      # itself runs in a container (started by ../docker-compose.yml) while
+      # HYDRA-UMC SERVER runs directly on the host via `npm run dev`/
+      # `npm start` (not containerized, not part of this compose file at
+      # all). `localhost` from inside the Prometheus container would mean
+      # the container itself, not the host - it wouldn't find anything
+      # listening on port 3000 there.
+      #
+      # This is a dev-machine convenience path, not the real deployment
+      # target. On the actual hardware (a Raspberry Pi CM5 running
+      # HYDRA-UMC SERVER as a plain Node/systemd process directly on the
+      # Pi's own OS - see the main README.md's "Production Build" section),
+      # there is no Docker-in-the-middle indirection: if Prometheus also
+      # runs on that same Pi (e.g. this same docker-compose.yml, deployed
+      # to the CM5 itself), the target below should be `localhost:3000`
+      # instead - the server and Prometheus/Grafana would be sharing the
+      # same real host, not separated by a Docker Desktop VM boundary the
+      # way they are on a Windows/Mac dev machine.
+      - targets: ["host.docker.internal:3000"]
+        labels:
+          instance: "hydra-umc-server"
