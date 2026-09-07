@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "ecosystem": "HYDRA-UMC",
+  "name": "HYDRA-UMC-SERVER",
+  "version": "0.5.6",
+  "role": "api",
+  "stack": "node",
+  "technologies": [
+    "Node.js 20+",
+    "Express",
+    "Socket.io/WebSocket",
+    "gRPC"
+  ],
+  "deployment_target": "cm5",
+  "maturity": "established",
+  "family": "Core Backend & Clients",
+  "parent": null,
+  "build": "npm install && npm run build.",
+  "notes": "The real headless backend every control client (STUDIO, SUITE, DSI, the mobile apps) actually talks to. It relays bounded authenticated voice turns to a loopback HYDRA-UMC-VOICE-UI gateway while retaining the gateway token server-side (voice never becomes a direct robot command), and now relays the real CM5<->STM32H745 SPI-OTA link to a local spi_bridge service (admin-only for flashing, live progress over WebSocket) - not yet exercised against real STM32H745 hardware, since no populated board exists yet. A new /api/ai/:service/* real passthrough proxy (GET/POST/etc) reaches this cell's own local Hailo-accelerated AI services (cognitive-node/detection-hef/visual-servoing-api/vla-engine, all loopback-only systemd units) the same authenticated way, for a development/control machine that is not on this host itself. New GET /api/adapters and /api/adapters/:adapterId proxy this cell's own real HYDRA-UMC-CONNECTOR-HUB serve-catalog, making this the ecosystem's first real Server-side consumer of the adapter catalog rather than only a CLI/fixture calling its safety gate. src/serverPolicy.ts now holds 8 pure helper functions extracted out of src/server.ts (some previously trapped inside startServer()'s own closure with no external reason to be), each with real, direct node:test unit tests (tests/serverPolicy.test.ts, tests/kinematics.test.ts) run via the already-present tsx devDependency - this repository's first direct unit tests, alongside its existing 11 real end-to-end tools/verify_*_contract.mjs scripts. src/users.ts accounts now carry a real tokenVersion, bumped on every account mutation and re-checked on every authenticated HTTP request and WebSocket tick (not just at login), so deleting/demoting a user or changing its password revokes every already-issued token/session immediately instead of waiting for JWT expiry; users.json reads now distinguish a genuinely missing file from real corruption (throws instead of silently reseeding) and writes are atomic (temp file + rename); scrypt password hashing runs on Node's async threadpool instead of blocking the whole event loop per login, bounded to 4 concurrent operations plus a 20-deep queue with an explicit ScryptOverloadError/503 once both are full (an unbounded queue is just a slower-motion version of the same overload). tests/users.test.ts adds 32 direct unit tests for this store.",
+  "native_version": {
+    "file": "package.json",
+    "pattern": "\"version\":\\s*\"(\\d+)\\.(\\d+)\\.(\\d+)\""
+  },
+  "service": {
+    "port": 3000,
+    "health_path": "/api/system/metrics",
+    "systemd_unit": "hydra-umc-server.service"
+  }
+}

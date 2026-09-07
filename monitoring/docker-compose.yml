@@ -1,0 +1,65 @@
+# =============================================================================
+# HYDRA-UMC SERVER - Optional Monitoring Stack (Prometheus + Grafana)
+# Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
+# GPL-3.0 - see ../LICENSE
+#
+# Scrapes GET /metrics on the real HYDRA-UMC SERVER process (npm run dev /
+# npm start, run separately - NOT started by this compose file) and gives it
+# a Grafana dashboard. Entirely optional: the server runs fine, with no
+# monitoring at all, without this folder ever being touched. See README.md
+# in this same folder for how to bring it up and log into Grafana.
+# =============================================================================
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: hydra-umc-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      # Host-only exposure by default (127.0.0.1) - Prometheus' own UI has no
+      # authentication at all, so publishing it on 0.0.0.0 would let anyone
+      # on the LAN browse every scraped metric with zero login. Grafana below
+      # is the one meant to be reached from other machines; change this back
+      # to "9090:9090" only if you specifically want Prometheus' own UI
+      # reachable from elsewhere too.
+      - "127.0.0.1:9090:9090"
+    # host.docker.internal is Docker Desktop's own bridge back to the host
+    # machine (Windows/Mac) - not needed on native Linux Docker, where
+    # containers already reach the host via the host's real LAN IP or
+    # (with newer Docker) this same hostname works too via the extra_hosts
+    # line below. Harmless to keep on every platform.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: hydra-umc-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    environment:
+      # Change these before leaving this stack running unattended - see
+      # README.md's own "Changing the default credentials" section.
+      # Unset (commented out) falls back to Grafana's own image default,
+      # admin/admin, which it force-prompts you to change on first login.
+      # - GF_SECURITY_ADMIN_USER=admin
+      # - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      # Auto-provisioned on every container start: the Prometheus datasource
+      # and the hydra-umc-overview.json dashboard both appear in Grafana
+      # with zero manual clicking. See README.md if you'd rather import the
+      # dashboard JSON by hand instead (e.g. into an already-running Grafana
+      # you don't want to reconfigure).
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3001:3000"
+
+volumes:
+  prometheus-data:
+  grafana-data:

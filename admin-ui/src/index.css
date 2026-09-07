@@ -1,0 +1,101 @@
+/* HYDRA-UMC SERVER - Admin UI global styles: index.css
+   Copyright (C) 2026 JuanenRac (Electro Hobby 3D), electrohobby3d@gmail.com
+   GPL-3.0 - see LICENSE
+
+   Matches the brushed-metal, embossed industrial panel look HYDRA-UMC
+   STUDIO calls HYDRA-UMC Studio Fasion in its own src/index.css - applied
+   here as the one fixed look this admin panel uses, by redefining the same
+   Tailwind color tokens that theme redefines there, so every bg-slate-900,
+   text-sky-400, bg-emerald-500 class already used across App.tsx and the
+   tabs picks up the same palette automatically. The embossed button and
+   input rules below target the same plain elements and classes that
+   theme's own rule targets, with the same values. */
+@import "tailwindcss";
+
+@theme {
+  --color-slate-950: #0a0b10;
+  --color-slate-900: #14161f;
+  --color-slate-800: #202430;
+  --color-slate-700: #2e3444;
+  --color-slate-600: #424a5e;
+
+  --color-sky-300: #f1f5f9;
+  --color-sky-400: #cbd5e1;
+  --color-sky-500: #94a3b8;
+
+  --color-emerald-400: #4ade80;
+  --color-emerald-500: #22c55e;
+  --color-green-400: #4ade80;
+  --color-green-500: #22c55e;
+
+  --color-rose-400: #f43f5e;
+  --color-rose-500: #e11d48;
+  --color-red-500: #ef4444;
+  --color-red-600: #dc2626;
+
+  --color-amber-400: #fbbf24;
+  --color-amber-500: #f59e0b;
+  --color-yellow-400: #facc15;
+  --color-yellow-500: #eab308;
+
+  --color-blue-400: #60a5fa;
+  --color-blue-500: #3b82f6;
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  background-color: var(--color-slate-950);
+  color: #f8fafc;
+  background-image:
+    linear-gradient(45deg, rgba(255,255,255,0.02) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.02) 50%, rgba(255,255,255,0.02) 75%, transparent 75%, transparent),
+    radial-gradient(circle at center, #14161f 0%, #0a0b10 100%);
+  background-size: 4px 4px, 100% 100%;
+  min-height: 100vh;
+}
+
+/* Embossed/brushed-metal buttons - same values as STUDIO's own theme rule. */
+button {
+  background-image: linear-gradient(180deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.05) 45%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.3) 100%);
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.4), inset 0 -1px 1px rgba(0,0,0,0.6), 0 3px 6px rgba(0,0,0,0.5);
+  border-top-color: rgba(255,255,255,0.3);
+  border-bottom-color: rgba(0,0,0,0.6);
+  border-left-color: rgba(0,0,0,0.2);
+  border-right-color: rgba(0,0,0,0.2);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+}
+
+button:hover {
+  filter: brightness(1.15);
+}
+
+button:active {
+  background-image: linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.1) 45%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0.15) 100%);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.6), 0 1px 2px rgba(255,255,255,0.1);
+}
+
+button:disabled {
+  filter: grayscale(0.4) brightness(0.7);
+  cursor: not-allowed;
+}
+
+.bg-slate-900,
+.bg-slate-950 {
+  background-image: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.2) 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 2px 4px rgba(0,0,0,0.4);
+}
+
+select,
+input {
+  background-image: linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.1) 100%);
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.5), 0 1px 0 rgba(255,255,255,0.05);
+  border-color: #0a0b10;
+}
+
+/* Hidden scrollbars - same convention as STUDIO's own index.css. */
+::-webkit-scrollbar {
+  display: none;
+}
+* {
+  scrollbar-width: none;
+}
