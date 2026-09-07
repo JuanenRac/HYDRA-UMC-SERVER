@@ -33,6 +33,14 @@ a change is actually worth summarizing for a human.
 
 (nothing yet)
 
+## [0.5.7] - Refreshed bundled STUDIO frontend (public/)
+
+`build-frontend.sh` re-run to pull in HYDRA-UMC-STUDIO's own LumenPnP/
+JuanenPnP fix (nozzle no longer rotates its own Z-carriage housing - see
+that repo's own CHANGELOG) into this server's bundled `public/` copy of
+its frontend, plus a routine admin-ui rebuild. No server-side (`src/`)
+code changed.
+
 ## [0.5.6] - Real consumer of HYDRA-UMC-CONNECTOR-HUB's own adapter catalog
 
 - **`GET /api/adapters`, `GET /api/adapters/:adapterId`** (new) - a real,
