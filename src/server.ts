@@ -2248,7 +2248,21 @@ async function startServer() {
       // Keep table axes separate from the arm target. The table's full object
       // is sent in the delta because clients shallow-merge it; `{ pos }`
       // alone would erase tableSize and other configuration remotely.
-      if (typeof pt.tx === "number" || typeof pt.ty === "number" || typeof pt.trz === "number") {
+      //
+      // Real bug found live on STUDIO/CM5: a combined robot with NO real
+      // table (hasXYTable: false) still keeps its own stale `xyTable`
+      // config object around (turning the table off in the UI only ever
+      // flips the boolean, never clears the object - see
+      // XYTableConfig.tsx) - `r.xyTable?.pos` alone was truthy for it
+      // too. `pos.tx`/`pos.ty` also does double duty on a table-less
+      // combined robot as its own general world-placement in the 3D
+      // scene (VirtualKinematics.tsx) - so a stale recorded tx/ty from
+      // before the table was disabled silently relocated that robot's
+      // WHOLE 3D model, exactly reproducing "moving the table-having
+      // robot also visually moves the combined one". Gated on the
+      // robot's own real `hasXYTable` now, matching the same real fix
+      // already applied to the jog/reset "xytable" target cases below.
+      if (r.hasXYTable && (typeof pt.tx === "number" || typeof pt.ty === "number" || typeof pt.trz === "number")) {
         if (r.xyTable?.pos) {
           r.xyTable = {
             ...r.xyTable,
@@ -2848,7 +2862,7 @@ async function startServer() {
                   const hasValidJoints = j && typeof j === "object" && JOINT_KEYS.every((k) => typeof j[k] === "number" && Number.isFinite(j[k]));
                   robot.joints = hasValidJoints ? { j1: j.j1, j2: j.j2, j3: j.j3, j4: j.j4, j5: j.j5, j6: j.j6 } : calculateJoints(robot.pos);
                   patch = { pos: robot.pos, joints: robot.joints };
-                } else if (target === "xytable" && robot.xyTable) {
+                } else if (target === "xytable" && robot.hasXYTable && robot.xyTable) {
                   const axis = params.axis === "x" ? "x" : (params.axis === "y" ? "y" : null);
                   if (axis) {
                     robot.xyTable.pos[axis] = isAbsolute ? params.amount : robot.xyTable.pos[axis] + params.amount;
@@ -2914,7 +2928,7 @@ async function startServer() {
                 const hasValidJoints = j && typeof j === "object" && JOINT_KEYS_RESET.every((k) => typeof j[k] === "number" && Number.isFinite(j[k]));
                 robot.joints = hasValidJoints ? { j1: j.j1, j2: j.j2, j3: j.j3, j4: j.j4, j5: j.j5, j6: j.j6 } : calculateJoints(robot.pos);
                 patch = { pos: robot.pos, joints: robot.joints };
-              } else if (robot.xyTable) {
+              } else if (robot.hasXYTable && robot.xyTable) {
                 robot.pos = { ...robot.pos, tx: 0, ty: 0 };
                 robot.xyTable.pos = { x: 0, y: 0 };
                 patch = { pos: robot.pos, xyTable: robot.xyTable };

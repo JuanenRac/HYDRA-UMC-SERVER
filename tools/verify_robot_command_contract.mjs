@@ -80,6 +80,9 @@ async function writeFixture(directory) {
           visionEnabled: false,
           camera: { connected: true },
           playbackState: { isPlaying: true, playing: true, isPaused: false, paused: false },
+          hasXYTable: true,
+          xyTable: { pos: { x: 0, y: 0 }, tableSize: { width: 500, length: 500 } },
+          pos: { x: 0, y: 0, z: 0, a: 0, b: 0, c: 0, tx: 0, ty: 0 },
         },
         {
           id: 2,
@@ -87,6 +90,14 @@ async function writeFixture(directory) {
           visionEnabled: false,
           camera: { connected: true },
           playbackState: { isPlaying: true, playing: true, isPaused: true, paused: true },
+          // Real regression fixture: "turning the table off" in the UI
+          // only ever flips hasXYTable, the config object is never
+          // cleared (XYTableConfig.tsx) - this stale-but-present
+          // xyTable is exactly what let the server misapply robot 1's
+          // table jog to this table-less combined sibling.
+          hasXYTable: false,
+          xyTable: { pos: { x: 0, y: 0 }, tableSize: { width: 500, length: 500 } },
+          pos: { x: 0, y: 0, z: 0, a: 0, b: 0, c: 0, tx: 77, ty: 88 },
         },
       ],
     }],
@@ -178,7 +189,46 @@ async function main() {
     assert.equal(trajectoryA1.selectedExample, "example-2-circle", "Server must persist the selected example with its atomic trajectory");
     assert.equal(trajectoryA1.playbackState.activeStep, -1, "loading a Work must reset its playback cursor");
     assert.deepEqual(trajectoryA2.recordedPoints ?? [], [], "combined sibling must retain its own trajectory");
-    console.log("SERVER_ROBOT_COMMAND_CONTRACT=PASS combined-pause=2 camera-state=3 trajectory-sync=5");
+
+    // Real regression found live on STUDIO/CM5: jogging robot 1's own
+    // real XY table used to also relocate robot 2 (a combined sibling
+    // with NO real table, hasXYTable: false) because the server only
+    // checked "does a config object exist" (robot.xyTable, always
+    // present) instead of "does THIS robot actually have a table"
+    // (robot.hasXYTable). robot 2's own pos.tx/ty doubles as its
+    // general world-placement in the 3D scene for a table-less combined
+    // robot - so this bug directly, visibly moved robot 2's whole model
+    // whenever anyone jogged robot 1's table.
+    const jogTable = await request(port, "/api/robot/1/command", {
+      method: "POST",
+      headers: authorization,
+      body: JSON.stringify({ command: "jog", params: { axis: "x", amount: 250, target: "xytable", absolute: true } }),
+    });
+    assert.equal(jogTable.response.status, 200);
+
+    settings = await request(port, "/api/settings");
+    const jogA1 = findRobot(settings.body, 1);
+    const jogA2 = findRobot(settings.body, 2);
+    assert.equal(jogA1.xyTable.pos.x, 250, "the robot that actually has a table must move it");
+    assert.equal(jogA1.pos.tx, 250);
+    assert.equal(jogA2.xyTable.pos.x, 0, "a table-less combined sibling's stale xyTable config must never be touched");
+    assert.equal(jogA2.pos.tx, 77, "a table-less combined sibling's own world-placement pos.tx must never be stomped by another robot's table jog");
+    assert.equal(jogA2.pos.ty, 88);
+
+    // Same real regression, via 'reset' target:"xytable" - must be
+    // equally gated on hasXYTable, not just "jog".
+    const resetTable = await request(port, "/api/robot/1/command", {
+      method: "POST",
+      headers: authorization,
+      body: JSON.stringify({ command: "reset", params: { target: "xytable" } }),
+    });
+    assert.equal(resetTable.response.status, 200);
+    settings = await request(port, "/api/settings");
+    const resetA2 = findRobot(settings.body, 2);
+    assert.equal(resetA2.pos.tx, 77, "resetting robot 1's table must never touch robot 2's own world-placement pos.tx");
+    assert.equal(resetA2.pos.ty, 88);
+
+    console.log("SERVER_ROBOT_COMMAND_CONTRACT=PASS combined-pause=2 camera-state=3 trajectory-sync=5 xytable-ownership=2");
   } finally {
     if (child && child.exitCode === null) {
       child.kill("SIGTERM");
