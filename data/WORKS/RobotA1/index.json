@@ -7,5 +7,6 @@
   "pintado_panel.json",
   "aplicacion_pegamento.json",
   "inspeccion_optica.json",
-  "impresion_espiral.json"
+  "impresion_espiral.json",
+  "inspeccion_con_mesa_xy.json"
 ]

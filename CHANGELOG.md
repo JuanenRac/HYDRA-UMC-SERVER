@@ -33,6 +33,25 @@ a change is actually worth summarizing for a human.
 
 (nothing yet)
 
+## [0.5.8] - First real persisted Work exercising the XY table
+
+Every Work ever actually saved under `data/WORKS/<robot>/` used only
+`{x,y,z,a,b,c}` - the XY table's own `tx`/`ty` axes were exercised
+exclusively by STUDIO's in-memory Examples, never by anything a real
+user could load, save and replay.
+
+- `data/WORKS/RobotA1/inspeccion_con_mesa_xy.json` - a new, real Work
+  moving the arm and the XY table together through 3 distinct table
+  positions (inspection pattern), ending back at the table's own rest
+  position. Added to `index.json` so it appears in the real file picker.
+- `tools/verify_persisted_work_xy_table.mjs` - loads this exact file (not
+  a hand-typed copy of it) into a real, isolated server instance and
+  proves `play` drives `xyTable.pos` through every one of its real
+  `tx`/`ty` values in order, ending at the file's own last position - the
+  same server-authoritative playback engine `verify_server_playback_
+  contract.mjs` already proves for a synthetic fixture, now proven
+  against a file a real user can actually load and run.
+
 ## [0.5.7] - Refreshed bundled STUDIO frontend (public/)
 
 `build-frontend.sh` re-run to pull in HYDRA-UMC-STUDIO's own LumenPnP/
