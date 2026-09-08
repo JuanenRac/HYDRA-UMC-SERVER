@@ -33,6 +33,22 @@ a change is actually worth summarizing for a human.
 
 (nothing yet)
 
+## [0.6.1] - Real error-path coverage for POST /api/voice/turn
+
+`verify_voice_relay_contract.mjs` already proved the real happy path
+(200 for status/motion intents against the real Python Voice UI gateway,
+401 anonymous, per-client remote-access gating) but none of this route's
+own real error branches - what a flaky/misconfigured/rejecting upstream
+actually hits in production. New `tools/verify_voice_turn_error_paths_
+contract.mjs` proves all of them against a small controllable local HTTP
+stub standing in for Voice UI: `validateVoiceTurnPayload`'s 5 real
+rejection branches (400), Voice UI unconfigured (503), a rejecting
+upstream (502), a 200 reply that fails `isAssistantReplyForRequest`'s
+own contract (502, never relayed as-is), a real timeout at the
+configured bound (503), and a real connection refusal (503) - the two
+distinct halves of the route's own `timedOut ? ... : "unavailable"`
+catch-block split, both exercised for real rather than assumed.
+
 ## [0.6.0] - Real bug: jogging a combined robot's real XY table also moved its table-less sibling
 
 Reported live on STUDIO/CM5: a robot with a real XY table (`hasXYTable:
