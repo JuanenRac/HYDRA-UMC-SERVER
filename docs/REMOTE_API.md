@@ -98,7 +98,7 @@ Every write in this API (`POST /api/settings`, `POST
 POST /api/login
 { "username": "admin", "password": "admin" }
 
--> { "success": true, "token": "<JWT>", "role": "admin" }
+-> { "success": true, "token": "<JWT>", "refreshToken": "<opaque>", "role": "admin" }
 ```
 
 - Every server seeds exactly one account on its own first-ever start:
@@ -112,10 +112,32 @@ POST /api/login
   Create additional accounts of either role from Config -> Users
   (admin-only) or via section 2b directly.
 - The returned token is a JWT signed server-side (`JWT_SECRET` in
-  `server.ts`) carrying `{ username, role }`, valid 30 days. There is no
-  refresh endpoint - a client whose token expires (or lacks a `role`
-  claim - see the note below) just calls `POST
-  /api/login` again.
+  `server.ts`) carrying `{ username, role }`, valid 30 days
+  (`JWT_EXPIRES_IN`).
+- `refreshToken` is a separate, opaque, long-lived (90 days by default,
+  `HYDRA_UMC_REFRESH_TOKEN_EXPIRES_IN`) credential - see
+  `refresh_tokens.ts`. Exchange it for a fresh access token, without the
+  account's password, via:
+  ```
+  POST /api/refresh
+  { "refreshToken": "<opaque>" }
+
+  -> { "success": true, "token": "<new JWT>", "refreshToken": "<new opaque>", "role": "admin" }
+  ```
+  Rotated on every use (the old `refreshToken` stops working the moment a
+  new one is issued) and revoked the instant the account is deleted or its
+  password/role changes (same real-time revocation guarantee an already-
+  issued JWT already gets via `tokenVersion` - see `users.ts`), so a
+  refresh only ever succeeds for an account whose session is still
+  genuinely valid. A `401` here means a real re-login (`POST /api/login`)
+  is the only way forward. `POST /api/logout { "refreshToken": "<opaque>" }`
+  revokes it explicitly server-side (always `200`, even for an
+  unknown/already-used token) - do this on an intentional sign-out so a
+  discarded refresh token doesn't stay silently valid for the rest of its
+  90-day TTL.
+- A client whose token expires (or lacks a `role`
+  claim - see the note below) and has no `refreshToken` on file just calls
+  `POST /api/login` again.
 - **A token with no `role` claim** reads as `req.user?.role === undefined`,
   so every `requireAdmin`-gated route (`POST /api/settings` included)
   rejects it with `403`. Every already-open client (this same browser tab,
@@ -523,12 +545,15 @@ POST/broadcast ping-pong on every single change.
   exposed beyond a private tunnel, this needs real transport security
   (TLS) and a hardcoded, source-committed `JWT_SECRET` (`server.ts`)
   moved to a real per-deployment secret before that's safe.
-- **A refresh/rotate token endpoint** - the only way to get a new token is
-  `POST /api/login` again with the username/password; a 30-day token that
-  leaks stays valid for up to 30 days with no way to revoke it short of
-  changing that account's password (which invalidates nothing already
-  issued - `verifyPassword` is only checked at login time, not per
-  request) or deleting the account outright.
+- This bullet used to say there was no refresh/rotate endpoint and that a
+  password change "invalidates nothing already issued" - both are now out
+  of date. `POST /api/refresh`/`POST /api/logout` (section 2a) let a
+  client recover from a real token expiry without a password, and every
+  account mutation (password/role change, deletion) already revokes every
+  outstanding access token AND refresh token immediately (`tokenVersion`/
+  `id` in `users.ts`, checked on every request/WS tick - see
+  `authenticate()`/the WS connect+heartbeat re-checks in `server.ts`) -
+  not just at the next login.
 
 ## 5. Where the server-side code lives
 

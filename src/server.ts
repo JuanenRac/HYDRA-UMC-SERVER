@@ -48,6 +48,7 @@ import {
 import Bonjour from 'bonjour-service';
 import jwt from 'jsonwebtoken';
 import { ensureSeedUser, findUser, verifyPassword, listUsers, createUser, updateUser, deleteUser, effectiveTokenVersion, effectiveId, ScryptOverloadError, type UserRole } from './users';
+import { issueRefreshToken, consumeRefreshToken, revokeRefreshToken, pruneExpiredRefreshTokens } from './refresh_tokens';
 import {
   registry as metricsRegistry,
   robotCommandsTotal,
@@ -1426,6 +1427,18 @@ async function startServer() {
   // start. Development/test retain an isolated local convenience account.
   await ensureSeedUser();
 
+  // C08: hygiene sweep for refresh_tokens.ts's own data/refresh_tokens.json
+  // - see pruneExpiredRefreshTokens()'s own doc comment. Run once at
+  // startup (same timing as the .tmp sweep above) and again every 6h for
+  // a long-running process - an expired-but-never-rotated record (an
+  // abandoned/lost device) would otherwise never get removed on its own.
+  const prunedAtStartup = pruneExpiredRefreshTokens();
+  if (prunedAtStartup > 0) industrialLog(`[STARTUP] Removed ${prunedAtStartup} expired refresh token(s).`);
+  setInterval(() => {
+    const pruned = pruneExpiredRefreshTokens();
+    if (pruned > 0) industrialLog(`[MAINTENANCE] Removed ${pruned} expired refresh token(s).`);
+  }, 6 * 60 * 60 * 1000).unref();
+
   // The signing key and first administrator are enforced above. Keep a loud
   // diagnostic for an operator who deliberately configured the weak literal
   // admin/admin pair, but never create it implicitly in production.
@@ -2321,8 +2334,8 @@ async function startServer() {
   // below by POST /api/upload-work and POST /api/models/submit - both write
   // caller-controlled filenames to disk and need to refuse landing on one of
   // these regardless of which folder they resolve into (audit #016).
-  const RESERVED_DATA_FILENAMES = new Set(["settings.json", "users.json", "model_submissions.json"]);
-  const BLOCKED_STATIC_FILES = new Set(["/settings.json", "/users.json", "/model_submissions.json"]);
+  const RESERVED_DATA_FILENAMES = new Set(["settings.json", "users.json", "model_submissions.json", "refresh_tokens.json"]);
+  const BLOCKED_STATIC_FILES = new Set(["/settings.json", "/users.json", "/model_submissions.json", "/refresh_tokens.json"]);
   app.use((req, res, next) => {
     if (
       BLOCKED_STATIC_FILES.has(req.path) ||
@@ -2416,7 +2429,55 @@ async function startServer() {
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN as any }
     );
-    res.json({ success: true, token, role: user.role });
+    // C08: issued alongside the access token so a client can recover from
+    // its own real time-based expiry (see refresh_tokens.ts's own header
+    // comment) without forcing a manual re-login - a client that predates
+    // this field simply never sends refreshToken to POST /api/refresh and
+    // keeps today's forced-logout behavior, so this is purely additive.
+    const refreshToken = issueRefreshToken(user);
+    res.json({ success: true, token, refreshToken, role: user.role });
+  }));
+
+  // C08: exchanges a still-valid refresh token for a fresh access token,
+  // without the caller's password - see refresh_tokens.ts's own
+  // consumeRefreshToken() doc comment for exactly which cases this
+  // succeeds vs. correctly still fails closed (a genuinely revoked
+  // session, not just an expired access token, must still force a real
+  // re-login). Not gated behind authenticate() - the whole point is
+  // recovering from an access token that's already expired or otherwise
+  // invalid - but shares loginRateLimiter with POST /api/login as the same
+  // defense-in-depth against abuse, even though a refresh token itself is
+  // an unguessable 32-byte random value, not a brute-forceable password.
+  app.post("/api/refresh", loginRateLimiter, asyncHandler(async (req, res) => {
+    const { refreshToken } = req.body || {};
+    if (typeof refreshToken !== "string" || !refreshToken) {
+      return res.status(400).json({ error: "refreshToken required" });
+    }
+    const result = consumeRefreshToken(refreshToken);
+    if (!result.ok) {
+      authFailuresTotal.inc({ reason: `refresh_${result.reason}` });
+      return res.status(401).json({ error: "Invalid or expired refresh token" });
+    }
+    const token = jwt.sign(
+      { username: result.user.username, role: result.user.role, tokenVersion: effectiveTokenVersion(result.user), id: effectiveId(result.user) },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN as any }
+    );
+    res.json({ success: true, token, refreshToken: result.refreshToken, role: result.user.role });
+  }));
+
+  // C08: a real, explicit logout now revokes the refresh token
+  // server-side too (see revokeRefreshToken()'s own doc comment) instead
+  // of only discarding it client-side, which would otherwise leave it
+  // silently valid for the rest of its real TTL. No authenticate() gate,
+  // same reasoning as /api/refresh - a client whose access token already
+  // expired still needs to be able to log out cleanly. Always reports
+  // success: an already-used/expired/never-sent token is a no-op, not an
+  // error, from the caller's point of view.
+  app.post("/api/logout", asyncHandler(async (req, res) => {
+    const { refreshToken } = req.body || {};
+    if (typeof refreshToken === "string" && refreshToken) revokeRefreshToken(refreshToken);
+    res.json({ success: true });
   }));
 
   // Account management - admin-only (requireAdmin, chained after
