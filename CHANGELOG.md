@@ -33,6 +33,34 @@ a change is actually worth summarizing for a human.
 
 (nothing yet)
 
+## [0.6.0] - Real bug: jogging a combined robot's real XY table also moved its table-less sibling
+
+Reported live on STUDIO/CM5: a robot with a real XY table (`hasXYTable:
+true`), combined with a sibling that has none, would visually relocate
+that WHOLE sibling robot whenever the table-having robot's table was
+jogged, reset, or played through a Work with recorded `tx`/`ty`.
+
+Root cause: the server's `target: "xytable"` jog/reset branches, and the
+playback tick's own table handling, all checked "does a `xyTable` config
+object exist" (`robot.xyTable`) instead of "does THIS robot actually
+have a real table" (`robot.hasXYTable`). Turning a table off in the UI
+only ever flips that boolean - the config object is never cleared - so
+a table-less combined sibling still had a truthy `robot.xyTable` and
+absorbed the other robot's table jog. Compounding it: `pos.tx`/`pos.ty`
+doubles as a table-less combined robot's own general world-placement in
+the 3D scene (`VirtualKinematics.tsx`), so stomping it directly moved
+that robot's entire rendered model, not just some inert config field.
+
+Fixed: every place that applies `tx`/`ty`/table config now also requires
+the specific robot's own `hasXYTable` - the jog `"xytable"` target, the
+reset `"xytable"` target, and the playback tick's own per-point table
+handling. New regression coverage in
+`tools/verify_robot_command_contract.mjs` (`xytable-ownership`): a
+table-less combined sibling with a deliberately stale `xyTable` config
+and a distinctive `pos.tx`/`ty` - confirmed to reproduce the real bug
+before the fix (temporarily reverted the guard to prove it), confirmed
+fixed after.
+
 ## [0.5.9] - P06: real command ownership for POST /api/robot/:id/command
 
 `POST /api/robot/:id/command` only ever checked "is this token valid" -
