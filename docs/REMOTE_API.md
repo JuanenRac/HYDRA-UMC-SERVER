@@ -167,7 +167,10 @@ a separate one.
 - `POST /api/robot/:id/command` (body: `{ "command": "jog", "params":
   { "axis": "x", "amount": 12.5 } }`) is the small-payload alternative:
   **any authenticated
-  token, `admin` or `operator`**, can call it. The server computes which
+  token, `admin` or `operator`**, can call it - unless a different
+  account currently holds a real claim on that robot (see `claim`/
+  `release` below), in which case only that account (or `"stop"`) may.
+  The server computes which
   robot IDs are affected (the target plus anything `combinedWith` it)
   itself, persists to disk, and broadcasts a WS delta on its own - this is
   the primary way SUITE, the Android app, and the iOS app all write today,
@@ -186,6 +189,27 @@ a separate one.
   only to the requested robot, clears its playback cursor and
   persists/broadcasts both the trajectory and its selected source; it
   deliberately does not replace a combined robot's independent Work.
+
+- `POST /api/robot/:id/claim` (body: `{ "ttlMs"?: number, "force"?: boolean }`,
+  default `ttlMs` 5 minutes, capped at 30) and `POST /api/robot/:id/release`
+  (body: `{}`) give one authenticated **account** (never a per-tab/
+  per-device identity - this server has no concept of one) real,
+  TTL-bounded exclusive command ownership of a robot. Once claimed,
+  `POST /api/robot/:id/command` from a *different* account is rejected
+  `409` (with the current `reservation` in the body) for every command
+  except `"stop"`, which is a deliberate safety exception and is never
+  blockable by someone else's claim, real or stale. Re-claiming your own
+  already-held robot refreshes its TTL - this is how a real client keeps
+  a long session alive rather than losing the claim mid-use. `release`
+  is idempotent (releasing an unclaimed/expired robot succeeds, it never
+  errors) and refuses a non-holder unless that caller is `admin`; an
+  `admin` may also force-override someone else's still-active claim with
+  `force: true`. A claim that simply expires (its holder never released
+  it) is never treated as still-locked - an interruption in ownership
+  must never look like a permanent one. The current `reservation` (or
+  `null`) is a real field on the robot object itself, so it round-trips
+  through the same `GET /api/settings` response and WebSocket delta
+  every other robot field already does - no separate endpoint to poll.
 
 **Race condition to know about:** two clients (a browser tab and SUITE, or
 two SUITE instances) that both read, then both write moments apart, can
