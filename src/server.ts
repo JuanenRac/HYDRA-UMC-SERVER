@@ -2123,6 +2123,23 @@ async function startServer() {
     return found;
   }
 
+  // P06: command ownership. A real, TTL-bounded claim is embedded
+  // directly on the robot object (`robot.reservation`) rather than a
+  // separate Map, so it round-trips through the SAME persistence
+  // (queueSettingsWrite) and broadcast (broadcastRobotDelta/
+  // broadcastSettings) machinery every other robot field already uses,
+  // instead of needing its own parallel wiring. Identity is per-ACCOUNT
+  // (req.user.id), the only identity this server has - two tabs/devices
+  // logged in as the same account share one claim, by design, since
+  // there is no per-session/per-tab id anywhere else in this codebase to
+  // key a finer-grained lock on.
+  const DEFAULT_RESERVATION_TTL_MS = 5 * 60 * 1000;
+  const MAX_RESERVATION_TTL_MS = 30 * 60 * 1000;
+
+  function isReservationActive(reservation: any): boolean {
+    return !!reservation && typeof reservation.expiresAt === "number" && reservation.expiresAt > Date.now();
+  }
+
   function stopServerPlayback(robotId: number) {
     const timer = playbackTimers.get(robotId);
     if (timer) {
@@ -2615,6 +2632,22 @@ async function startServer() {
       return res.status(404).json({ error: "Robot not found" });
     }
 
+    // P06 (this project's own documented gap): command ownership. Any
+    // authenticated admin/operator could command any robot - no
+    // reservation, no generation, no exclusivity of any kind. "stop" is
+    // deliberately exempt: a real emergency stop must never be blockable
+    // by someone else's stale/forgotten claim. Every other command is
+    // rejected with 409 when a different, still-active claim exists.
+    const activeClaim = isReservationActive(targetRobot.reservation)
+      ? targetRobot.reservation
+      : null;
+    if (activeClaim && activeClaim.ownerId !== (req as any).user.id && command !== "stop") {
+      return res.status(409).json({
+        error: `robot is claimed by ${activeClaim.ownerUsername}`,
+        reservation: activeClaim,
+      });
+    }
+
     // A trajectory belongs to one robot. Unlike play/pause/stop, loading it
     // must not overwrite a combined sibling's independently selected Work.
     const affectedIds = command === "trajectory"
@@ -3021,6 +3054,70 @@ async function startServer() {
     await queueSettingsWrite(lastKnownSettings);
     broadcastRobotDelta(deltas, lastKnownSettings);
     res.json({ success: true, affectedCount: affectedIds.length });
+  });
+
+  // P06: claim exclusive command ownership of a robot. Real rules:
+  // - No existing active claim, or the caller already holds it -> grant/
+  //   refresh it (a caller re-claiming its own robot is how a real
+  //   client renews its own TTL before it expires, not an error).
+  // - An active claim held by someone else -> 409, unless the caller is
+  //   an admin explicitly passing `force: true` (a real, deliberate
+  //   override for "the previous operator walked away and left a robot
+  //   locked" - never the default, and never available to a plain
+  //   operator role).
+  app.post("/api/robot/:id/claim", authenticate, async (req, res) => {
+    const robotId = parseInt(req.params.id);
+    const robot = findRobotById(robotId);
+    if (!robot) {
+      return res.status(404).json({ error: "Robot not found" });
+    }
+    const user = (req as any).user;
+    const requestedTtlMs = typeof req.body?.ttlMs === "number" ? req.body.ttlMs : DEFAULT_RESERVATION_TTL_MS;
+    const ttlMs = Math.min(Math.max(requestedTtlMs, 1000), MAX_RESERVATION_TTL_MS);
+    const force = req.body?.force === true;
+
+    const existing = robot.reservation;
+    const heldByAnother = isReservationActive(existing) && existing.ownerId !== user.id;
+    if (heldByAnother && !(force && user.role === "admin")) {
+      return res.status(409).json({ error: `robot is already claimed by ${existing.ownerUsername}`, reservation: existing });
+    }
+
+    robot.reservation = {
+      ownerId: user.id,
+      ownerUsername: user.username,
+      claimedAt: Date.now(),
+      expiresAt: Date.now() + ttlMs,
+    };
+    const controllerId = findControllerIdForRobot(robotId);
+    await queueSettingsWrite(lastKnownSettings);
+    if (controllerId) {
+      broadcastRobotDelta([{ controllerId, robotId, patch: { reservation: robot.reservation } }], lastKnownSettings);
+    }
+    res.json({ success: true, reservation: robot.reservation });
+  });
+
+  // P06: release a claim - only the current holder or an admin may do
+  // this. Releasing an already-unclaimed (or expired) robot is a
+  // successful no-op, not an error, matching this codebase's own
+  // idempotent-mutation convention elsewhere (see e.g. mission.rs's
+  // cancel() in HYDRA-UMC-ORCHESTRATOR for the same real reasoning).
+  app.post("/api/robot/:id/release", authenticate, async (req, res) => {
+    const robotId = parseInt(req.params.id);
+    const robot = findRobotById(robotId);
+    if (!robot) {
+      return res.status(404).json({ error: "Robot not found" });
+    }
+    const user = (req as any).user;
+    if (isReservationActive(robot.reservation) && robot.reservation.ownerId !== user.id && user.role !== "admin") {
+      return res.status(409).json({ error: `robot is claimed by ${robot.reservation.ownerUsername}`, reservation: robot.reservation });
+    }
+    robot.reservation = null;
+    const controllerId = findControllerIdForRobot(robotId);
+    await queueSettingsWrite(lastKnownSettings);
+    if (controllerId) {
+      broadcastRobotDelta([{ controllerId, robotId, patch: { reservation: null } }], lastKnownSettings);
+    }
+    res.json({ success: true });
   });
 
   // Real proxy to HYDRA-UMC-VISION-STREAMER's own real MJPEG capture+serve

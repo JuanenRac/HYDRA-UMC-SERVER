@@ -33,6 +33,38 @@ a change is actually worth summarizing for a human.
 
 (nothing yet)
 
+## [0.5.9] - P06: real command ownership for POST /api/robot/:id/command
+
+`POST /api/robot/:id/command` only ever checked "is this token valid" -
+any authenticated admin/operator account could command any robot at any
+time, with no reservation, no generation, no exclusivity of any kind
+between two different real accounts both trying to drive the same robot.
+
+Added:
+
+- `robot.reservation: { ownerId, ownerUsername, claimedAt, expiresAt } | null` -
+  a real, TTL-bounded claim embedded directly on the robot object, so it
+  round-trips through the exact same persistence
+  (`queueSettingsWrite`)/broadcast (`broadcastRobotDelta`) machinery
+  every other robot field already uses.
+- `POST /api/robot/:id/claim` (`ttlMs` default 5 min, capped at 30;
+  `force: true`, admin-only, to override someone else's active claim) and
+  `POST /api/robot/:id/release` (idempotent - releasing an
+  unclaimed/expired robot succeeds, never errors; only the holder or an
+  admin may release someone else's).
+- `POST /api/robot/:id/command` now rejects `409` when a *different*
+  account holds an active claim, for every command except `"stop"` -
+  deliberately never blockable, the one real safety exception. A claim
+  that simply expires is never treated as still-locked.
+- New `tools/verify_robot_ownership_contract.mjs` - the real, two-
+  distinct-account regression this whole feature exists to close (an
+  admin account created live via `POST /api/users`, not a second token
+  for the same account): unclaimed access, claim, a blocked cross-
+  account command, the `stop` exception, the claim holder's own commands
+  still working, a contested claim, a non-holder's refused release, an
+  admin's forced override, release, idempotent release, and a real,
+  waited-out TTL expiry. `docs/REMOTE_API.md` documents the new contract.
+
 ## [0.5.8] - First real persisted Work exercising the XY table
 
 Every Work ever actually saved under `data/WORKS/<robot>/` used only
