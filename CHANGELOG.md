@@ -33,6 +33,28 @@ a change is actually worth summarizing for a human.
 
 (nothing yet)
 
+## [0.6.2] - Real refresh-token support: silent recovery from a WS 1008 close
+
+Every client (STUDIO, Android, iOS, DSI) forced a full manual re-login the
+instant its access token expired (WS closes 1008, no other reason
+exists) - even though the account itself was never actually revoked, a
+30-day-old dashboard tab left open just lost whatever view/robot
+selection it had. `POST /api/login` now also returns a real, opaque,
+long-lived `refreshToken` (`src/refresh_tokens.ts`, 90 days by default);
+new `POST /api/refresh` exchanges a still-valid one for a fresh access
+token with no password involved, rotating it on every use; new
+`POST /api/logout` revokes one explicitly server-side instead of only
+discarding it client-side. Fails closed exactly where a real re-login is
+still the correct behavior: a refresh token records the account's
+`tokenVersion`/`id` at issuance, so a password/role change or an account
+delete-and-recreate revokes it immediately, the same real-time guarantee
+an already-issued access token already gets. STUDIO's own WS-reconnect
+effect now tries a silent refresh before falling back to its existing
+forced logout on any 1008 close. 102 unit tests (13 new) +
+`tools/verify_refresh_token_contract.mjs` (new, real login->refresh->
+logout lifecycle against an actual running server) in SERVER; 154 tests
+in STUDIO.
+
 ## [0.6.1] - Real error-path coverage for POST /api/voice/turn
 
 `verify_voice_relay_contract.mjs` already proved the real happy path
