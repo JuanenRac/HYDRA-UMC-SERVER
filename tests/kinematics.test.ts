@@ -4,7 +4,7 @@
 // GPL-3.0 - see LICENSE
 // =============================================================================
 // calculateJoints() already lived in its own module, but - like the rest
-// of this repository before the same audit that added
+// of this repository before the same review pass that added
 // tests/serverPolicy.test.ts - had no direct unit test of its own; the
 // "reset"/"jog" command cases in server.ts only exercise it indirectly,
 // end-to-end, through a whole real server process. Expected values below
