@@ -220,9 +220,9 @@ code changed.
   like every other real proxy route here, never reachable anonymously.
   `npm test`: 89 unit tests + 12 real contract scripts, all passing.
 
-## [0.5.4] - REV-003/REV-004: real regressions found by independent revalidation
+## [0.5.4] - REV-003/REV-004: real regressions found in a second review pass
 
-An independent revalidation audit reproduced 2 real issues in the same
+A second review pass reproduced 2 real issues in the same
 account/authentication surface v0.5.3 above already hardened once (each
 against the real file store or a real in-process race, no mocked
 filesystem). Both fixed here, each with new regression tests:
@@ -257,7 +257,7 @@ filesystem). Both fixed here, each with new regression tests:
 
 ## [0.5.3] - Real session revocation, users.json corruption handling, and non-blocking login
 
-Found in an ecosystem-wide software-improvements audit (three separate P1
+Found while auditing the code (three separate P1
 findings against `src/users.ts`/`src/server.ts`, all fixed together since
 they touch the same account/authentication surface):
 
@@ -315,7 +315,7 @@ they touch the same account/authentication surface):
 
 ## [0.5.2] - Extracted pure helpers into src/serverPolicy.ts, with real direct unit tests
 
-- Found in an ecosystem-wide software-improvements audit: this repository
+- Found while auditing the code: this repository
   had zero direct unit tests - only the real, valuable but end-to-end
   `tools/verify_*_contract.mjs` scripts, each spinning up a whole real
   server process. `server.ts` itself has several genuinely pure functions
@@ -324,7 +324,7 @@ they touch the same account/authentication surface):
   `hi3510Action`), others were declared INSIDE `startServer()`'s own
   closure despite never touching anything from it (`cameraFingerprint`,
   `safeIdSegment`, `slugify`, `cameraStreamPort`) - a real example of the
-  exact "pure function trapped in a closure" pattern this audit flagged.
+  exact "pure function trapped in a closure" pattern flagged while auditing the code.
 - **`src/serverPolicy.ts`** (new) - all 8 functions above moved here
   unchanged (same logic, same comments, same behavior), each `export`ed
   and independently importable. `server.ts` now imports them back and
@@ -358,8 +358,8 @@ they touch the same account/authentication surface):
 
 ## [0.5.1]
 
-- **Fixed a real remote-access gate gap, found in an ecosystem roadmap
-  audit: HYDRA-UMC-DSI's own client already sent
+- **Fixed a real remote-access gate gap, found while
+  auditing the code: HYDRA-UMC-DSI's own client already sent
   `X-Hydra-Client: dsi`, but `remoteAccessAllowed()` never recognized
   "dsi" as one of the gated client types.** A DSI request fell into the
   same bucket as an ungated plain browser tab (any unrecognized header
@@ -395,7 +395,7 @@ they touch the same account/authentication surface):
 ## [0.4.9]
 
 - **Fixed a real wrong-error-message bug in the admin UI's login screen,
-  found by an ecosystem-wide bug audit.** `admin-ui/src/api.ts`'s own
+  found while auditing the code.** `admin-ui/src/api.ts`'s own
   `apiFetch()` intercepted every real `401` response globally and
   rewrote it to `"Session expired - please log in again."` - correct for
   an already-authenticated call whose token stopped being valid, but
@@ -1174,13 +1174,13 @@ including the new watch-gate assertions).
 ## [0.1.4] - Safety and reliability fixes
 
 Real security/robustness gaps confirmed against the actual current code
-(most of that audit's other claims for this project turned out to already
+(most of the other points raised for this project turned out to already
 be fixed - CORS, JWT_SECRET default, path traversal, the WebSocket
 listener leak, and the kinematics NaN singularity were all already
 handled; the public code and tests record the resulting behavior).
 
 - **Real log rotation.** `industrialLog()` used to append to `server.log`
-  forever with nothing that ever trimmed it - a real gap (audit #10):
+  forever with nothing that ever trimmed it - a real gap:
   an industrial cell logs a line on every robot command, so an
   unattended CM5 would eventually fill its own eMMC. Single-file
   rotation at 10MB (current -> `server.log.1`, current truncated).
@@ -1188,7 +1188,7 @@ handled; the public code and tests record the resulting behavior).
   it rotated to 347 bytes + a `server.log.1` with the old content.
 - **Bounded `jog`/`speed` atomic command values.** Both only checked
   `typeof === "number"` before this fix - which NaN/Infinity/an absurd
-  value like `1e9` all pass (audit #6). `jog`'s `amount` is now also
+  value like `1e9` all pass. `jog`'s `amount` is now also
   required to be finite and `|amount| <= 1000` (10x headroom over
   STUDIO's own largest `JOG_STEP_OPTIONS` entry); `speed`/`acceleration`
   are bounded to STUDIO's own slider range (10-500).
@@ -1196,12 +1196,12 @@ handled; the public code and tests record the resulting behavior).
   baseline** (N=2^17/r=8/p=1, up from Node's un-configured default of
   N=2^14) - login is infrequent (never on a jog/telemetry hot path), so
   the extra ~350ms/~128MB per attempt is a reasonable one-time-per-session
-  cost (audit #7). Existing accounts hashed under the old cost still log
+  cost. Existing accounts hashed under the old cost still log
   in via an automatic fallback check - no forced password reset.
 - **Graceful shutdown on SIGTERM/SIGINT.** Nothing handled either signal
   before this fix - a normal `systemctl stop`/Ctrl-C just killed the
   process mid-flight, leaving the mDNS record to expire only via its own
-  TTL instead of unpublishing immediately (audit #8). Verified in-process
+  TTL instead of unpublishing immediately. Verified in-process
   (emitting SIGINT directly at the same process this session's build
   produced, since real cross-process signal delivery isn't reliably
   testable through Windows' signal emulation - the standard
@@ -1337,7 +1337,7 @@ variables.
   HTTP/WS. A cert/key path that's set but unreadable/invalid fails
   startup loudly instead of silently falling back to plain HTTP.
 
-A later audit pass, still within this same version (done via `npm run dev`,
+A later review pass, still within this same version (done via `npm run dev`,
 so it never triggered the automatic build-bump above), found and fixed
 further real issues:
 
