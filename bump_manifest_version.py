@@ -75,7 +75,7 @@ def write_manifest(data: dict[str, object]) -> None:
 
 
 def sync_package_lock(version: str) -> bool:
-    """V07-017 (found in an independent revalidation audit, P2): this
+    """V07-017 (P2): this
     utility only ever patched the ONE `native_version.file` (typically
     `package.json`, via a plain text regex - see `replace_version`
     above), leaving `package-lock.json`'s own separate copy of the same
