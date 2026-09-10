@@ -3,7 +3,7 @@
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
 // GPL-3.0 - see LICENSE
 // =============================================================================
-// Found in an ecosystem-wide software-improvements audit: server.ts (the
+// Found while auditing the code: server.ts (the
 // single busiest, most business-critical file in this ecosystem) had zero
 // direct unit tests - only the real, valuable but end-to-end
 // tools/verify_*_contract.mjs scripts, each spinning up a whole real server
@@ -36,7 +36,7 @@
 // - so Watch access can be revoked without also blocking that same
 // phone's direct Android access.
 //
-// Real gap found and fixed here (ecosystem roadmap audit):
+// Real gap found and fixed here while auditing the code:
 // HYDRA-UMC-DSI's own hydra_api_client.dart already sends
 // `X-Hydra-Client: dsi` on every request (see that file's own header
 // comment - it was written anticipating this gate) but this function

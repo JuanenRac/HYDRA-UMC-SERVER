@@ -3,7 +3,7 @@
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
 // GPL-3.0 - see LICENSE
 // =============================================================================
-// Found in an ecosystem-wide software-improvements audit (SERVER-01/02/03,
+// Found while auditing the code (SERVER-01/02/03,
 // all P1): this store had zero direct unit tests of its own - the only
 // coverage touching it at all was tools/verify_auth_negative.mjs, a real
 // end-to-end contract script that proves anonymous/invalid-token/wrong-role

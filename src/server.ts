@@ -1244,8 +1244,7 @@ function authenticate(req: any, res: any, next: any) {
         code: expired ? "TOKEN_EXPIRED" : "TOKEN_INVALID",
       });
     }
-    // SERVER-01 (found in an ecosystem-wide software-improvements audit,
-    // P1): a valid JWT signature alone used to authorize for the token's
+    // SERVER-01 (P1): a valid JWT signature alone used to authorize for the token's
     // entire lifetime - deleting or demoting a user never revoked an
     // already-issued token, since {username, role} were trusted straight
     // from the (old, stale) token claims. Re-looks up the account on
@@ -1255,7 +1254,7 @@ function authenticate(req: any, res: any, next: any) {
     // authorizes, even though it hasn't expired yet. requireAdmin below
     // reads req.user.role from THIS fresh lookup, never the token's own
     // stale claim, so a demotion takes effect on the very next request.
-    // REV-004 (found in an independent revalidation audit, P1): tokenVersion
+    // REV-004 (P1): tokenVersion
     // alone is only ever compared PER USERNAME - deleting this account and
     // recreating the same username reset tokenVersion back to its own
     // starting value on the brand-new account, so an old, not-yet-expired

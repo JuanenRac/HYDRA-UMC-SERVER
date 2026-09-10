@@ -3,7 +3,7 @@
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
 // GPL-3.0 - see LICENSE
 // =============================================================================
-// Found in an ecosystem-wide software-improvements audit: this whole
+// Found while auditing the code: this whole
 // repository had zero direct unit tests - only the real, valuable but
 // end-to-end tools/verify_*_contract.mjs scripts, each spinning up a full
 // server process. These are genuinely pure functions (moved out of

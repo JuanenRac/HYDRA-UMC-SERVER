@@ -30,8 +30,7 @@ export interface StoredUser {
   passwordHash: string; // "saltHex:hashHex"
   role: UserRole;
   createdAt: string;
-  // SERVER-01 (found in an ecosystem-wide software-improvements audit,
-  // P1): a JWT's own {username, role} claims were trusted for the
+  // SERVER-01 (P1): a JWT's own {username, role} claims were trusted for the
   // token's entire lifetime - deleting or demoting a user never revoked
   // an already-issued token, and a WebSocket only checked identity once,
   // at connect time. Every real account mutation (password/role change)
@@ -43,7 +42,7 @@ export interface StoredUser {
   // effectiveTokenVersion() treats a missing value as 1, the same
   // starting value every account created after this fix gets explicitly.
   tokenVersion?: number;
-  // REV-004 (found in an independent revalidation audit, P1): tokenVersion
+  // REV-004 (P1): tokenVersion
   // alone is compared PER USERNAME - deleting an account and recreating
   // the same username reset tokenVersion back to 1 on the new account,
   // and an old, not-yet-expired JWT for the OLD (deleted) account still
@@ -95,8 +94,7 @@ const usersPath = () => path.join(process.cwd(), "data", "users.json");
 // OLD N=16384 cost, not this one.
 const SCRYPT_OPTIONS: crypto.ScryptOptions = { N: 131072, r: 8, p: 1, maxmem: 256 * 1024 * 1024 };
 
-// SERVER-03 (found in an ecosystem-wide software-improvements audit,
-// P1): `crypto.scryptSync` runs on Node's own single main thread -
+// SERVER-03 (P1): `crypto.scryptSync` runs on Node's own single main thread -
 // blocking it for the ~100ms this cost parameter takes (see the comment
 // above) stalls EVERY concurrent HTTP/WebSocket connection this server
 // is holding open, including real-time robot command/telemetry traffic,
@@ -198,8 +196,7 @@ export async function verifyPassword(password: string, stored: string): Promise<
   });
 }
 
-// SERVER-02 (found in an ecosystem-wide software-improvements audit,
-// P1): a real, distinct failure reason - loadUsers() below throws this
+// SERVER-02 (P1): a real, distinct failure reason - loadUsers() below throws this
 // instead of silently returning [] for anything other than the file
 // genuinely not existing yet, so a caller (ensureSeedUser() in
 // particular) can never mistake real corruption for a fresh install.
@@ -248,7 +245,7 @@ function saveUsers(users: StoredUser[]): void {
   fs.renameSync(tmp, target);
 }
 
-// REV-003 (found in an independent revalidation audit, P1): createUser()/
+// REV-003 (P1): createUser()/
 // updateUser()/deleteUser() each do a real read-modify-write cycle
 // (loadUsers() -> mutate an in-memory array -> saveUsers()) with a real
 // `await` (hashPassword()) sitting in the middle. Two concurrent calls

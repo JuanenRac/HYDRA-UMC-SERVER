@@ -52,7 +52,7 @@ export async function apiFetch<T = any>(path: string, init?: RequestInit): Promi
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const res = await fetch(path, { ...init, headers });
-  // Real bug found by an ecosystem-wide audit: a 401 from /api/login
+  // Real bug found while auditing the code: a 401 from /api/login
   // itself means "wrong credentials" (server.ts's own real response,
   // {"error": "Invalid credentials"}) - there is no prior session for a
   // fresh login attempt to have "expired". This global 401 handler is
