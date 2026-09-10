@@ -57,6 +57,7 @@ RestrictRealtime=true
 RestrictSUIDSGID=true
 SystemCallArchitectures=native
 UMask=0027
+MemoryAccounting=yes
 MemoryHigh=384M
 MemoryMax=512M
 ReadWritePaths=/opt/hydra-umc/server/data
