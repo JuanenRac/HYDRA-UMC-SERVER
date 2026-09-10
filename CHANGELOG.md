@@ -33,6 +33,16 @@ a change is actually worth summarizing for a human.
 
 (nothing yet)
 
+## [0.6.3] - Refresh bundled STUDIO frontend (vacuum-table models + C08 refresh-token client)
+
+No server-side code changed - `build-frontend.sh` re-run to pull
+HYDRA-UMC-STUDIO's own `public/` copy of its frontend up to date with:
+STUDIO 0.6.0 (six real selectable vacuum-table STL models replacing the
+primitive parametric box) and STUDIO 0.5.9 (the client half of C08 -
+`store.tsx` now tries this server's own `POST /api/refresh` before
+forcing a logout on a WebSocket 1008 close, see 0.6.2). admin-ui rebuilt
+in the same pass.
+
 ## [0.6.2] - Real refresh-token support: silent recovery from a WS 1008 close
 
 Every client (STUDIO, Android, iOS, DSI) forced a full manual re-login the
