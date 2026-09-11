@@ -25,6 +25,8 @@
 </p>
 
 
+**正直な現状確認 - 実際に今動くもの:** Express + WebSocket エンジン、その REST/WS API サーフェス、リフレッシュトークンのローテーションを伴う JWT 認証、scrypt によるパスワードハッシュ、mDNS ディスカバリー、ロボットの所有権/占有の裁定、再生（プレイバック）、そして CAN-OTA/テレメトリ/音声/ローカルAI/connector-hub へのリレー（`src/server.ts`、`src/users.ts`、`src/kinematics.ts`、`src/metrics.ts`）は本物であり、テスト済みです - モックに対してではなく、テストツール自身が起動する、まさにこのサーバーの実インスタンスに対してテストされています: 102件のユニットテスト（`npm run test:unit`、`src/serverPolicy.ts`/`src/kinematics.ts` に対する `node:test`）に加え、`tools/` 配下の17個のエンドツーエンドの契約/認証否定スクリプト（discovery、認証否定、本番ブートストラップ、ロボットコマンド/所有権、リフレッシュトークン、音声リレーとその独自のエラーパス、再生、永続化されたXYテーブル、エコシステムのステータス/サービス制御、テレメトリリレー、統合の test-connection、CAN-OTAリレー、ローカルAIプロキシ、connector-hubリレー）があり、すべて `npm run test` で成功しています。ここで本当にハードウェアに近いものの完全には検証されていないもの: 実際の HYDRA-UMC CM5+STM32H745 ボードへの `spi_bridge` リンクと、STUDIO/admin-ui の静的フロントエンドを提供するオプションの経路は本物のコードであり、上記のAPI/契約層を通じて実際に動かされていますが、この環境にはその最後の接続を締めくくる物理的な CM5/STM32 がありません。TLS/HTTPS と `monitoring/` の Prometheus/Grafana スタックは本物でオプションであり、デフォルトでは無効です。これまでに実際に出荷されたものの詳細は `CHANGELOG.md` を参照してください。
+
 ---
 
 ## 🎯 概要
@@ -103,11 +105,14 @@ HYDRA-UMC-SERVER/
 │   └── hydra-umc-server.service # CM5 上のローカル systemd ユニット
 ├── tools/
 │   ├── ci_validate.py                                   # CI が使用する manifest/CHANGELOG/docs の検証
-│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 実サーバーに対する 11 個の実際の契約/認証否定
-│                                                           チェック（CAN-OTA リレー、discovery、エコシステム
-│                                                           サービス制御/ステータス、統合の test-connection、
-│                                                           本番ブートストラップ、ロボットコマンド、再生、
-│                                                           テレメトリリレー、音声リレー）
+│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 実サーバーに対する 17 個の実際の契約/認証否定
+│                                                           チェック（discovery、認証否定、本番ブートストラップ、
+│                                                           ロボットコマンド/所有権、リフレッシュトークン、
+│                                                           音声リレーとその独自のエラーパス、再生、永続化
+│                                                           されたXYテーブル、エコシステムのステータス/
+│                                                           サービス制御、テレメトリリレー、統合の
+│                                                           test-connection、CAN-OTAリレー、ローカルAI
+│                                                           プロキシ、connector-hubリレー）
 ├── tests/
 │   └── *.test.ts        # src/serverPolicy.ts と src/kinematics.ts の実際に純粋な関数に対する直接的な
 │                           ユニットテスト（node:test を tsx --test 経由で実行、`npm run test:unit`）-

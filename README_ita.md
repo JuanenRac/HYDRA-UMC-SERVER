@@ -23,6 +23,8 @@
 </p>
 
 
+**Verifica di onestà - cosa funziona davvero oggi:** il motore Express + WebSocket, la sua superficie API REST/WS, l'autenticazione JWT con rotazione dei token di refresh, l'hashing delle password con scrypt, la scoperta mDNS, l'arbitraggio di proprietà/rivendicazione dei robot, il playback, e i relay verso CAN-OTA/telemetria/voce/IA locale/connector-hub (`src/server.ts`, `src/users.ts`, `src/kinematics.ts`, `src/metrics.ts`) sono reali e testati - non contro mock, ma contro un'istanza reale di questo stesso server avviata dagli stessi strumenti di test: 102 test unitari (`npm run test:unit`, `node:test` su `src/serverPolicy.ts`/`src/kinematics.ts`) più 17 script di contratto/auth-negativa end-to-end sotto `tools/` (discovery, auth negativa, bootstrap di produzione, comandi/proprietà robot, token di refresh, relay vocale + i suoi propri percorsi di errore, playback, la tabella XY persistita, stato/controllo dei servizi dell'ecosistema, relay di telemetria, test-connection delle integrazioni, relay CAN-OTA, proxy IA locale, relay connector-hub), tutti superati tramite `npm run test`. Ciò che è genuinamente adiacente all'hardware piuttosto che pienamente verificato qui: il collegamento `spi_bridge` a una vera scheda HYDRA-UMC CM5+STM32H745 e il percorso opzionale di servire il frontend statico di STUDIO/admin-ui sono codice reale, esercitato attraverso lo strato API/contratto sopra, ma questo ambiente non dispone di una CM5/STM32 fisica per chiudere quest'ultimo passaggio. TLS/HTTPS e lo stack Prometheus/Grafana di `monitoring/` sono reali e opzionali, disattivati per impostazione predefinita. Vedi `CHANGELOG.md` per ciò che è stato consegnato finora esattamente.
+
 ---
 
 ## 🎯 Panoramica
@@ -183,12 +185,15 @@ HYDRA-UMC-SERVER/
 │   └── hydra-umc-server.service # Unità systemd locale sulla CM5
 ├── tools/
 │   ├── ci_validate.py                                   # Validazione manifest/CHANGELOG/docs usata dalla CI
-│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 11 verifiche reali di contratto/auth negativa
-│                                                           contro un server reale (relay CAN-OTA, discovery,
-│                                                           controllo/stato dei servizi dell'ecosistema,
-│                                                           test-connection delle integrazioni, bootstrap di
-│                                                           produzione, comandi robot, playback, relay di
-│                                                           telemetria, relay vocale)
+│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 17 verifiche reali di contratto/auth negativa
+│                                                           contro un server reale (discovery, auth negativa,
+│                                                           bootstrap di produzione, comandi/proprietà robot,
+│                                                           token di refresh, relay vocale + i suoi percorsi
+│                                                           di errore, playback, tabella XY persistita,
+│                                                           stato/controllo dei servizi dell'ecosistema, relay
+│                                                           di telemetria, test-connection delle integrazioni,
+│                                                           relay CAN-OTA, proxy IA locale, relay
+│                                                           connector-hub)
 ├── tests/
 │   └── *.test.ts        # Test unitari diretti (node:test via tsx --test, `npm run test:unit`) per le
 │                           vere funzioni pure in src/serverPolicy.ts e src/kinematics.ts - in-process,
