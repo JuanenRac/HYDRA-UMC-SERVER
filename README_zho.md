@@ -25,6 +25,8 @@
 </p>
 
 
+**诚实核查——今天真正能跑起来的部分：** Express + WebSocket 引擎、它的 REST/WS API 接口、带刷新令牌轮换的 JWT 认证、scrypt 密码哈希、mDNS 发现、机器人所有权/占用仲裁、回放（playback），以及通往 CAN-OTA/遥测/语音/本地 AI/connector-hub 的中继（`src/server.ts`、`src/users.ts`、`src/kinematics.ts`、`src/metrics.ts`）都是真实且经过测试的——不是针对模拟对象（mock），而是针对测试工具自身启动的这个服务器的一个真实实例：102 个单元测试（`npm run test:unit`，基于 `node:test` 针对 `src/serverPolicy.ts`/`src/kinematics.ts`），外加 `tools/` 目录下 17 个端到端契约/负向认证脚本（discovery、负向认证、生产环境 bootstrap、机器人指令/所有权、刷新令牌、语音中继及其自身错误路径、回放、持久化的 XY 表、生态系统状态/服务控制、遥测中继、集成 test-connection、CAN-OTA 中继、本地 AI 代理、connector-hub 中继），全部通过 `npm run test`。真正属于"贴近硬件但尚未在此完全验证"的部分：连接到真实 HYDRA-UMC CM5+STM32H745 主板的 `spi_bridge` 链路，以及提供 STUDIO/admin-ui 静态前端的可选路径，都是真实代码，并通过上述 API/契约层得到了验证，但本环境没有物理的 CM5/STM32 来闭合最后这一环。TLS/HTTPS 以及 `monitoring/` 中的 Prometheus/Grafana 技术栈都是真实且可选的，默认关闭。已交付的具体内容见 `CHANGELOG.md`。
+
 ---
 
 ## 🎯 概述
@@ -103,10 +105,12 @@ HYDRA-UMC-SERVER/
 │   └── hydra-umc-server.service # CM5 本地 systemd 单元
 ├── tools/
 │   ├── ci_validate.py                                   # CI 使用的 manifest/CHANGELOG/docs 校验
-│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 针对真实服务器的 11 项真实契约/负向认证
-│                                                           检查（CAN-OTA 中继、discovery、生态系统服务
-│                                                           控制/状态、集成 test-connection、生产环境
-│                                                           bootstrap、机器人指令、回放、遥测中继、语音中继）
+│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 针对真实服务器的 17 项真实契约/负向认证
+│                                                           检查（discovery、负向认证、生产环境 bootstrap、
+│                                                           机器人指令/所有权、刷新令牌、语音中继及其自身
+│                                                           错误路径、回放、持久化的 XY 表、生态系统状态/
+│                                                           服务控制、遥测中继、集成 test-connection、
+│                                                           CAN-OTA 中继、本地 AI 代理、connector-hub 中继）
 ├── tests/
 │   └── *.test.ts        # 针对 src/serverPolicy.ts 和 src/kinematics.ts 中真正纯函数的直接单元测试
 │                           (通过 tsx --test 运行 node:test,即 `npm run test:unit`)——在进程内运行,
