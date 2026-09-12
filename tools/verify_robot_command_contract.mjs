@@ -228,7 +228,46 @@ async function main() {
     assert.equal(resetA2.pos.tx, 77, "resetting robot 1's table must never touch robot 2's own world-placement pos.tx");
     assert.equal(resetA2.pos.ty, 88);
 
-    console.log("SERVER_ROBOT_COMMAND_CONTRACT=PASS combined-pause=2 camera-state=3 trajectory-sync=5 xytable-ownership=2");
+    // Custom vacuum footprints use ordinary settings, not a physical command.
+    settings = await request(port, "/api/settings");
+    const otherRobot = structuredClone(findRobot(settings.body, 2));
+    for (const width of [80, 165, 237, 500]) {
+      const vacuumTable = { enabled: true, modelId: "232x217x15", customSize: true,
+        size: { width, length: 150 }, pumpActive: false, valveActive: false,
+        worldPos: { x: 12, y: 34 }, worldRot: 0.25, renderScale: 1 };
+      findRobot(settings.body, 1).vacuumTable = vacuumTable;
+      const saved = await request(port, "/api/settings", { method: "POST", headers: authorization,
+        body: JSON.stringify(settings.body) });
+      assert.equal(saved.response.status, 200);
+      settings = await request(port, "/api/settings");
+      assert.deepEqual(findRobot(settings.body, 1).vacuumTable, vacuumTable);
+      assert.deepEqual(findRobot(settings.body, 2), otherRobot, "custom size must not affect another robot");
+    }
+    for (const [modelId, width, length] of [["100x100x5",100,100], ["200x100x5",200,100], ["200x200x5",200,200], ["255x255x5",255,255], ["255x255x5",260,150]]) {
+      const heatedBed = { enabled: true, modelId, size: { width, length }, targetTemp: 80,
+        ssrActive: false, currentTemp1: 25, currentTemp2: 25,
+        worldPos: { x: 12, y: 34 }, worldRot: 0.25, renderScale: 1 };
+      findRobot(settings.body, 1).heatedBed = heatedBed;
+      const saved = await request(port, "/api/settings", { method: "POST", headers: authorization,
+        body: JSON.stringify(settings.body) });
+      assert.equal(saved.response.status, 200);
+      settings = await request(port, "/api/settings");
+      assert.deepEqual(findRobot(settings.body, 1).heatedBed, heatedBed);
+      assert.deepEqual(findRobot(settings.body, 2), otherRobot);
+    }
+    for (const capacity of [1,6,24]) {
+      const rack2 = {type:"Output",width:200,depth:100,color:"#10b981",capacity:24,usableSlots:Array(24).fill(true),basePickupPos:{j1:42}};
+      const rackSystem = {enabled:true, rack1:{type:"Input",width:161,depth:201,color:"#123abc",capacity,
+        usableSlots:Array.from({length:24},(_,i)=>i%2===0),basePickupPos:{j1:12,tx:34},
+        renderPos:{x:300,y:150},renderRot:0.2,renderScale:1},rack2};
+      findRobot(settings.body,1).rackSystem = rackSystem;
+      const saved = await request(port,"/api/settings",{method:"POST",headers:authorization,body:JSON.stringify(settings.body)});
+      assert.equal(saved.response.status,200);
+      settings=await request(port,"/api/settings");
+      assert.deepEqual(findRobot(settings.body,1).rackSystem,rackSystem);
+      assert.deepEqual(findRobot(settings.body,2),otherRobot);
+    }
+    console.log("SERVER_ROBOT_COMMAND_CONTRACT=PASS combined-pause=2 camera-state=3 trajectory-sync=5 xytable-ownership=2 vacuum-custom-size=4 heated-bed=5 rack=3");
   } finally {
     if (child && child.exitCode === null) {
       child.kill("SIGTERM");
