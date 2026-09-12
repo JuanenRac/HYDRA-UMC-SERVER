@@ -1,5 +1,56 @@
 # HYDRA-UMC SERVER - Remote Control API
 
+## Vacuum table footprint settings
+
+STUDIO (including the web client served by SERVER) and SUITE use the existing
+authenticated settings-write API for each robot's `vacuumTable`. No new endpoint
+or machine command is needed. Preserve `modelId`, `customSize` and
+`size: { width, length }` when relaying settings. Dimensions are millimeters.
+
+With `customSize: true`, updated clients display the chosen STL scaled to the
+configured width/length (integer 10–5000 mm; UI arrows step by 5 mm). Thickness
+does not change. Missing/false `customSize` retains original catalog dimensions,
+so legacy arbitrary sizes are not reinterpreted. Choosing a preset clears custom
+sizing; disabling/re-enabling preserves it. Pump, valve and placement are separate.
+
+SERVER persists these fields; it does not generate a manufacturing STL or certify
+physical dimensions. Older clients may ignore the custom footprint: update both
+clients before relying on matching previews. `tools/verify_robot_command_contract.mjs`
+checks custom footprints through the real isolated settings API and verifies that
+another robot is unchanged. Do not copy a full stale settings snapshot over a newer
+one; retain the existing client synchronization rules.
+
+## Rack STL geometry settings
+
+Within each robot's rackSystem, rack1 and rack2 independently accept optional
+width and depth (usable PCB dimensions in mm, integer 40–1000, UI step 1),
+and color (#RRGGBB). Existing capacity remains 1–24; guide pitch is 10 mm.
+Defaults without these fields are 160x160 mm, blue Input / green Output.
+Clients render height as capacity*10+40 mm and outer footprint as
+(width+20)x(depth+20) mm. STL itself does not store color.
+
+The authenticated settings API roundtrips these fields without a new endpoint.
+Geometry edits must retain usableSlots, basePickupPos, placement and the other
+rack. They are visual configuration, not physical calibration or motion commands.
+The isolated robot-command contract test covers three capacities and independent
+robot/rack settings. Updated client builds/assets are required for visualization.
+
+## Heated bed footprint settings
+
+The same settings transport preserves `heatedBed.modelId` and `heatedBed.size`
+(`width`, `length` in mm). Presets: `100x100x5`, `200x100x5`, `200x200x5`,
+`255x255x5`; total STL height is 5 mm in all cases. Updated STUDIO/SUITE clients
+allow 5 mm footprint steps (integer 25–5000 mm). Unlike vacuum tables, existing
+heated-bed sizes were editable already and remain valid without a customSize flag.
+Missing/unknown IDs render the 200x200 preset at the saved valid footprint.
+
+Selecting/resizing must not change targetTemp, currentTemp1/currentTemp2,
+ssrActive, placement or another robot. Reset follows the clients' existing reset
+semantics and restores 200x200, target 60 and SSR off. SERVER does not generate
+meshes or provide electrical/thermal certification; its hosted STUDIO requires
+the rebuilt client assets to show the STL. The isolated robot-command contract
+test covers all four presets and one custom size with SSR off.
+
 Reference for any client that talks to a running HYDRA-UMC SERVER
 instance: [HYDRA-UMC STUDIO](https://github.com/JuanenRac/HYDRA-UMC-STUDIO)
 (the web dashboard - a pure Vite/React client of this same contract, not

@@ -29,9 +29,20 @@ a change is actually worth summarizing for a human.
 
 ---
 
-## Unreleased
+## [0.6.4] - Table model contracts: rack/heated-bed/vacuum-table settings
 
-(nothing yet)
+- Add configurable rack width/depth (1 mm steps), capacity-driven STL guides
+  and independent color metadata. Preserve pickup poses and the other rack.
+- Verify rack geometry/settings roundtrips with an isolated server; document
+  the shared contract without adding physical commands.
+
+- Test and document the heatedBed modelId/size roundtrip for four 5 mm STL
+  presets plus a custom footprint, preserving heater state and another robot.
+
+- Verify customSize/modelId/width/length persistence through the existing settings
+  API using an isolated server, including isolation from another robot.
+- Document the shared STUDIO/SUITE footprint contract; no new endpoint, physical
+  command or parametric STL generation is introduced.
 
 ## [0.6.3] - Refresh bundled STUDIO frontend (vacuum-table models + C08 refresh-token client)
 
