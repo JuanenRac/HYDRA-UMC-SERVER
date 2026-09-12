@@ -29,6 +29,10 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.6.5]
+
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
+
 ## [0.6.4] - Table model contracts: rack/heated-bed/vacuum-table settings
 
 - Add configurable rack width/depth (1 mm steps), capacity-driven STL guides
