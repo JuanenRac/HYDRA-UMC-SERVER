@@ -2334,12 +2334,38 @@ async function startServer() {
   // caller-controlled filenames to disk and need to refuse landing on one of
   // these regardless of which folder they resolve into (audit #016).
   const RESERVED_DATA_FILENAMES = new Set(["settings.json", "users.json", "model_submissions.json", "refresh_tokens.json"]);
-  const BLOCKED_STATIC_FILES = new Set(["/settings.json", "/users.json", "/model_submissions.json", "/refresh_tokens.json"]);
   app.use((req, res, next) => {
+    // H030: an exact-string check against `req.path` (Express's own
+    // decoded/routing-normalized path) is NOT the same string
+    // `express.static`/`send` below ultimately resolve to a real file
+    // with - confirmed live against this exact block, all four of these
+    // served the real settings.json despite failing the naive
+    // string-equality check that used to run here: a single character
+    // percent-encoded (`/%73ettings.json`), a doubled leading slash
+    // (`//settings.json`), a case difference (`/Settings.json` - this
+    // filesystem resolves it to the same file case-insensitively even
+    // though the string comparison did not), and a literal or encoded
+    // `.` segment (`/./settings.json`, `/%2e/settings.json`). Decode and
+    // normalize the path the same way `send` itself does, then compare
+    // only the real, lowercased basename and top-level segment - what
+    // matters is which REAL file/directory this request resolves to,
+    // not which of countless equivalent spellings of its URL asked for
+    // it. A malformed percent-encoding is refused outright rather than
+    // guessed at.
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(req.path);
+    } catch {
+      res.status(400).end();
+      return;
+    }
+    const normalized = path.posix.normalize(decoded).toLowerCase();
+    const segments = normalized.split("/").filter(Boolean);
+    const baseName = segments[segments.length - 1] ?? "";
     if (
-      BLOCKED_STATIC_FILES.has(req.path) ||
-      req.path === "/logs" || req.path.startsWith("/logs/") ||
-      req.path === "/points" || req.path.startsWith("/points/")
+      RESERVED_DATA_FILENAMES.has(baseName) ||
+      segments[0] === "logs" ||
+      segments[0] === "points"
     ) {
       res.status(404).end();
       return;
@@ -2593,7 +2619,15 @@ async function startServer() {
   });
 
   // API routes FIRST
-  app.get("/api/settings", (req, res) => {
+  // H031: this had no auth middleware at all - any unauthenticated
+  // caller could GET the full settings object (controller IPs,
+  // CAN-OTA config, complete per-robot state - see the comment on
+  // RESERVED_DATA_FILENAMES above for exactly what this file holds),
+  // confirmed live (200 with no Authorization header at all). `authenticate`
+  // only (not `requireAdmin`, unlike the POST just below) - every logged-in
+  // STUDIO operator legitimately reads this today, not only an admin;
+  // writing it already correctly requires admin.
+  app.get("/api/settings", authenticate, (req, res) => {
     try {
       res.json(loadFullSettingsFromDisk());
     } catch (e) {

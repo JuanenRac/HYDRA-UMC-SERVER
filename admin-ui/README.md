@@ -30,7 +30,7 @@ fully isolated) made Tailwind v4's CSS parser here throw a `Missing
 opening (` error on an otherwise valid file; a comment using none of
 them builds cleanly.
 
-Not part of the main 44-project ecosystem checklist (own README×5,
+Not part of the main 60-project ecosystem checklist (own README×7,
 CHANGELOG.md, license files, etc.) - this is an internal sub-project of
 HYDRA-UMC-SERVER, the same relationship STUDIO's own `src/components/`
 files have to STUDIO itself, just split into its own directory/build
@@ -40,7 +40,8 @@ because it's served from a different URL prefix (`/admin`) than STUDIO
 ## Scope note: English only
 
 Unlike every other UI in this ecosystem (which ships English + Spanish +
-French + Italian + German), this admin panel is English-only for now.
+French + Italian + German + Japanese + Chinese), this admin panel is
+English-only for now.
 This is a real gap, not an oversight silently left undocumented - it's a
 low-traffic internal tool (server administration, not day-to-day robot
 operation), so it was scoped down deliberately to ship the actual

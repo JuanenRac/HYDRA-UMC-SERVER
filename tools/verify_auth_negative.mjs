@@ -101,6 +101,15 @@ async function main() {
       assert.match(body.error, /No token provided/);
     }
 
+    // H031: GET /api/settings had NO auth middleware at all (confirmed live
+    // returning 200 to an anonymous request) - the loop above only ever
+    // exercised the POST (write) side of this route, so it never caught
+    // that the GET (read) side leaked the full settings payload, including
+    // every controller/robot/camera config, to any unauthenticated caller.
+    const anonymousGetSettings = await request(port, "/api/settings", { method: "GET" });
+    assert.equal(anonymousGetSettings.response.status, 401, "anonymous GET /api/settings must be rejected");
+    assert.match(anonymousGetSettings.body.error, /No token provided/);
+
     const invalid = await request(port, "/api/settings", {
       method: "POST",
       headers: { authorization: "Bearer definitely-not-a-valid-token" },
@@ -136,7 +145,36 @@ async function main() {
     });
     assert.equal(workFile.response.status, 200);
     assert.equal(workFile.body.success, true);
-    console.log("SERVER_AUTH_NEGATIVE=PASS anonymous=3 invalid-token=1 operator-denials=3 operator-work-write=1");
+
+    // H030: an exact-string check against req.path used to guard
+    // settings.json/users.json/etc. under express.static(dataPath) - real,
+    // unauthenticated bypasses confirmed live before the fix: a single
+    // percent-encoded character, a doubled leading slash, a case
+    // difference, and a literal or encoded "." segment all served the real
+    // file despite failing that naive string comparison (send()/
+    // express.static resolve paths differently than a plain req.path
+    // string-equality check does). Every variant below must now be
+    // refused (404), and the legitimate WORKS file just written above
+    // (same static mount, same dataPath root) must still be served
+    // normally - proving this is a targeted fix, not a blanket lockdown of
+    // the whole static mount.
+    for (const bypass of [
+      "/settings.json",
+      "/%73ettings.json",
+      "//settings.json",
+      "/Settings.json",
+      "/./settings.json",
+      "/%2e/settings.json",
+    ]) {
+      const { response } = await fetch(`http://127.0.0.1:${port}${bypass}`, { redirect: "manual" }).then((r) => ({ response: r }));
+      assert.equal(response.status, 404, `static bypass ${bypass} must not serve settings.json`);
+    }
+    const legitimateWorkFile = await fetch(`http://127.0.0.1:${port}/contract-check/operator.json`);
+    assert.equal(legitimateWorkFile.status, 200, "the H030 fix must not block legitimate WORKS file access");
+    const legitimateBody = await legitimateWorkFile.json();
+    assert.equal(legitimateBody.ok, true);
+
+    console.log("SERVER_AUTH_NEGATIVE=PASS anonymous=4 invalid-token=1 operator-denials=3 operator-work-write=1 static-bypass-blocked=6 static-legitimate=1");
   } finally {
     if (child && child.exitCode === null) {
       child.kill("SIGTERM");

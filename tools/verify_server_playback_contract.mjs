@@ -180,7 +180,7 @@ async function main() {
     const authorization = { authorization: `Bearer ${login.body.token}` };
 
     const currentRobot1 = async () => {
-      const s = await request(port, "/api/settings");
+      const s = await request(port, "/api/settings", { headers: authorization });
       return findRobot(s.body, 1);
     };
 
@@ -191,7 +191,7 @@ async function main() {
     assert.equal(emptyPlay.response.status, 200);
     await waitUntil(
       async () => {
-        const s = await request(port, "/api/settings");
+        const s = await request(port, "/api/settings", { headers: authorization });
         return findRobot(s.body, 2).playbackState.isPlaying === false;
       },
       { message: "robot 2 (no recorded points) must not stay in a playing state" },
@@ -293,7 +293,7 @@ async function main() {
     // instead of always halting regardless of the Repeat button's own
     // state (the real regression this covers: the engine used to ignore
     // playbackState.isLooping entirely).
-    const settingsBeforeLoop = await request(port, "/api/settings");
+    const settingsBeforeLoop = await request(port, "/api/settings", { headers: authorization });
     const loopSettings = settingsBeforeLoop.body;
     findRobot(loopSettings, 1).playbackState.isLooping = true;
     const saveLoop = await request(port, "/api/settings", {

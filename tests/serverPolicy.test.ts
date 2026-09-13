@@ -164,6 +164,20 @@ test("safeIdSegment", async (t) => {
   await t.test("truncates an absurdly long id to 128 characters", () => {
     assert.equal(safeIdSegment("a".repeat(500)).length, 128);
   });
+  await t.test("H032: neutralizes a bare '.' or '..' id, which the allowlist regex alone lets through unchanged", () => {
+    // "." is a deliberately allowed character (real ids use it), so an id
+    // of EXACTLY "." or ".." previously survived cleaning untouched -
+    // confirmed live to make getPointsPath() resolve outside its own
+    // points/ subdirectory (path.join(dataPath, "points", "..", ...) ===
+    // dataPath itself), letting a caller's own controllerId/robotId choose
+    // which file directly under data/ gets overwritten.
+    assert.equal(safeIdSegment(".."), "_");
+    assert.equal(safeIdSegment("."), "_");
+  });
+  await t.test("H032: still allows a real id that merely contains dots", () => {
+    assert.equal(safeIdSegment("192.168.0.10"), "192.168.0.10");
+    assert.equal(safeIdSegment("robot.1"), "robot.1");
+  });
 });
 
 test("slugify", async (t) => {

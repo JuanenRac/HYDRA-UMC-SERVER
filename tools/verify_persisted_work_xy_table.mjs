@@ -148,7 +148,7 @@ async function main() {
     const authorization = { authorization: `Bearer ${login.body.token}` };
 
     const currentRobot1 = async () => {
-      const s = await request(port, "/api/settings");
+      const s = await request(port, "/api/settings", { headers: authorization });
       return findRobot(s.body, 1);
     };
 
