@@ -29,6 +29,18 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.6.7] - Per-interface network traffic on the Supervisor endpoint
+
+- `GET /api/system/supervisor` now reports real cumulative RX/TX byte
+  counters per network interface (Wi-Fi, Ethernet), read straight from the
+  standard Linux sysfs statistics files - backend for STUDIO/SUITE's own
+  Supervisor panel data-flow graphs. Bluetooth has no equivalent sysfs
+  byte-counter and stays honestly `null` rather than an approximated
+  number. A host without a given interface (no onboard Wi-Fi, a non-Linux
+  dev machine) reports `null` for it, never a fabricated zero.
+- Add `tools/verify_supervisor_contract.mjs`: this endpoint had no test
+  coverage at all before this change.
+
 ## [0.6.6] - Static-file bypass, unauthenticated settings read, and points path traversal
 
 - Close a real bypass of the private-file block in front of `express.static(dataPath)`:
