@@ -367,11 +367,49 @@ function readRp1Temp(): number | null {
   }
 }
 
+// Cumulative RX/TX byte counters for one interface, straight from the
+// standard Linux sysfs statistics files - the kernel itself accumulates
+// these from the moment the interface is registered (effectively "since
+// boot" for wlan0/eth0 on a real CM5 deployment that never manually
+// resets its network stack) with no polling/sampling of our own needed,
+// same "real sysfs read, honest null on any other host" convention as
+// readInterfaceUp/readRp1Temp above. Returns null (not 0) when the
+// interface doesn't exist on this host at all - a genuinely absent
+// interface must never look like one that exists with zero traffic.
+function readInterfaceBytes(iface: string): { rxBytes: number; txBytes: number } | null {
+  try {
+    const rxBytes = parseInt(fs.readFileSync(`/sys/class/net/${iface}/statistics/rx_bytes`, "utf-8").trim(), 10);
+    const txBytes = parseInt(fs.readFileSync(`/sys/class/net/${iface}/statistics/tx_bytes`, "utf-8").trim(), 10);
+    if (!Number.isFinite(rxBytes) || !Number.isFinite(txBytes)) return null;
+    return { rxBytes, txBytes };
+  } catch {
+    return null; // interface doesn't exist on this host (no onboard Wi-Fi, non-Linux dev machine, ...)
+  }
+}
+
+// Real per-interface cumulative traffic for the Supervisor panel's data-flow
+// graphs (STUDIO/SUITE, "extras a discrecion" feature request) - only the
+// interfaces this host actually has get a real reading; the rest stay null
+// rather than a fabricated 0, matching readNetworkStatus()'s existing
+// wifi/ethernet/bluetooth presence checks. Bluetooth has no standard sysfs
+// byte-counter equivalent (unlike a real net_device, an hci controller
+// doesn't expose /sys/class/bluetooth/hciN/statistics/*) - reported as null
+// rather than approximated from some other signal, an honest gap tracked in
+// this repo's own CHANGELOG/backlog rather than silently guessed at.
+function readNetworkTraffic() {
+  return {
+    wifi: readInterfaceBytes("wlan0"),
+    ethernet: readInterfaceBytes("eth0"),
+    bluetooth: null as { rxBytes: number; txBytes: number } | null,
+  };
+}
+
 function readNetworkStatus() {
   return {
     wifi: readInterfaceUp("wlan0"),
     ethernet: readInterfaceUp("eth0"),
     bluetooth: readBluetoothUp(),
+    traffic: readNetworkTraffic(),
   };
 }
 
