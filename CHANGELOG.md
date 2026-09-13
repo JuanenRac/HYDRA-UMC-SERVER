@@ -29,6 +29,31 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.6.6] - Static-file bypass, unauthenticated settings read, and points path traversal
+
+- Close a real bypass of the private-file block in front of `express.static(dataPath)`:
+  a naive exact-string check against `req.path` did not match how `send`/
+  `express.static` themselves resolve a URL to a real file on disk, so a
+  percent-encoded character, a doubled leading slash, a case difference, or a
+  literal/encoded `.` segment could all still reach `settings.json`/`users.json`/etc.
+  Decode and normalize the path the same way `send` does, then compare only the
+  real, lowercased basename and top-level segment.
+- Require authentication on `GET /api/settings`, which previously had none at
+  all and returned the full settings payload (every controller/robot/camera
+  configuration) to any anonymous caller.
+- Reject a controller/robot id of exactly `.` or `..` in `safeIdSegment()`: `.`
+  is a deliberately allowed character in real ids, so that one specific value
+  survived the existing allowlist cleaning unchanged and let `getPointsPath()`
+  resolve outside its own `points/` subdirectory, choosing which file directly
+  under `data/` a points write would land on.
+- Add live regression coverage for all three: `tools/verify_auth_negative.mjs`
+  now exercises six real static-file bypass variants plus a legitimate file to
+  prove the fix is targeted, and an anonymous `GET /api/settings` check; unit
+  tests cover the `.`/`..` id case directly.
+- Correct two stale doc claims: the admin-ui README's own project/language
+  counts, and `docs/REMOTE_API.md`'s description of the optional same-origin
+  STUDIO-serving mode this server actually implements.
+
 ## [0.6.5]
 
 - Build version synchronized with `hydra-umc.project.json` and the repository-native version source.

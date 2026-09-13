@@ -147,7 +147,7 @@ async function main() {
     assert.equal(pause.response.status, 200);
     assert.equal(pause.body.affectedCount, 2);
 
-    let settings = await request(port, "/api/settings");
+    let settings = await request(port, "/api/settings", { headers: authorization });
     assert.equal(settings.response.status, 200);
     for (const id of [1, 2]) {
       const playback = findRobot(settings.body, id).playbackState;
@@ -163,7 +163,7 @@ async function main() {
     });
     assert.equal(vision.response.status, 200);
 
-    settings = await request(port, "/api/settings");
+    settings = await request(port, "/api/settings", { headers: authorization });
     const a1 = findRobot(settings.body, 1);
     assert.equal(a1.visionEnabled, false);
     assert.equal(a1.camera.connected, false, "embedded robot camera must not retain a stale enabled state");
@@ -181,7 +181,7 @@ async function main() {
     assert.equal(trajectory.response.status, 200);
     assert.equal(trajectory.body.affectedCount, 1, "a loaded Work must not overwrite a combined sibling");
 
-    settings = await request(port, "/api/settings");
+    settings = await request(port, "/api/settings", { headers: authorization });
     const trajectoryA1 = findRobot(settings.body, 1);
     const trajectoryA2 = findRobot(settings.body, 2);
     assert.deepEqual(trajectoryA1.recordedPoints, points, "Server must persist the selected Work before Play");
@@ -206,7 +206,7 @@ async function main() {
     });
     assert.equal(jogTable.response.status, 200);
 
-    settings = await request(port, "/api/settings");
+    settings = await request(port, "/api/settings", { headers: authorization });
     const jogA1 = findRobot(settings.body, 1);
     const jogA2 = findRobot(settings.body, 2);
     assert.equal(jogA1.xyTable.pos.x, 250, "the robot that actually has a table must move it");
@@ -223,13 +223,13 @@ async function main() {
       body: JSON.stringify({ command: "reset", params: { target: "xytable" } }),
     });
     assert.equal(resetTable.response.status, 200);
-    settings = await request(port, "/api/settings");
+    settings = await request(port, "/api/settings", { headers: authorization });
     const resetA2 = findRobot(settings.body, 2);
     assert.equal(resetA2.pos.tx, 77, "resetting robot 1's table must never touch robot 2's own world-placement pos.tx");
     assert.equal(resetA2.pos.ty, 88);
 
     // Custom vacuum footprints use ordinary settings, not a physical command.
-    settings = await request(port, "/api/settings");
+    settings = await request(port, "/api/settings", { headers: authorization });
     const otherRobot = structuredClone(findRobot(settings.body, 2));
     for (const width of [80, 165, 237, 500]) {
       const vacuumTable = { enabled: true, modelId: "232x217x15", customSize: true,
@@ -239,7 +239,7 @@ async function main() {
       const saved = await request(port, "/api/settings", { method: "POST", headers: authorization,
         body: JSON.stringify(settings.body) });
       assert.equal(saved.response.status, 200);
-      settings = await request(port, "/api/settings");
+      settings = await request(port, "/api/settings", { headers: authorization });
       assert.deepEqual(findRobot(settings.body, 1).vacuumTable, vacuumTable);
       assert.deepEqual(findRobot(settings.body, 2), otherRobot, "custom size must not affect another robot");
     }
@@ -251,7 +251,7 @@ async function main() {
       const saved = await request(port, "/api/settings", { method: "POST", headers: authorization,
         body: JSON.stringify(settings.body) });
       assert.equal(saved.response.status, 200);
-      settings = await request(port, "/api/settings");
+      settings = await request(port, "/api/settings", { headers: authorization });
       assert.deepEqual(findRobot(settings.body, 1).heatedBed, heatedBed);
       assert.deepEqual(findRobot(settings.body, 2), otherRobot);
     }
@@ -263,7 +263,7 @@ async function main() {
       findRobot(settings.body,1).rackSystem = rackSystem;
       const saved = await request(port,"/api/settings",{method:"POST",headers:authorization,body:JSON.stringify(settings.body)});
       assert.equal(saved.response.status,200);
-      settings=await request(port,"/api/settings");
+      settings=await request(port,"/api/settings",{headers:authorization});
       assert.deepEqual(findRobot(settings.body,1).rackSystem,rackSystem);
       assert.deepEqual(findRobot(settings.body,2),otherRobot);
     }

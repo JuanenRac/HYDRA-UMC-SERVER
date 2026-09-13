@@ -188,6 +188,21 @@ export function hi3510Action(pan: number, tilt: number, zoom: number): string | 
 export function safeIdSegment(id: unknown): string {
   const s = String(id ?? "");
   const cleaned = s.replace(/[^A-Za-z0-9._-]/g, "_");
+  // H032: `.` is a deliberately allowed character (real controller/robot
+  // ids use it), but that means an id of EXACTLY "." or ".." survives
+  // this cleaning untouched - getPointsPath() below joins this segment
+  // straight into a real filesystem path
+  // (path.join(dataPath, "points", safeIdSegment(controllerId), ...)),
+  // where ".." is a real, standard path-traversal token: an id of ".."
+  // makes that call resolve to `dataPath` itself instead of
+  // `dataPath/points`, letting a caller's own robotId choose exactly
+  // which file directly under `data/` (settings.json, users.json, ...)
+  // gets overwritten - confirmed live via path.join("/data", "points",
+  // "..", "settings.json") resolving to "/data/settings.json". A
+  // cleaned result of "." or ".." is replaced with the same safe
+  // fallback an empty id already gets, since neither is ever a real,
+  // meaningful controller/robot id.
+  if (cleaned === "." || cleaned === "..") return "_";
   return cleaned.length > 0 ? cleaned.slice(0, 128) : "_";
 }
 

@@ -68,9 +68,21 @@ single combined remote-access toggle.
 Everything here lives on this same HYDRA-UMC SERVER host:port (default
 `3000`) - one thing to discover, one port to open through a firewall,
 both the REST endpoints and the WebSocket share it. HYDRA-UMC STUDIO
-itself is a separate process/origin (see that project's own README for
-why) that talks to this same host:port like every other client below,
-not a special case served from the same process anymore.
+itself is a separate project/codebase (a pure Vite/React client, see
+that project's own README for why it was split out) that talks to this
+same host:port like every other client below - it does NOT require a
+separate process or origin to run. `build-frontend.sh`/`.bat` can build
+STUDIO's static assets into this server's own `public/` directory, and
+`src/server.ts` optionally serves them from `/` on this exact same
+host:port (see that file's own header comment and the
+`express.static(studioPublicPath)` mount) - the common "everything on
+the CM5, one origin" deployment `src/lib/apiBase.ts` on the STUDIO side
+already assumes by default. This is entirely optional: `public/` is
+gitignored and nothing here requires it to exist - a deployment that
+never runs `build-frontend` stays headless (this server serves 404s at
+`/` instead of a page) and STUDIO can still be hosted as its own
+separate process/origin exactly as described in its own README, talking
+to this API remotely like any other client.
 
 ## 1. Discovery: `GET /api/hydra-info`
 
