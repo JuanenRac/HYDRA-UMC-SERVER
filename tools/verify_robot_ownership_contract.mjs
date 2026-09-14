@@ -145,10 +145,29 @@ async function main() {
 
     // The operator claims the robot for real.
     const claim = await request(port, "/api/robot/1/claim", {
-      method: "POST", headers: operatorAuth, body: JSON.stringify({ ttlMs: 60000 }),
+      method: "POST", headers: operatorAuth, body: JSON.stringify({ ttlMs: 60000, reason: "starting a paint job" }),
     });
     assert.equal(claim.response.status, 200);
     assert.equal(claim.body.reservation.ownerUsername, OPERATOR.username);
+
+    // I03: a real transition history entry, not just the new reservation
+    // itself - who claimed it, what kind of transition, and the real
+    // reason the caller supplied.
+    assert.equal(claim.body.reservationHistory.length, 1, "the very first claim must record exactly one history entry");
+    assert.equal(claim.body.reservationHistory[0].action, "claimed");
+    assert.equal(claim.body.reservationHistory[0].byUsername, OPERATOR.username);
+    assert.equal(claim.body.reservationHistory[0].reason, "starting a paint job");
+    assert.equal(typeof claim.body.reservationHistory[0].at, "number");
+
+    // Re-claiming your own already-held robot is a real, distinct
+    // transition (a TTL renewal), not indistinguishable from a fresh claim.
+    const renewal = await request(port, "/api/robot/1/claim", {
+      method: "POST", headers: operatorAuth, body: JSON.stringify({ ttlMs: 60000 }),
+    });
+    assert.equal(renewal.response.status, 200);
+    assert.equal(renewal.body.reservationHistory.length, 2, "a renewal must append its own history entry");
+    assert.equal(renewal.body.reservationHistory[1].action, "renewed");
+    assert.equal(renewal.body.reservationHistory[1].byUsername, OPERATOR.username);
 
     // A DIFFERENT real, authenticated account (the admin) is now refused
     // a normal command on that same robot - this is the real regression
@@ -192,10 +211,18 @@ async function main() {
 
     // Admin can force-override an active claim held by someone else.
     const forcedClaim = await request(port, "/api/robot/1/claim", {
-      method: "POST", headers: adminAuth, body: JSON.stringify({ force: true }),
+      method: "POST", headers: adminAuth, body: JSON.stringify({ force: true, reason: "operator walked away" }),
     });
     assert.equal(forcedClaim.response.status, 200, "an admin with force:true must be able to override an active claim");
     assert.equal(forcedClaim.body.reservation.ownerUsername, ADMIN.username);
+
+    // I03: a forced override is its own real, distinct transition kind -
+    // never conflated with a plain "claimed" on an unclaimed robot.
+    const historyAfterForce = forcedClaim.body.reservationHistory;
+    const lastEntry = historyAfterForce[historyAfterForce.length - 1];
+    assert.equal(lastEntry.action, "force-claimed");
+    assert.equal(lastEntry.byUsername, ADMIN.username);
+    assert.equal(lastEntry.reason, "operator walked away");
 
     // The original operator is now the one refused (roles reversed).
     const nowBlocked = await request(port, "/api/robot/1/command", {
@@ -203,17 +230,29 @@ async function main() {
     });
     assert.equal(nowBlocked.response.status, 409, "the previous claim holder must now itself be blocked after a forced override");
 
-    // Release, then confirm the robot is genuinely free again.
-    const release = await request(port, "/api/robot/1/release", { method: "POST", headers: adminAuth, body: JSON.stringify({}) });
+    // Release, then confirm the robot is genuinely free again. Admin is
+    // the CURRENT holder at this point (from the forced claim above), so
+    // this is a real, ordinary self-release - "released", not
+    // "force-released".
+    const release = await request(port, "/api/robot/1/release", { method: "POST", headers: adminAuth, body: JSON.stringify({ reason: "job done" }) });
     assert.equal(release.response.status, 200);
+    const releaseEntry = release.body.reservationHistory[release.body.reservationHistory.length - 1];
+    assert.equal(releaseEntry.action, "released", "the current holder releasing their own active claim is a plain release");
+    assert.equal(releaseEntry.byUsername, ADMIN.username);
+    assert.equal(releaseEntry.reason, "job done");
+    const historyLengthAfterRelease = release.body.reservationHistory.length;
+
     const freeAgain = await request(port, "/api/robot/1/command", {
       method: "POST", headers: operatorAuth, body: JSON.stringify({ command: "play" }),
     });
     assert.equal(freeAgain.response.status, 200, "a released robot must accept a command from anyone authenticated again");
 
-    // Releasing an already-unclaimed robot is a safe, idempotent no-op.
+    // Releasing an already-unclaimed robot is a safe, idempotent no-op -
+    // and, since nothing was actually holding a claim, it must add no
+    // new history entry either (there is nothing real to record).
     const idempotentRelease = await request(port, "/api/robot/1/release", { method: "POST", headers: adminAuth, body: JSON.stringify({}) });
     assert.equal(idempotentRelease.response.status, 200, "releasing an already-unclaimed robot must succeed, not error");
+    assert.equal(idempotentRelease.body.reservationHistory.length, historyLengthAfterRelease, "releasing an already-unclaimed robot must not fabricate a history entry");
 
     // A real, expired claim (short TTL, waited out) never blocks a
     // command - an interruption in ownership must never look like a
@@ -228,7 +267,33 @@ async function main() {
     });
     assert.equal(afterExpiry.response.status, 200, "an expired claim must never block a command");
 
-    console.log("SERVER_ROBOT_OWNERSHIP_CONTRACT=PASS unclaimed=1 claim=1 blocked=1 stop_exception=1 own_command=1 contested_claim=1 non_owner_release=1 forced_override=1 release=1 idempotent_release=1 expiry=1");
+    // I03: a real lapsed reservation is recorded as "expired" (never
+    // silently overwritten with no trace) the moment a fresh claim
+    // supersedes it, distinct from an explicit release by its own holder.
+    const claimAfterExpiry = await request(port, "/api/robot/1/claim", {
+      method: "POST", headers: adminAuth, body: JSON.stringify({}),
+    });
+    assert.equal(claimAfterExpiry.response.status, 200);
+    const historyAfterExpiry = claimAfterExpiry.body.reservationHistory;
+    const expiredEntry = historyAfterExpiry[historyAfterExpiry.length - 2];
+    const claimedEntry = historyAfterExpiry[historyAfterExpiry.length - 1];
+    assert.equal(expiredEntry.action, "expired", "a lapsed claim must be recorded as expired, not silently dropped");
+    assert.equal(expiredEntry.byUsername, OPERATOR.username, "the expired entry names the operator whose claim actually lapsed");
+    assert.equal(claimedEntry.action, "claimed");
+    assert.equal(claimedEntry.byUsername, ADMIN.username);
+
+    // The bounded history never grows without limit - real production use
+    // (a robot claimed/released many times over its life) must not leak
+    // memory or bloat settings.json forever.
+    for (let i = 0; i < 25; i++) {
+      await request(port, "/api/robot/1/claim", { method: "POST", headers: adminAuth, body: JSON.stringify({}) });
+      await request(port, "/api/robot/1/release", { method: "POST", headers: adminAuth, body: JSON.stringify({}) });
+    }
+    const finalSettings = await request(port, "/api/settings", { headers: adminAuth });
+    const finalHistory = findRobot(finalSettings.body, 1).reservationHistory;
+    assert.equal(finalHistory.length, 20, "reservationHistory must stay bounded to its documented cap, not grow forever");
+
+    console.log("SERVER_ROBOT_OWNERSHIP_CONTRACT=PASS unclaimed=1 claim=1 blocked=1 stop_exception=1 own_command=1 contested_claim=1 non_owner_release=1 forced_override=1 release=1 idempotent_release=1 expiry=1 reservation_history=6");
   } finally {
     if (child) {
       child.kill();

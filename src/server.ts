@@ -2190,6 +2190,35 @@ async function startServer() {
     return !!reservation && typeof reservation.expiresAt === "number" && reservation.expiresAt > Date.now();
   }
 
+  // I03: `robot.reservation` itself only ever held the CURRENT state -
+  // overwritten by every claim/release with no trace of who changed it,
+  // when, or why. reservationHistory is a real, bounded (last
+  // RESERVATION_HISTORY_MAX_ENTRIES) append-only log living on the same
+  // robot object, so it round-trips through the exact same persistence/
+  // broadcast machinery `reservation` already does - no separate
+  // endpoint or storage needed to read it back.
+  const RESERVATION_HISTORY_MAX_ENTRIES = 20;
+
+  function appendReservationHistory(
+    robot: any,
+    action: "claimed" | "renewed" | "force-claimed" | "released" | "force-released" | "expired",
+    byUserId: unknown,
+    byUsername: unknown,
+    reason?: string,
+  ) {
+    if (!Array.isArray(robot.reservationHistory)) robot.reservationHistory = [];
+    robot.reservationHistory.push({
+      at: Date.now(),
+      action,
+      byUserId,
+      byUsername,
+      ...(reason ? { reason } : {}),
+    });
+    if (robot.reservationHistory.length > RESERVATION_HISTORY_MAX_ENTRIES) {
+      robot.reservationHistory.splice(0, robot.reservationHistory.length - RESERVATION_HISTORY_MAX_ENTRIES);
+    }
+  }
+
   function stopServerPlayback(robotId: number) {
     const timer = playbackTimers.get(robotId);
     if (timer) {
@@ -3260,11 +3289,37 @@ async function startServer() {
     const requestedTtlMs = typeof req.body?.ttlMs === "number" ? req.body.ttlMs : DEFAULT_RESERVATION_TTL_MS;
     const ttlMs = Math.min(Math.max(requestedTtlMs, 1000), MAX_RESERVATION_TTL_MS);
     const force = req.body?.force === true;
+    // I03: an optional, real reason recorded alongside who/when - never
+    // required (every existing caller that never sends one still works
+    // exactly as before), capped so one caller can't grow the bounded
+    // history's stored payload unreasonably.
+    const reason = typeof req.body?.reason === "string" && req.body.reason.trim() ? req.body.reason.trim().slice(0, 200) : undefined;
 
     const existing = robot.reservation;
     const heldByAnother = isReservationActive(existing) && existing.ownerId !== user.id;
     if (heldByAnother && !(force && user.role === "admin")) {
       return res.status(409).json({ error: `robot is already claimed by ${existing.ownerUsername}`, reservation: existing });
+    }
+
+    // I03: which kind of transition this really is depends on the
+    // PREVIOUS state, not just the new claim being written below.
+    let action: "claimed" | "renewed" | "force-claimed";
+    if (heldByAnother) {
+      // Only reachable via the admin force-override path above - someone
+      // else's still-active claim is being forcibly superseded.
+      action = "force-claimed";
+    } else if (isReservationActive(existing) && existing.ownerId === user.id) {
+      action = "renewed";
+    } else {
+      // No active claim right now - either genuinely never claimed, or a
+      // previous one lapsed unnoticed. Record that lapse explicitly
+      // before it's overwritten below, so the history can tell "nobody
+      // ever claimed this" apart from "someone had it and let it expire",
+      // not just show a fresh claim appearing out of nowhere.
+      if (existing && !isReservationActive(existing)) {
+        appendReservationHistory(robot, "expired", existing.ownerId, existing.ownerUsername);
+      }
+      action = "claimed";
     }
 
     robot.reservation = {
@@ -3273,12 +3328,16 @@ async function startServer() {
       claimedAt: Date.now(),
       expiresAt: Date.now() + ttlMs,
     };
+    appendReservationHistory(robot, action, user.id, user.username, reason);
     const controllerId = findControllerIdForRobot(robotId);
     await queueSettingsWrite(lastKnownSettings);
     if (controllerId) {
-      broadcastRobotDelta([{ controllerId, robotId, patch: { reservation: robot.reservation } }], lastKnownSettings);
+      broadcastRobotDelta(
+        [{ controllerId, robotId, patch: { reservation: robot.reservation, reservationHistory: robot.reservationHistory } }],
+        lastKnownSettings,
+      );
     }
-    res.json({ success: true, reservation: robot.reservation });
+    res.json({ success: true, reservation: robot.reservation, reservationHistory: robot.reservationHistory });
   });
 
   // P06: release a claim - only the current holder or an admin may do
@@ -3296,13 +3355,33 @@ async function startServer() {
     if (isReservationActive(robot.reservation) && robot.reservation.ownerId !== user.id && user.role !== "admin") {
       return res.status(409).json({ error: `robot is claimed by ${robot.reservation.ownerUsername}`, reservation: robot.reservation });
     }
+    const reason = typeof req.body?.reason === "string" && req.body.reason.trim() ? req.body.reason.trim().slice(0, 200) : undefined;
+    if (robot.reservation) {
+      if (isReservationActive(robot.reservation)) {
+        // I03: a real active claim is genuinely being released here -
+        // distinguish the holder releasing their own claim from an admin
+        // force-releasing someone else's, same real distinction claim
+        // already makes for "claimed" vs "force-claimed".
+        const releasedByOwner = robot.reservation.ownerId === user.id;
+        appendReservationHistory(robot, releasedByOwner ? "released" : "force-released", user.id, user.username, reason);
+      } else {
+        // Idempotent cleanup of an already-lapsed reservation - nobody's
+        // active claim was actually released, so this is really the same
+        // "expired" transition claim's own lazy-expiry detection records,
+        // not a new released/force-released event.
+        appendReservationHistory(robot, "expired", robot.reservation.ownerId, robot.reservation.ownerUsername);
+      }
+    }
     robot.reservation = null;
     const controllerId = findControllerIdForRobot(robotId);
     await queueSettingsWrite(lastKnownSettings);
     if (controllerId) {
-      broadcastRobotDelta([{ controllerId, robotId, patch: { reservation: null } }], lastKnownSettings);
+      broadcastRobotDelta(
+        [{ controllerId, robotId, patch: { reservation: null, reservationHistory: robot.reservationHistory } }],
+        lastKnownSettings,
+      );
     }
-    res.json({ success: true });
+    res.json({ success: true, reservationHistory: robot.reservationHistory });
   });
 
   // Real proxy to HYDRA-UMC-VISION-STREAMER's own real MJPEG capture+serve

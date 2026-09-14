@@ -275,10 +275,10 @@ a separate one.
   persists/broadcasts both the trajectory and its selected source; it
   deliberately does not replace a combined robot's independent Work.
 
-- `POST /api/robot/:id/claim` (body: `{ "ttlMs"?: number, "force"?: boolean }`,
+- `POST /api/robot/:id/claim` (body: `{ "ttlMs"?: number, "force"?: boolean, "reason"?: string }`,
   default `ttlMs` 5 minutes, capped at 30) and `POST /api/robot/:id/release`
-  (body: `{}`) give one authenticated **account** (never a per-tab/
-  per-device identity - this server has no concept of one) real,
+  (body: `{ "reason"?: string }`) give one authenticated **account** (never
+  a per-tab/per-device identity - this server has no concept of one) real,
   TTL-bounded exclusive command ownership of a robot. Once claimed,
   `POST /api/robot/:id/command` from a *different* account is rejected
   `409` (with the current `reservation` in the body) for every command
@@ -295,6 +295,19 @@ a separate one.
   `null`) is a real field on the robot object itself, so it round-trips
   through the same `GET /api/settings` response and WebSocket delta
   every other robot field already does - no separate endpoint to poll.
+
+  I03: every real transition also appends to `reservationHistory`, a
+  bounded (last 20) array living on the same robot object, also returned
+  directly by `claim`/`release` and broadcast in their own delta - so a
+  client never has to poll settings separately to see it. Each entry is
+  `{ at, action, byUserId, byUsername, reason? }`, where `action` is one
+  of `"claimed"`, `"renewed"` (re-claiming your own already-held robot),
+  `"force-claimed"`, `"released"`, `"force-released"`, or `"expired"`
+  (a claim that lapsed on its own, recorded the moment it's superseded by
+  a fresh claim or lazily released) - so an operator can tell *why*
+  ownership changed, not just that it did. The optional `reason` on
+  `claim`/`release` (trimmed, capped at 200 characters) is carried
+  straight into its own history entry when supplied.
 
 **Race condition to know about:** two clients (a browser tab and SUITE, or
 two SUITE instances) that both read, then both write moments apart, can
