@@ -29,7 +29,7 @@ a change is actually worth summarizing for a human.
 
 ---
 
-## [Unreleased]
+## [0.6.9] - Robot command setpoint warnings + claim transition history (I01/I03)
 
 - **I01: `POST /api/robot/:id/command`'s `"speed"` case now records a
   rejected setpoint instead of silently discarding it.** A `speed`/
@@ -42,6 +42,22 @@ a change is actually worth summarizing for a human.
   omitted entirely on a normal request, so an existing caller that only
   reads `success` sees the exact same response shape as before. 4 new
   assertions in `tools/verify_robot_command_contract.mjs`.
+
+- **I03: a real transition history for robot claims (`reservationHistory`).**
+  `robot.reservation` only ever held the current claim, overwritten by
+  every claim/release with no trace of who changed it, when, or why. A
+  new, bounded (last 20) `reservationHistory` array on the same robot
+  object now records every real transition -
+  `"claimed"`/`"renewed"`/`"force-claimed"`/`"released"`/
+  `"force-released"`/`"expired"` - each with `at`/`byUserId`/
+  `byUsername` and an optional caller-supplied `reason` (`claim`/
+  `release` both accept one now, trimmed and capped at 200 characters).
+  A lapsed claim is recorded as `"expired"` the moment it's superseded
+  by a fresh claim or lazily released, instead of silently vanishing.
+  Returned directly by `claim`/`release` and broadcast in their own
+  delta, so no separate endpoint or polling is needed. 6 new assertions
+  in `tools/verify_robot_ownership_contract.mjs`, including the bounded
+  cap under 25 real claim/release cycles. `docs/REMOTE_API.md` updated.
 
 ## [0.6.8] - Real sustained WebSocket reconnect coverage (T04/A.5)
 
