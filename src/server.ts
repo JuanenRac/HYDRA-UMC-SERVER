@@ -2879,6 +2879,15 @@ async function startServer() {
     // small targeted patch instead of the full tree.
     const deltas: { controllerId: string; robotId: number; patch: Record<string, unknown>; cameraId?: number; cameraPatch?: Record<string, unknown> }[] = [];
 
+    // I01: real, per-robot record of a setpoint this command tried to
+    // apply but couldn't because it fell outside a documented limit - see
+    // the "speed" case below. Never affects `success`/affectedCount (this
+    // is about a still-valid request where one field's value was
+    // rejected, not about the request itself failing); a caller that
+    // never reads this new field sees the exact same response shape as
+    // before.
+    const warnings: { robotId: number; field: string; requested: unknown; message: string }[] = [];
+
     lastKnownSettings.controllers.forEach((controller: any) => {
       controller.robots?.forEach((robot: any) => {
         if (affectedIds.includes(robot.id)) {
@@ -3120,15 +3129,41 @@ async function startServer() {
               // step (AUDITORIA_COMPLETA_44_PROYECTOS.txt #6).
               const validSpeedField = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v >= 10 && v <= 500;
               let touched = false;
-              if (validSpeedField(params?.speed)) {
-                if (!robot.playbackState) robot.playbackState = { isPlaying: false, activeStep: 0, speed: 100 };
-                robot.playbackState.speed = params.speed;
-                touched = true;
+              // I01: a rejected setpoint used to be indistinguishable from
+              // one that was simply never sent - the response's own
+              // `success: true` never said WHY playbackState.speed/
+              // acceleration didn't change, so an out-of-range value from
+              // a buggy client (or a future STUDIO range that drifts out of
+              // sync with this endpoint's own 10-500) looked identical to a
+              // real success. `warnings` records the real clip reason per
+              // robot instead of discarding it.
+              if (params?.speed !== undefined) {
+                if (validSpeedField(params.speed)) {
+                  if (!robot.playbackState) robot.playbackState = { isPlaying: false, activeStep: 0, speed: 100 };
+                  robot.playbackState.speed = params.speed;
+                  touched = true;
+                } else {
+                  warnings.push({
+                    robotId: robot.id,
+                    field: "speed",
+                    requested: params.speed,
+                    message: `speed ${JSON.stringify(params.speed)} is outside the allowed range (10-500) - setpoint was not applied`,
+                  });
+                }
               }
-              if (validSpeedField(params?.acceleration)) {
-                if (!robot.playbackState) robot.playbackState = { isPlaying: false, activeStep: 0, speed: 100 };
-                robot.playbackState.acceleration = params.acceleration;
-                touched = true;
+              if (params?.acceleration !== undefined) {
+                if (validSpeedField(params.acceleration)) {
+                  if (!robot.playbackState) robot.playbackState = { isPlaying: false, activeStep: 0, speed: 100 };
+                  robot.playbackState.acceleration = params.acceleration;
+                  touched = true;
+                } else {
+                  warnings.push({
+                    robotId: robot.id,
+                    field: "acceleration",
+                    requested: params.acceleration,
+                    message: `acceleration ${JSON.stringify(params.acceleration)} is outside the allowed range (10-500) - setpoint was not applied`,
+                  });
+                }
               }
               if (touched) patch = { playbackState: robot.playbackState };
               break;
@@ -3199,7 +3234,11 @@ async function startServer() {
 
     await queueSettingsWrite(lastKnownSettings);
     broadcastRobotDelta(deltas, lastKnownSettings);
-    res.json({ success: true, affectedCount: affectedIds.length });
+    res.json({
+      success: true,
+      affectedCount: affectedIds.length,
+      ...(warnings.length ? { warnings } : {}),
+    });
   });
 
   // P06: claim exclusive command ownership of a robot. Real rules:

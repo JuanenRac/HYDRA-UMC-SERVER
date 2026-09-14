@@ -169,6 +169,57 @@ async function main() {
     assert.equal(a1.camera.connected, false, "embedded robot camera must not retain a stale enabled state");
     assert.equal(settings.body.controllers[0].cameras[0].connected, false, "controller camera must match its robot command");
 
+    // I01: a rejected speed/acceleration setpoint (outside the 10-500
+    // range STUDIO's own sliders enforce) used to be silently discarded -
+    // `success: true` never said whether the value actually applied.
+    const validSpeed = await request(port, "/api/robot/1/command", {
+      method: "POST",
+      headers: authorization,
+      body: JSON.stringify({ command: "speed", params: { speed: 250 } }),
+    });
+    assert.equal(validSpeed.response.status, 200);
+    assert.equal(validSpeed.body.warnings, undefined, "a real, in-range setpoint must never produce a warning");
+
+    settings = await request(port, "/api/settings", { headers: authorization });
+    assert.equal(findRobot(settings.body, 1).playbackState.speed, 250, "a valid speed must still apply as before");
+
+    // Robot 1 is combined with robot 2 (combinedWith: [2]), so a rejected
+    // speed fans out to both real affected robots - one warning each,
+    // never silently merged into one.
+    const outOfRangeSpeed = await request(port, "/api/robot/1/command", {
+      method: "POST",
+      headers: authorization,
+      body: JSON.stringify({ command: "speed", params: { speed: 9999 } }),
+    });
+    assert.equal(outOfRangeSpeed.response.status, 200, "an out-of-range setpoint is a warning, not a request failure");
+    assert.equal(outOfRangeSpeed.body.success, true);
+    assert.equal(outOfRangeSpeed.body.warnings?.length, 2, "the clipped setpoint must be recorded for every affected robot, not silently dropped");
+    assert.deepEqual(outOfRangeSpeed.body.warnings.map((w) => w.robotId).sort(), [1, 2]);
+    for (const warning of outOfRangeSpeed.body.warnings) {
+      assert.equal(warning.field, "speed");
+      assert.equal(warning.requested, 9999);
+    }
+
+    settings = await request(port, "/api/settings", { headers: authorization });
+    assert.equal(findRobot(settings.body, 1).playbackState.speed, 250, "a rejected setpoint must never overwrite the last valid one");
+
+    // A mixed request (one valid field, one rejected) must still apply the
+    // valid field AND report the rejected one - neither side silently wins.
+    const mixedFields = await request(port, "/api/robot/1/command", {
+      method: "POST",
+      headers: authorization,
+      body: JSON.stringify({ command: "speed", params: { speed: 300, acceleration: -5 } }),
+    });
+    assert.equal(mixedFields.response.status, 200);
+    assert.equal(mixedFields.body.warnings?.length, 2, "one acceleration warning per affected combined robot");
+    for (const warning of mixedFields.body.warnings) {
+      assert.equal(warning.field, "acceleration");
+      assert.equal(warning.requested, -5);
+    }
+
+    settings = await request(port, "/api/settings", { headers: authorization });
+    assert.equal(findRobot(settings.body, 1).playbackState.speed, 300, "the valid field in a mixed request must still apply");
+
     const points = [
       { motionType: "model-joints", j1: -10, j2: -25, j3: 20, j4: 0, j5: 0, j6: 0, x: 190, y: -30, z: 10 },
       { motionType: "model-joints", j1: 10, j2: -20, j3: 25, j4: 0, j5: 0, j6: 0, x: 190, y: 30, z: 10 },
@@ -267,7 +318,7 @@ async function main() {
       assert.deepEqual(findRobot(settings.body,1).rackSystem,rackSystem);
       assert.deepEqual(findRobot(settings.body,2),otherRobot);
     }
-    console.log("SERVER_ROBOT_COMMAND_CONTRACT=PASS combined-pause=2 camera-state=3 trajectory-sync=5 xytable-ownership=2 vacuum-custom-size=4 heated-bed=5 rack=3");
+    console.log("SERVER_ROBOT_COMMAND_CONTRACT=PASS combined-pause=2 camera-state=3 speed-setpoint-warnings=4 trajectory-sync=5 xytable-ownership=2 vacuum-custom-size=4 heated-bed=5 rack=3");
   } finally {
     if (child && child.exitCode === null) {
       child.kill("SIGTERM");
