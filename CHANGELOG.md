@@ -29,6 +29,20 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [Unreleased]
+
+- **I01: `POST /api/robot/:id/command`'s `"speed"` case now records a
+  rejected setpoint instead of silently discarding it.** A `speed`/
+  `acceleration` value outside the allowed 10-500 range was simply
+  dropped, with `success: true` returned regardless - the caller had no
+  way to tell "your setpoint was applied" from "your setpoint was
+  clipped and nothing changed". The response now includes a `warnings`
+  array (one entry per affected robot whose value was rejected, with
+  `field`/`requested`/a human-readable `message`) whenever this happens;
+  omitted entirely on a normal request, so an existing caller that only
+  reads `success` sees the exact same response shape as before. 4 new
+  assertions in `tools/verify_robot_command_contract.mjs`.
+
 ## [0.6.8] - Real sustained WebSocket reconnect coverage (T04/A.5)
 
 - New `tools/verify_ws_sustained_reconnect_contract.mjs`: 50 real
