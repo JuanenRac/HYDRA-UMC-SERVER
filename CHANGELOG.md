@@ -29,6 +29,22 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.6.8] - Real sustained WebSocket reconnect coverage (T04/A.5)
+
+- New `tools/verify_ws_sustained_reconnect_contract.mjs`: 50 real
+  connect/disconnect cycles against one running server, scraping the
+  real `GET /metrics` `hydra_ws_clients_connected` gauge after every
+  single cycle to prove it returns to exactly 0 each time - every other
+  WS-related check in this repo only ever opens one or two real
+  connections. Proves the 4 real `wsClients.delete()` call sites in
+  `server.ts` never leak a stale reference across a long session, and
+  that the server itself stays healthy after the sustained churn.
+  Confirmed to fail against a deliberately disabled `close` handler,
+  restored before committing.
+- 104 unit tests + 19 end-to-end contract scripts (up from 18) all pass
+  via `npm run test`; `tsc --noEmit` clean. Synced across all 7 README
+  languages.
+
 ## [0.6.7] - Per-interface network traffic on the Supervisor endpoint
 
 - `GET /api/system/supervisor` now reports real cumulative RX/TX byte
