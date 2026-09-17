@@ -2989,13 +2989,12 @@ async function startServer() {
               // never actually matched that assumption itself. Harmless
               // while every client trusted only its own optimistic
               // mutation and never round-tripped this value back from here,
-              // but a real bug once a client (see
-              // DISEÑO_SYNC_DELTAS.txt) starts treating this endpoint's own
-              // patch as authoritative: without this, a robot that
-              // finished a job once, then gets manually stopped after
-              // being replayed, could show a stale "completed successfully"
-              // notification/badge again once this patch's own isFinished
-              // (silently still true) lands.
+              // but a real bug once a client starts treating this
+              // endpoint's own patch as authoritative: without this, a
+              // robot that finished a job once, then gets manually stopped
+              // after being replayed, could show a stale "completed
+              // successfully" notification/badge again once this patch's
+              // own isFinished (silently still true) lands.
               robot.playbackState = { ...robot.playbackState, isPlaying: false, playing: false, activeStep: -1, isPaused: false, paused: false, requestPause: false, requestStop: true, isFinished: false, finished: false };
               patch = { playbackState: robot.playbackState };
               // Stops this robot's own V0 server-side playback timer (see
@@ -3209,7 +3208,7 @@ async function startServer() {
               // this fix) let a caller push NaN/Infinity/a negative value
               // straight into playbackState.speed, from where it feeds the
               // real motion-profile math on every subsequent jog/playback
-              // step (AUDITORIA_COMPLETA_44_PROYECTOS.txt #6).
+              // step.
               const validSpeedField = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v >= 10 && v <= 500;
               let touched = false;
               // I01: a rejected setpoint used to be indistinguishable from
@@ -3724,6 +3723,207 @@ async function startServer() {
       const message = error instanceof Error ? error.message : String(error);
       industrialLog(`[ADMIN] systemctl ${action} ${unit} failed: ${message}`);
       res.status(503).json({ error: `systemctl ${action} ${unit} failed - see this server's own logs for the real reason (commonly: the polkit rule above isn't installed on this host, or systemctl itself is unavailable).` });
+    }
+  });
+
+  // ---------------------------------------------------------------------
+  // Real Bluetooth pairing (Config > Bluetooth in STUDIO) - scans for and
+  // pairs a real Bluetooth gamepad (or any other device) directly to this
+  // device's own adapter, without SSH. Every call here shells out to the
+  // real `bluetoothctl` CLI (execFile, no shell) against this host's real
+  // BlueZ daemon. Unlike the systemctl-backed endpoints above, this needs
+  // NO polkit rule: this device's own stock
+  // /usr/share/dbus-1/system.d/bluetooth.conf (Debian/Raspberry Pi OS's
+  // own default BlueZ policy) already allows any local user to talk to
+  // org.bluez, so this runs fine as hydra-umc-server's own unprivileged,
+  // NoNewPrivileges account.
+  //
+  // Real gap found pairing a physical Xbox controller against this exact
+  // device: BlueZ's own default ClassicBondedOnly=true
+  // (profiles/input/device.c) refuses the HID connection for a device
+  // that bonds over LE rather than classic BR/EDR on this hardware
+  // (Broadcom BCM4345C0) - `pair`/`trust` both genuinely succeed, but the
+  // device is stuck at Paired=yes/Bonded=no forever and never becomes a
+  // real /dev/input device. HYDRA-UMC-OS's own provisioning/first_boot.sh
+  // sets ClassicBondedOnly=false for exactly this reason - a host
+  // provisioned before that fix landed will still hit it here, which is
+  // why POST /pair's own error response below names the real fix instead
+  // of a generic failure message.
+  const BLUETOOTH_SCAN_TIMEOUT_S = 10;
+  const BLUETOOTH_ACTION_TIMEOUT_MS = 20000;
+  const BLUETOOTH_MAC_RE = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/;
+
+  interface BluetoothDeviceInfo {
+    mac: string;
+    name: string;
+    icon: string | null;
+    paired: boolean;
+    bonded: boolean;
+    connected: boolean;
+    trusted: boolean;
+  }
+
+  function parseBluetoothctlInfo(output: string): Partial<BluetoothDeviceInfo> {
+    const field = (label: string): string | undefined => {
+      const match = output.match(new RegExp(`^\\s*${label}:\\s*(.+)$`, "m"));
+      return match ? match[1].trim() : undefined;
+    };
+    return {
+      name: field("Name") ?? field("Alias"),
+      icon: field("Icon") ?? null,
+      paired: field("Paired") === "yes",
+      bonded: field("Bonded") === "yes",
+      connected: field("Connected") === "yes",
+      trusted: field("Trusted") === "yes",
+    };
+  }
+
+  // `bluetoothctl devices` lists every device BlueZ currently remembers
+  // (paired or merely seen during the last scan); `info` per-MAC is the
+  // only source for the real paired/bonded/connected/trusted flags -
+  // there is no bulk-info bluetoothctl subcommand. A device that vanished
+  // between the two calls (moved out of range) is just skipped, not a
+  // real error worth failing the whole list over.
+  async function listBluetoothDevices(): Promise<BluetoothDeviceInfo[]> {
+    const { stdout } = await execFileAsync("bluetoothctl", ["devices"], { timeout: BLUETOOTH_ACTION_TIMEOUT_MS });
+    const seen = [...stdout.matchAll(/^Device ([0-9A-Fa-f:]{17})\s+(.*)$/gm)].map((m) => ({
+      mac: m[1],
+      fallbackName: m[2].trim(),
+    }));
+    const devices: BluetoothDeviceInfo[] = [];
+    for (const { mac, fallbackName } of seen) {
+      try {
+        const { stdout: info } = await execFileAsync("bluetoothctl", ["info", mac], { timeout: BLUETOOTH_ACTION_TIMEOUT_MS });
+        const parsed = parseBluetoothctlInfo(info);
+        devices.push({
+          mac,
+          name: parsed.name || fallbackName || mac,
+          icon: parsed.icon ?? null,
+          paired: parsed.paired ?? false,
+          bonded: parsed.bonded ?? false,
+          connected: parsed.connected ?? false,
+          trusted: parsed.trusted ?? false,
+        });
+      } catch {
+        continue;
+      }
+    }
+    return devices;
+  }
+
+  app.get("/api/system/bluetooth/status", authenticate, requireAdmin, async (req, res) => {
+    try {
+      const { stdout } = await execFileAsync("bluetoothctl", ["show"], { timeout: BLUETOOTH_ACTION_TIMEOUT_MS });
+      res.json({
+        available: true,
+        powered: /Powered:\s*yes/.test(stdout),
+        discovering: /Discovering:\s*yes/.test(stdout),
+        devices: await listBluetoothDevices(),
+      });
+    } catch {
+      res.status(503).json({
+        available: false,
+        error: "Bluetooth is not available on this device (bluetoothctl failed - no adapter, or bluetoothd is not running).",
+      });
+    }
+  });
+
+  app.post("/api/system/bluetooth/power", authenticate, requireAdmin, async (req, res) => {
+    const { on } = req.body || {};
+    if (typeof on !== "boolean") return res.status(400).json({ error: "on must be a boolean" });
+    try {
+      await execFileAsync("bluetoothctl", ["power", on ? "on" : "off"], { timeout: BLUETOOTH_ACTION_TIMEOUT_MS });
+      industrialLog(`[ADMIN] Bluetooth powered ${on ? "on" : "off"} via Config.`);
+      res.json({ success: true });
+    } catch {
+      res.status(503).json({ error: "Could not change the Bluetooth power state - see this server's own logs." });
+    }
+  });
+
+  app.post("/api/system/bluetooth/scan", authenticate, requireAdmin, async (req, res) => {
+    try {
+      // bluetoothctl's own non-interactive one-shot form: runs real
+      // discovery for exactly this many seconds, then exits on its own -
+      // no persistent session/agent bookkeeping needed on this side.
+      await execFileAsync("bluetoothctl", ["--timeout", String(BLUETOOTH_SCAN_TIMEOUT_S), "scan", "on"], {
+        timeout: (BLUETOOTH_SCAN_TIMEOUT_S + 5) * 1000,
+      });
+      const devices = await listBluetoothDevices();
+      industrialLog(`[ADMIN] Bluetooth scan requested via Config - found ${devices.length} device(s).`);
+      res.json({ success: true, devices });
+    } catch {
+      res.status(503).json({ error: "Bluetooth scan failed - see this server's own logs for the real reason." });
+    }
+  });
+
+  app.post("/api/system/bluetooth/pair", authenticate, requireAdmin, async (req, res) => {
+    const { mac } = req.body || {};
+    if (typeof mac !== "string" || !BLUETOOTH_MAC_RE.test(mac)) {
+      return res.status(400).json({ error: "mac must be a real Bluetooth MAC address (AA:BB:CC:DD:EE:FF)" });
+    }
+    try {
+      // Real, sequential handshake, same order proven live against a
+      // physical Xbox controller: pair (creates the real link key/bond),
+      // trust (so it reconnects on its own next time it powers on in
+      // range), connect (opens the HID/profile connection right now
+      // instead of waiting for the device's own next reconnect attempt).
+      await execFileAsync("bluetoothctl", ["pair", mac], { timeout: BLUETOOTH_ACTION_TIMEOUT_MS });
+      await execFileAsync("bluetoothctl", ["trust", mac], { timeout: BLUETOOTH_ACTION_TIMEOUT_MS });
+      try {
+        await execFileAsync("bluetoothctl", ["connect", mac], { timeout: BLUETOOTH_ACTION_TIMEOUT_MS });
+      } catch {
+        // Pairing/trusting already succeeded even if this immediate
+        // connect attempt didn't - a trusted device reconnects on its own
+        // once it's actually powered on and in range, so this alone is
+        // not a real failure of pairing itself.
+      }
+      const { stdout: info } = await execFileAsync("bluetoothctl", ["info", mac], { timeout: BLUETOOTH_ACTION_TIMEOUT_MS });
+      const parsed = parseBluetoothctlInfo(info);
+      industrialLog(
+        `[ADMIN] Bluetooth pair requested via Config for ${mac} (${parsed.name ?? "unknown"}) - paired=${parsed.paired} bonded=${parsed.bonded}.`,
+      );
+      if (parsed.paired && !parsed.bonded) {
+        // The exact real symptom of the ClassicBondedOnly=true gap this
+        // section's own header comment documents - name the real fix
+        // instead of a generic failure, since "paired but not bonded" on
+        // its own looks like success at a glance.
+        return res.status(503).json({
+          error:
+            `${parsed.name ?? mac} paired but did not bond - this device likely still has BlueZ's default ` +
+            `ClassicBondedOnly=true (see /etc/bluetooth/input.conf; HYDRA-UMC-OS's own first_boot.sh sets it to ` +
+            `false). It will never appear as a usable input device until that is fixed and Bluetooth is restarted.`,
+          mac,
+          name: parsed.name ?? mac,
+          paired: true,
+          bonded: false,
+        });
+      }
+      res.json({
+        success: Boolean(parsed.paired),
+        mac,
+        name: parsed.name ?? mac,
+        paired: parsed.paired ?? false,
+        bonded: parsed.bonded ?? false,
+        connected: parsed.connected ?? false,
+      });
+    } catch {
+      res.status(503).json({
+        error: `Could not pair with ${mac} - it may be out of range or no longer in pairing mode. Scan again and retry.`,
+      });
+    }
+  });
+
+  app.post("/api/system/bluetooth/remove", authenticate, requireAdmin, async (req, res) => {
+    const { mac } = req.body || {};
+    if (typeof mac !== "string" || !BLUETOOTH_MAC_RE.test(mac)) {
+      return res.status(400).json({ error: "mac must be a real Bluetooth MAC address (AA:BB:CC:DD:EE:FF)" });
+    }
+    try {
+      await execFileAsync("bluetoothctl", ["remove", mac], { timeout: BLUETOOTH_ACTION_TIMEOUT_MS });
+      industrialLog(`[ADMIN] Bluetooth device ${mac} removed via Config.`);
+      res.json({ success: true });
+    } catch {
+      res.status(503).json({ error: `Could not remove ${mac} - see this server's own logs.` });
     }
   });
 
