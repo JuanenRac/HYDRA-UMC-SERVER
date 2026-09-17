@@ -2714,6 +2714,45 @@ async function startServer() {
     }
   });
 
+  // Real spoken "status" text for the voice assistant's own status intent -
+  // see this function's one real call site (POST /api/voice/turn) for why
+  // this exists at all. Reuses the exact same real sources
+  // GET /api/hydra-info (controller/robot counts) and
+  // GET /api/watch/system-status (CPU/memory/uptime) already read from -
+  // never a second, competing computation of either. `robotIdEntity`, when
+  // present ("status of robot N"), is answered honestly from this Server's
+  // own real registered-robot list - there is no real per-robot LIVE
+  // telemetry available at this relay step yet, so this never fabricates
+  // an online/offline claim for one, only whether it's actually registered.
+  async function buildVoiceStatusText(entities: unknown): Promise<string> {
+    const s = lastKnownSettings;
+    const controllers = Array.isArray(s?.controllers) ? s.controllers : [];
+    const controllerCount = controllers.length;
+    const robotCount = controllers.reduce(
+      (n: number, c: any) => n + (Array.isArray(c.robots) ? c.robots.length : 0),
+      0,
+    );
+    const metrics = await getSystemMetrics();
+    const summary = `${controllerCount} controller${controllerCount === 1 ? "" : "s"}, ` +
+      `${robotCount} robot${robotCount === 1 ? "" : "s"} configured. ` +
+      `CPU load ${metrics.cpu_load}%, memory ${metrics.memory_usage}%, uptime ${metrics.uptime}s.`;
+
+    const robotIdRaw = entities && typeof entities === "object" ? (entities as Record<string, unknown>).robot_id : undefined;
+    if (typeof robotIdRaw !== "string") return summary;
+    const robotId = parseInt(robotIdRaw, 10);
+    let found = false;
+    for (const c of controllers) {
+      if (Array.isArray(c.robots) && c.robots.some((r: any) => r.id === robotId)) {
+        found = true;
+        break;
+      }
+    }
+    const robotNote = found
+      ? `Robot ${robotId} is registered on this Server. `
+      : `Robot ${robotId} is not registered on this Server. `;
+    return robotNote + summary;
+  }
+
   // Authenticated, non-actuating relay for a recognised voice turn. The
   // phone/watch presents its ordinary Server JWT; the Server alone holds the
   // local Voice UI token. This is intentionally REST rather than a robot
@@ -2752,6 +2791,21 @@ async function startServer() {
       if (!isAssistantReplyForRequest(reply, requestId)) {
         console.error(`[VOICE] gateway contract failure requestId=${requestId}`);
         return res.status(502).json({ error: "HYDRA-UMC-VOICE-UI returned an invalid assistant reply" });
+      }
+      // Real gap found live: HYDRA-UMC-VOICE-UI's own gateway.py is a
+      // deliberately pure/stateless intent classifier (its own docstring:
+      // "an authenticated Server ... integration can replace the response
+      // policy without changing the wire shape") - a real "status" turn
+      // came back as a canned "Live telemetry will be supplied by the
+      // authenticated HYDRA-UMC gateway" placeholder, never actual data,
+      // because nothing ever supplied it. This Server already has the
+      // real data (the same getSystemMetrics()/lastKnownSettings.controllers
+      // GET /api/watch/system-status and GET /api/hydra-info themselves
+      // read from) and already owns this relay step - the natural, real
+      // place to fill that promise in, without VOICE-UI ever needing
+      // outbound network access of its own.
+      if (reply.intent && (reply.intent as any).name === "status") {
+        reply.text = await buildVoiceStatusText((reply.intent as any).entities);
       }
       // Do not log the transcript or reply text: both can contain operator
       // information. The correlation ID and safety fields are sufficient for
