@@ -174,7 +174,23 @@ async function main() {
     const legitimateBody = await legitimateWorkFile.json();
     assert.equal(legitimateBody.ok, true);
 
-    console.log("SERVER_AUTH_NEGATIVE=PASS anonymous=4 invalid-token=1 operator-denials=3 operator-work-write=1 static-bypass-blocked=6 static-legitimate=1");
+    // Real "alg: none" / algorithm-confusion regression: authenticate()'s
+    // own jwt.verify() now pins `algorithms: ["HS256"]` explicitly. A
+    // hand-crafted token with a real, valid-looking payload (this same
+    // admin's own username/role) but header.alg set to "none" and an
+    // empty signature must never be accepted, regardless of whatever the
+    // jsonwebtoken library's own current default happens to be - this
+    // proves the explicit pin itself, against the real running server.
+    const base64url = (obj) => Buffer.from(JSON.stringify(obj)).toString("base64url");
+    const noneAlgToken = `${base64url({ alg: "none", typ: "JWT" })}.${base64url({ username: ADMIN.username, role: "admin", tokenVersion: 1 })}.`;
+    const noneAlgAttempt = await request(port, "/api/settings", {
+      method: "POST",
+      headers: { authorization: `Bearer ${noneAlgToken}` },
+      body: "{}",
+    });
+    assert.equal(noneAlgAttempt.response.status, 403, "an alg:none token must never be accepted as valid");
+
+    console.log("SERVER_AUTH_NEGATIVE=PASS anonymous=4 invalid-token=1 operator-denials=3 operator-work-write=1 static-bypass-blocked=6 static-legitimate=1 alg-none-rejected=1");
   } finally {
     if (child && child.exitCode === null) {
       child.kill("SIGTERM");
