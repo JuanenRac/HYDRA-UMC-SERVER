@@ -29,6 +29,18 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.7.1] - Real, admin-gated Bluetooth pairing (Config > Bluetooth in STUDIO)
+
+New `GET /api/system/bluetooth/status`, `POST /api/system/bluetooth/power`, `POST /api/system/bluetooth/scan`,
+`POST /api/system/bluetooth/pair` and `POST /api/system/bluetooth/remove` - every call shells out to the real
+`bluetoothctl` CLI against this device's own BlueZ daemon (no polkit rule needed: this device's own stock
+`/usr/share/dbus-1/system.d/bluetooth.conf` already lets any local user talk to `org.bluez`). Lets an admin pair
+a Bluetooth gamepad directly to this device's own adapter from STUDIO, without SSH. `POST /pair` also names a
+real, specific fix (`ClassicBondedOnly=false` in `/etc/bluetooth/input.conf`, now set by HYDRA-UMC-OS's own
+`first_boot.sh`) when a device pairs but never bonds - the exact real symptom found pairing a physical Xbox
+controller against this ecosystem's own CM5, where BlueZ's own default silently refused the HID connection
+forever with no obvious cause otherwise.
+
 ## [0.7.0] - The voice assistant's "status" reply is real data, not a canned placeholder
 
 Live report: asking the voice assistant "status" answered "Status
