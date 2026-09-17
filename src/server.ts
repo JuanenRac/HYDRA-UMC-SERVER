@@ -1237,13 +1237,12 @@ async function getEcosystemStatus(): Promise<{
 // Bumped whenever the /api/hydra-info or /ws message contract changes in a
 // way a remote client (HYDRA-UMC SUITE, the mobile control apps) might need
 // to branch on - NOT the same number as package.json's own app version.
-// 2 = this server can emit a real targeted delta (schema 2, see
-// DISEÑO_SYNC_DELTAS.txt section 2) on /ws for a client that opts in by
-// connecting with ?remoteApiVersion=2 in its own query string - the SAME
-// field/number a client already reads back from GET /api/hydra-info,
-// reused here as the version THIS client itself understands rather than
-// inventing a separate field (owner's own choice, per that document's
-// section 8 question 3). A client that connects without this param (every
+// 2 = this server can emit a real targeted delta (schema 2) on /ws for a
+// client that opts in by connecting with ?remoteApiVersion=2 in its own
+// query string - the SAME field/number a client already reads back from
+// GET /api/hydra-info, reused here as the version THIS client itself
+// understands rather than inventing a separate field (owner's own
+// choice). A client that connects without this param (every
 // one of the 6 existing clients today, none of which send it) is treated
 // as schema 1 and keeps getting the full tree under `type: "delta"`
 // exactly like before - bumping this constant is informational-only until
@@ -1262,7 +1261,15 @@ function authenticate(req: any, res: any, next: any) {
     return res.status(401).json({ error: "Access denied: No token provided" });
   }
 
-  jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
+  // `algorithms` pinned explicitly to this token's own real signing
+  // algorithm (jwt.sign() above uses a plain string secret, which
+  // defaults to HS256) - jsonwebtoken 9.x already refuses `alg: none`
+  // unless a caller opts into it, so this was never the classic
+  // unsigned-token bypass, but pinning it closes the real, separate
+  // algorithm-confusion class (a token crafted with a different
+  // algorithm this secret happens to also validate under) rather than
+  // relying on the library's own current default alone.
+  jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] }, (err: any, user: any) => {
     if (err) {
       // Same 403 status for both cases, deliberately (audit #019 wanted a
       // real 401-vs-403 split - "token expired" vs "token has no
@@ -2078,11 +2085,11 @@ async function startServer() {
     lastKnownSettings = payload;
     const type = deltaOnly ? "delta" : "settings";
     // schema: 1 = today's actual behavior ("delta" is still a full-tree
-    // payload, just like "settings" - see DISEÑO_SYNC_DELTAS.txt section 3
-    // step 1). Purely additive: every client today already ignores unknown
-    // fields on this message, so shipping this alone changes nothing for
-    // anyone - it only gives a future server/client pair a version to
-    // negotiate against before "delta" ever means a real partial patch.
+    // payload, just like "settings"). Purely additive: every client today
+    // already ignores unknown fields on this message, so shipping this
+    // alone changes nothing for anyone - it only gives a future
+    // server/client pair a version to negotiate against before "delta"
+    // ever means a real partial patch.
     const msg = JSON.stringify({ type, payload, schema: 1 });
     for (const client of wsClients) {
       if (client !== originator && client.readyState === WebSocket.OPEN) {
@@ -2096,9 +2103,9 @@ async function startServer() {
   /**
    * Real targeted delta broadcast for a write that already went through
    * POST /api/robot/:id/command's own validated switch/case (see that
-   * route's own comment on `deltas` below - DISEÑO_SYNC_DELTAS.txt section
-   * 5a: a delta is only ever built FROM a validated write, never from a
-   * generic before/after diff of the tree). `deltas` is one entry per
+   * route's own comment on `deltas` below - a delta is only ever built
+   * FROM a validated write, never from a generic before/after diff of
+   * the tree). `deltas` is one entry per
    * affected robot (self + combinedWith) for this single command.
    *
    * Per connection: a client that declared schema 2 on its /ws query
@@ -2957,7 +2964,7 @@ async function startServer() {
 
     // One entry per affected robot this command actually mutated - built
     // FROM the same validated switch/case below as it runs, never from a
-    // before/after diff of the tree (DISEÑO_SYNC_DELTAS.txt section 5a).
+    // before/after diff of the tree.
     // Feeds broadcastRobotDelta() below so a schema-2 client gets this
     // small targeted patch instead of the full tree.
     const deltas: { controllerId: string; robotId: number; patch: Record<string, unknown>; cameraId?: number; cameraPatch?: Record<string, unknown> }[] = [];
@@ -3070,8 +3077,7 @@ async function startServer() {
                   // know about any of that, so blindly recomputing joints
                   // server-side for a STUDIO-originated jog would silently
                   // diverge from what that same client already shows in its
-                  // own 3D viewport for most models (see
-                  // DISEÑO_SYNC_DELTAS.txt's own "jog" caveat). This is the
+                  // own 3D viewport for most models. This is the
                   // SAME trust level STUDIO's joints already had under the
                   // full-tree POST /api/settings path it used before this
                   // atomic command existed - not a new attack surface, just
@@ -4524,7 +4530,9 @@ async function startServer() {
       return;
     }
 
-    jwt.verify(token, JWT_SECRET, (err: any, decoded: any) => {
+    // Same explicit HS256 pin as authenticate()'s own jwt.verify() above -
+    // see that call site's own comment for why.
+    jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] }, (err: any, decoded: any) => {
       if (err) {
         authFailuresTotal.inc({ reason: "ws_token_invalid" });
         ws.send(JSON.stringify({ error: "Access denied: Invalid token" }));

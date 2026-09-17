@@ -29,6 +29,16 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.7.2] - JWT verification now pins its own real signing algorithm explicitly
+
+Both `jwt.verify()` call sites (HTTP `authenticate()` and the WebSocket auth handshake) now pass
+`algorithms: ["HS256"]` explicitly, matching `jwt.sign()`'s own real algorithm (a plain string secret
+defaults to HS256). `jsonwebtoken` 9.x already refuses `alg: none` unless a caller opts into it, so this
+was never the classic unsigned-token bypass, but pinning it closes the real, separate algorithm-confusion
+class instead of relying on the library's own current default alone. New regression test in
+`tools/verify_auth_negative.mjs` crafts a real hand-built `alg: none` token against the running server and
+proves it is refused.
+
 ## [0.7.1] - Real, admin-gated Bluetooth pairing (Config > Bluetooth in STUDIO)
 
 New `GET /api/system/bluetooth/status`, `POST /api/system/bluetooth/power`, `POST /api/system/bluetooth/scan`,
