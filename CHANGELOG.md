@@ -29,6 +29,34 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.7.0] - The voice assistant's "status" reply is real data, not a canned placeholder
+
+Live report: asking the voice assistant "status" answered "Status
+request understood. Live telemetry will be supplied by the authenticated
+HYDRA-UMC gateway" - a real, honest, but never-fulfilled promise.
+HYDRA-UMC-VOICE-UI's own `gateway.py` is a deliberately pure, stateless
+intent classifier (its own docstring: "an authenticated Server ...
+integration can replace the response policy without changing the wire
+shape") - nothing had ever filled that promise in.
+
+`POST /api/voice/turn` now does, right at this relay step: when the
+relayed reply's own recognized intent is `status`, its `text` is replaced
+with a real controller/robot count (the same real source
+`GET /api/hydra-info` already reads from `lastKnownSettings.controllers`)
+and real CPU/memory/uptime (the same `getSystemMetrics()`
+`GET /api/watch/system-status` already calls) - never a second, competing
+computation of either. "status of robot N" is answered honestly from this
+Server's own real registered-robot list (registered or not) - there is no
+real per-robot LIVE telemetry available at this relay step yet, so it
+never fabricates an online/offline claim for one.
+
+`tools/verify_voice_relay_contract.mjs` (real end-to-end: a real Python
+VOICE-UI gateway + a real Server, both on temp ports) extended with real
+assertions that the enriched text actually contains real data and no
+longer contains the old placeholder's own "will be supplied" wording, and
+that an unregistered robot ID is reported honestly. Verified: full
+`npm test` (104 unit tests + every real contract script) passes.
+
 ## [0.6.9] - Robot command setpoint warnings + claim transition history (I01/I03)
 
 - **I01: `POST /api/robot/:id/command`'s `"speed"` case now records a

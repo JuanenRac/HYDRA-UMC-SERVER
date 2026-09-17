@@ -159,6 +159,25 @@ async function main() {
     assert.equal(telemetry.body.type, "assistant_reply");
     assert.equal(telemetry.body.requestId, "voice-status-001");
     assert.equal(telemetry.body.requiresConfirmation, false);
+    // Real gap closed: this used to be VOICE-UI's own canned "Live
+    // telemetry will be supplied by the authenticated HYDRA-UMC gateway"
+    // placeholder - the Server itself now fills that promise in with real
+    // data (same real source GET /api/hydra-info/GET /api/watch/system-status
+    // already read from), right here in the relay step.
+    assert.match(telemetry.body.text, /controller/);
+    assert.match(telemetry.body.text, /robot/);
+    assert.match(telemetry.body.text, /CPU load/);
+    assert.doesNotMatch(telemetry.body.text, /will be supplied/);
+
+    const robotStatus = await request(serverPort, "/api/voice/turn", {
+      method: "POST",
+      headers: authorization,
+      body: JSON.stringify({ type: "voice_turn", requestId: "voice-status-002", transcript: "status of robot 7", locale: "en-US" }),
+    });
+    assert.equal(robotStatus.response.status, 200);
+    // No real robot 7 is registered against this contract's own empty
+    // settings.json - the real, honest answer, never a fabricated claim.
+    assert.match(robotStatus.body.text, /Robot 7 is not registered/);
 
     const motion = await request(serverPort, "/api/voice/turn", {
       method: "POST",
