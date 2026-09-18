@@ -29,6 +29,32 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.7.4] - Real camera snapshot and recording capture
+
+- Cameras had no way to actually save a photo or a recording: STUDIO's
+  Vision Center only flipped local UI state (a flash animation, a red REC
+  dot) with no backend call behind either, so nothing was ever written to
+  disk and there was nothing to look back at afterward. New
+  `POST /api/camera/:id/snapshot`, `POST /api/camera/:id/recording/start`,
+  `POST /api/camera/:id/recording/stop`, `GET /api/camera/media` and
+  `GET /api/camera/media/:cameraId/:kind/:filename`, all built on the
+  exact same local `mjpeg_server.py` multipart stream
+  `GET /api/camera/:id/stream` already proxies - no ffmpeg or other new
+  system dependency. A snapshot parses one real JPEG frame out of that
+  stream's own `Content-Length`-delimited parts and saves it as a plain
+  `.jpg`; a recording tees the exact same raw multipart bytes to a
+  `.mjpeg` file while active, so a saved recording is served back with
+  the identical `multipart/x-mixed-replace` framing a live camera uses -
+  the same `<img>` element renders either one unmodified. Saved under
+  `data/camera-media/<camera id>/{snapshots,recordings}/`, filenames
+  reused directly (traversal-sanitized via the existing
+  `resolveWithinDataDir()`). New `tools/verify_camera_media_contract.mjs`
+  (a fake local camera stream, real HTTP calls, no mocking of Server
+  itself) covers auth gating, a camera with no running stream (503, not
+  a fabricated capture), byte-exact snapshot capture, path-traversal
+  filenames (404), the full start/stop recording lifecycle, a rejected
+  double-start (409) and double-stop (404), and the media listing.
+
 ## [0.7.3] - Bluetooth pairing logic extracted into its own module; combined-robot command concurrency now covered by a real test
 
 Bluetooth pairing (`/api/system/bluetooth/*`) is the first route group split out of `server.ts` into its own module

@@ -3518,6 +3518,205 @@ async function startServer() {
     req.on("close", () => nodeStream.destroy());
   });
 
+  // Real camera media capture (snapshots + recordings), saved from the
+  // exact same local mjpeg_server.py multipart stream /api/camera/:id/stream
+  // already proxies above - no ffmpeg or other new system dependency,
+  // since HYDRA-UMC-VISION-STREAMER's own wire format (boundary
+  // "hydraumcframe", `Content-Type: image/jpeg` + `Content-Length: N`
+  // headers before each frame's raw JPEG bytes, see mjpeg_server.py's own
+  // make_handler()) is already a byte-exact, replayable multipart body on
+  // its own: a recording is just those same bytes teed to a file while
+  // active, and playing it back later is the same
+  // `multipart/x-mixed-replace` response this server already sends for a
+  // live camera, just reading from disk instead of the upstream socket.
+  const MJPEG_BOUNDARY = "hydraumcframe";
+  const CAMERA_MEDIA_ROOT = path.join(dataPath, "camera-media");
+
+  function cameraMediaDir(id: number, kind: "snapshots" | "recordings"): string {
+    const dir = path.join(CAMERA_MEDIA_ROOT, String(id), kind);
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+  }
+
+  // One real JPEG frame, parsed out of the raw multipart bytes (boundary
+  // marker + `Content-Length` header tell us exactly where the payload
+  // starts and ends - no reliance on JPEG SOI/EOI markers, which would
+  // break the moment a frame's own bytes happened to contain a matching
+  // sequence).
+  function extractFirstJpegFrame(buffer: Buffer): Buffer | null {
+    const headerEnd = buffer.indexOf("\r\n\r\n");
+    if (headerEnd === -1) return null;
+    const head = buffer.subarray(0, headerEnd).toString("ascii");
+    const match = head.match(/Content-Length:\s*(\d+)/i);
+    if (!match) return null;
+    const length = Number(match[1]);
+    const payloadStart = headerEnd + 4;
+    if (buffer.length < payloadStart + length) return null;
+    return buffer.subarray(payloadStart, payloadStart + length);
+  }
+
+  async function connectToLocalCameraStream(id: number): Promise<Response> {
+    const port = cameraStreamPort(id);
+    const connectController = new AbortController();
+    const connectTimeout = setTimeout(() => connectController.abort(), 5000);
+    try {
+      const upstream = await fetch(`http://127.0.0.1:${port}/stream`, { signal: connectController.signal });
+      if (!upstream.ok || !upstream.body) throw new Error("unexpected upstream response");
+      return upstream;
+    } finally {
+      clearTimeout(connectTimeout);
+    }
+  }
+
+  // Real one-shot photo: connects just long enough to capture ONE frame,
+  // then disconnects - unlike a recording, this never keeps the upstream
+  // connection open.
+  app.post("/api/camera/:id/snapshot", authenticate, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "camera id must be a positive integer" });
+    let upstream: Response;
+    try {
+      upstream = await connectToLocalCameraStream(id);
+    } catch {
+      return res.status(503).json({ error: `No camera stream running locally for camera ${id}.`, available: false });
+    }
+    const reader = (upstream.body as any).getReader();
+    let buffered = Buffer.alloc(0);
+    const readTimeout = setTimeout(() => reader.cancel().catch(() => {}), 5000);
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffered = Buffer.concat([buffered, Buffer.from(value)]);
+        const frame = extractFirstJpegFrame(buffered);
+        if (frame) {
+          const filename = `${new Date().toISOString().replace(/[:.]/g, "-")}.jpg`;
+          const dir = cameraMediaDir(id, "snapshots");
+          fs.writeFileSync(path.join(dir, filename), frame);
+          return res.json({ success: true, cameraId: id, filename, capturedAt: new Date().toISOString(), sizeBytes: frame.length });
+        }
+        if (buffered.length > 8 * 1024 * 1024) break; // no single real JPEG frame is anywhere near this large
+      }
+      return res.status(502).json({ error: `Could not capture a full frame from camera ${id} before disconnecting.` });
+    } finally {
+      clearTimeout(readTimeout);
+      reader.cancel().catch(() => {});
+    }
+  });
+
+  // Active recordings, keyed by camera id - one in-flight recording per
+  // camera at a time, matching the "one camera = one local stream" model
+  // the rest of this file already uses. In-memory only: a server restart
+  // ends any in-progress recording (the partial file on disk stays valid
+  // and playable, since each written frame is already a complete
+  // multipart part).
+  const activeCameraRecordings = new Map<number, { filePath: string; startedAt: string; reader: any; writeStream: fs.WriteStream }>();
+
+  app.post("/api/camera/:id/recording/start", authenticate, async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "camera id must be a positive integer" });
+    if (activeCameraRecordings.has(id)) return res.status(409).json({ error: `Camera ${id} is already recording.` });
+    let upstream: Response;
+    try {
+      upstream = await connectToLocalCameraStream(id);
+    } catch {
+      return res.status(503).json({ error: `No camera stream running locally for camera ${id}.`, available: false });
+    }
+    const filename = `${new Date().toISOString().replace(/[:.]/g, "-")}.mjpeg`;
+    const dir = cameraMediaDir(id, "recordings");
+    const filePath = path.join(dir, filename);
+    const writeStream = fs.createWriteStream(filePath);
+    const reader = (upstream.body as any).getReader();
+    const startedAt = new Date().toISOString();
+    activeCameraRecordings.set(id, { filePath, startedAt, reader, writeStream });
+    (async () => {
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (!writeStream.write(Buffer.from(value))) await new Promise<void>(r => writeStream.once("drain", () => r()));
+        }
+      } catch {
+        // Upstream closing (stop requested, or mjpeg_server.py restarting) ends the loop the same way.
+      } finally {
+        writeStream.end();
+        activeCameraRecordings.delete(id);
+      }
+    })();
+    res.json({ success: true, cameraId: id, filename, startedAt });
+  });
+
+  app.post("/api/camera/:id/recording/stop", authenticate, (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "camera id must be a positive integer" });
+    const active = activeCameraRecordings.get(id);
+    if (!active) return res.status(404).json({ error: `Camera ${id} is not currently recording.` });
+    active.reader.cancel().catch(() => {});
+    const filename = path.basename(active.filePath);
+    const startedAt = active.startedAt;
+    // The reader loop's own `finally` block (recording/start above) closes
+    // writeStream and clears the map entry once cancel() takes effect - not
+    // duplicated here, so there is exactly one place that ever finalizes a
+    // recording file.
+    res.json({ success: true, cameraId: id, filename, startedAt, stoppedAt: new Date().toISOString() });
+  });
+
+  // Every saved snapshot/recording across every camera, newest first -
+  // what STUDIO/SUITE's own camera media viewer lists.
+  app.get("/api/camera/media", authenticate, (req, res) => {
+    const items: { cameraId: number; kind: "snapshots" | "recordings"; filename: string; sizeBytes: number; capturedAt: string; recording: boolean }[] = [];
+    if (fs.existsSync(CAMERA_MEDIA_ROOT)) {
+      for (const idDir of fs.readdirSync(CAMERA_MEDIA_ROOT)) {
+        const cameraId = Number(idDir);
+        if (!Number.isInteger(cameraId)) continue;
+        for (const kind of ["snapshots", "recordings"] as const) {
+          const dir = path.join(CAMERA_MEDIA_ROOT, idDir, kind);
+          if (!fs.existsSync(dir)) continue;
+          for (const filename of fs.readdirSync(dir)) {
+            const stat = fs.statSync(path.join(dir, filename));
+            items.push({
+              cameraId,
+              kind,
+              filename,
+              sizeBytes: stat.size,
+              capturedAt: stat.mtime.toISOString(),
+              recording: kind === "recordings" && activeCameraRecordings.get(cameraId)?.filePath.endsWith(filename) === true,
+            });
+          }
+        }
+      }
+    }
+    items.sort((a, b) => b.capturedAt.localeCompare(a.capturedAt));
+    res.json({ items });
+  });
+
+  // Serves one saved snapshot/recording. A recording is served with the
+  // exact same multipart/x-mixed-replace framing the live stream route
+  // above uses (real, not simulated - the bytes on disk already carry
+  // their own boundary/Content-Type/Content-Length per frame), so the
+  // same <img>/player that renders a live camera can render a saved
+  // recording unchanged.
+  app.get("/api/camera/media/:cameraId/:kind/:filename", authenticate, (req, res) => {
+    const cameraId = Number(req.params.cameraId);
+    const kind = req.params.kind;
+    if (!Number.isInteger(cameraId) || cameraId < 1 || (kind !== "snapshots" && kind !== "recordings")) {
+      return res.status(400).json({ error: "invalid camera id or media kind" });
+    }
+    const resolved = resolveWithinDataDir("camera-media", String(cameraId), kind, req.params.filename);
+    if (!resolved || !fs.existsSync(resolved)) return res.status(404).json({ error: "media file not found" });
+    if (kind === "snapshots") {
+      res.setHeader("Content-Type", "image/jpeg");
+      return fs.createReadStream(resolved).pipe(res);
+    }
+    res.writeHead(200, {
+      "Content-Type": `multipart/x-mixed-replace; boundary=${MJPEG_BOUNDARY}`,
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+    });
+    const fileStream = fs.createReadStream(resolved);
+    fileStream.pipe(res);
+    req.on("close", () => fileStream.destroy());
+  });
+
   // Real, live status of every camera's own local stream serve process
   // (reconcileCameraProcesses(), above) - what a real "did Apply work"
   // indicator in STUDIO/SUITE's own Cameras UI reads, instead of the
