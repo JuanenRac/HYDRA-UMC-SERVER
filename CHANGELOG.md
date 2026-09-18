@@ -385,14 +385,14 @@ code changed.
   like every other real proxy route here, never reachable anonymously.
   `npm test`: 89 unit tests + 12 real contract scripts, all passing.
 
-## [0.5.4] - REV-003/REV-004: real regressions found in a second review pass
+## [0.5.4] - Real regressions found in a second review pass
 
 A second review pass reproduced 2 real issues in the same
 account/authentication surface v0.5.3 above already hardened once (each
 against the real file store or a real in-process race, no mocked
 filesystem). Both fixed here, each with new regression tests:
 
-- **REV-003 [P1]:** `createUser()`/`updateUser()`/`deleteUser()` each do
+- `createUser()`/`updateUser()`/`deleteUser()` each do
   a real read-modify-write cycle (`loadUsers()` -> mutate -> `saveUsers()`)
   with a real `await` (`hashPassword()`) in the middle - two concurrent
   calls (two admins creating accounts at once, or a create racing an
@@ -403,9 +403,9 @@ filesystem). Both fixed here, each with new regression tests:
   a single, in-process promise-chained mutex (`withUsersLock()`)
   serializing every real mutation - this process is the only writer of
   `data/users.json`, so this alone is sufficient.
-- **REV-004 [P1]:** deleting an account and recreating the same username
+- Deleting an account and recreating the same username
   reset `tokenVersion` back to its starting value on the brand-new
-  account - v0.5.3's own SERVER-01 fix compares `tokenVersion` per
+  account - v0.5.3's own session-revocation fix compares `tokenVersion` per
   USERNAME, so an old, not-yet-expired JWT for the DELETED account could
   still authenticate as the unrelated NEW one (possibly with a different
   role). Fixed with a real, random, never-reused account `id`
@@ -415,18 +415,18 @@ filesystem). Both fixed here, each with new regression tests:
   token's `id` claim can never match a same-named account created after
   it. **Deploying this fix invalidates every already-issued token**
   (none of them carry a real `id` claim yet) - every client must log in
-  again once, the same one-time cost SERVER-01's own tokenVersion
-  introduction already had.
+  again once, the same one-time cost the tokenVersion
+  introduction above already had.
 - 8 new regression tests, plus every existing real end-to-end contract
   script (`tools/verify_*.mjs`) re-run and still passing unchanged.
 
 ## [0.5.3] - Real session revocation, users.json corruption handling, and non-blocking login
 
-Found while auditing the code (three separate P1
+Found while auditing the code (three separate
 findings against `src/users.ts`/`src/server.ts`, all fixed together since
 they touch the same account/authentication surface):
 
-- **SERVER-01 - session revocation.** A JWT's `{username, role}` claims used
+- **Session revocation.** A JWT's `{username, role}` claims used
   to be trusted for the token's entire signed lifetime, with no way to
   revoke one early: deleting a user, demoting an admin to operator, or
   changing a password never invalidated tokens/WebSocket sessions already
@@ -443,7 +443,7 @@ they touch the same account/authentication surface):
   match a real current value - a one-time, intentional consequence of
   shipping real revocation where none existed before, not a bug. Everyone
   simply logs in again.
-- **SERVER-02 - `users.json` corruption/atomicity.** A corrupted or
+- **`users.json` corruption/atomicity.** A corrupted or
   truncated `users.json` (e.g. from a crash mid-write) used to be
   indistinguishable from "no users file yet", so a caller could silently
   reseed a brand-new admin account over real, still-recoverable accounts.
@@ -452,7 +452,7 @@ they touch the same account/authentication surface):
   saving is now atomic (write to a temp file in the same directory, then
   rename) so a crash mid-write can never leave a half-written file behind
   in the first place.
-- **SERVER-03 - non-blocking password hashing.** Login used Node's
+- **Non-blocking password hashing.** Login used Node's
   synchronous `crypto.scryptSync`, which blocks the entire single-threaded
   event loop for its full ~100ms cost on every attempt - stalling every
   other concurrent HTTP/WebSocket connection this server holds, including
