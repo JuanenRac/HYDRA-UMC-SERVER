@@ -29,6 +29,23 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.7.3] - Bluetooth pairing logic extracted into its own module; combined-robot command concurrency now covered by a real test
+
+Bluetooth pairing (`/api/system/bluetooth/*`) is the first route group split out of `server.ts` into its own module
+(`src/bluetooth.ts`) since `kinematics.ts`/`users.ts` - the `bluetoothctl` subprocess calls and output parsing now
+live there, imported into `server.ts`'s own route registrations exactly like `calculateJoints()` already is. Purely
+a code-organization change: the routes, their auth middleware and their responses are unchanged, confirmed by
+`tools/verify_bluetooth_contract.mjs` still passing unmodified.
+
+Added `tools/verify_robot_command_race_contract.mjs`, a new real-server contract test that fires concurrent HTTP
+requests at `POST /api/robot/:id/command` and `POST /api/robot/:id/claim` for a combined robot group - proving a
+combined sibling never ends up on a different setpoint than the robot that commanded it, an unrelated robot's state
+never leaks across a concurrent command on another robot, and a concurrent claim race always resolves to exactly one
+winner. No production code change was needed for this: `server.ts`'s own settings mutation already runs fully
+synchronously between reading a robot's state and queuing its write, so Node's single-threaded event loop cannot
+interleave two of these handlers - this test makes that invariant explicit and regression-proofed instead of only a
+comment.
+
 ## [0.7.2] - JWT verification now pins its own real signing algorithm explicitly
 
 Both `jwt.verify()` call sites (HTTP `authenticate()` and the WebSocket auth handshake) now pass
