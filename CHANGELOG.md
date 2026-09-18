@@ -1124,8 +1124,6 @@ they touch the same account/authentication surface):
   root)` -> the real `src/server.ts`). Documentation-only - no code
   changed, no version bump.
 
-## [Unreleased]
-
 ### Added
 
 - **V0 server-authoritative playback engine.** `play`/`pause`/`stop` used
@@ -1179,10 +1177,6 @@ they touch the same account/authentication surface):
   ServerDiscovery contract.
 - Made both temporary server-contract verifiers retry their cleanup on Windows
   so an already-exited `tsx` handle cannot turn a successful test into EBUSY.
-
-## [0.2.6]
-
-- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
 
 ## [0.2.5] - Independent remote-access gate for HYDRA-UMC-WATCH
 
