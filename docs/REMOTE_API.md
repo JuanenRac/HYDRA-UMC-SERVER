@@ -296,7 +296,7 @@ a separate one.
   through the same `GET /api/settings` response and WebSocket delta
   every other robot field already does - no separate endpoint to poll.
 
-  I03: every real transition also appends to `reservationHistory`, a
+  Every real transition also appends to `reservationHistory`, a
   bounded (last 20) array living on the same robot object, also returned
   directly by `claim`/`release` and broadcast in their own delta - so a
   client never has to poll settings separately to see it. Each entry is

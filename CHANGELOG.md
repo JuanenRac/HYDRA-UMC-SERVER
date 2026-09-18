@@ -96,9 +96,9 @@ longer contains the old placeholder's own "will be supplied" wording, and
 that an unregistered robot ID is reported honestly. Verified: full
 `npm test` (104 unit tests + every real contract script) passes.
 
-## [0.6.9] - Robot command setpoint warnings + claim transition history (I01/I03)
+## [0.6.9] - Robot command setpoint warnings + claim transition history
 
-- **I01: `POST /api/robot/:id/command`'s `"speed"` case now records a
+- **`POST /api/robot/:id/command`'s `"speed"` case now records a
   rejected setpoint instead of silently discarding it.** A `speed`/
   `acceleration` value outside the allowed 10-500 range was simply
   dropped, with `success: true` returned regardless - the caller had no
@@ -110,7 +110,7 @@ that an unregistered robot ID is reported honestly. Verified: full
   reads `success` sees the exact same response shape as before. 4 new
   assertions in `tools/verify_robot_command_contract.mjs`.
 
-- **I03: a real transition history for robot claims (`reservationHistory`).**
+- **A real transition history for robot claims (`reservationHistory`).**
   `robot.reservation` only ever held the current claim, overwritten by
   every claim/release with no trace of who changed it, when, or why. A
   new, bounded (last 20) `reservationHistory` array on the same robot
@@ -126,7 +126,7 @@ that an unregistered robot ID is reported honestly. Verified: full
   in `tools/verify_robot_ownership_contract.mjs`, including the bounded
   cap under 25 real claim/release cycles. `docs/REMOTE_API.md` updated.
 
-## [0.6.8] - Real sustained WebSocket reconnect coverage (T04/A.5)
+## [0.6.8] - Real sustained WebSocket reconnect coverage
 
 - New `tools/verify_ws_sustained_reconnect_contract.mjs`: 50 real
   connect/disconnect cycles against one running server, scraping the
@@ -274,7 +274,7 @@ and a distinctive `pos.tx`/`ty` - confirmed to reproduce the real bug
 before the fix (temporarily reverted the guard to prove it), confirmed
 fixed after.
 
-## [0.5.9] - P06: real command ownership for POST /api/robot/:id/command
+## [0.5.9] - Real command ownership for POST /api/robot/:id/command
 
 `POST /api/robot/:id/command` only ever checked "is this token valid" -
 any authenticated admin/operator account could command any robot at any
