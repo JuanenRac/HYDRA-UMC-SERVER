@@ -144,14 +144,20 @@ async function main() {
     assert.equal(snapshot.body.sizeBytes, FAKE_JPEG.length);
     assert.ok(snapshot.body.filename.endsWith(".jpg"));
 
-    const snapshotBytes = await fetch(`http://127.0.0.1:${serverPort}/api/camera/media/1/snapshots/${snapshot.body.filename}`, { headers: authorization });
-    assert.equal(snapshotBytes.status, 200);
+    // Deliberately unauthenticated, matching GET /api/camera/:id/stream's
+    // own precedent - a plain <img src="..."> (what CameraMediaView.tsx
+    // really renders) cannot send an Authorization header. Real bug found
+    // via live testing on the CM5: this route used to require auth, so
+    // every real photo/recording rendered as a broken image.
+    const snapshotBytes = await fetch(`http://127.0.0.1:${serverPort}/api/camera/media/1/snapshots/${snapshot.body.filename}`);
+    assert.equal(snapshotBytes.status, 200, "serving a saved snapshot must not require authentication, same as the live stream route");
     assert.equal(snapshotBytes.headers.get("content-type"), "image/jpeg");
     const snapshotBuffer = Buffer.from(await snapshotBytes.arrayBuffer());
     assert.ok(snapshotBuffer.equals(FAKE_JPEG), "the served snapshot bytes must exactly match the captured frame");
 
-    // Path traversal in the filename must never escape the camera's own folder.
-    const traversal = await fetch(`http://127.0.0.1:${serverPort}/api/camera/media/1/snapshots/${encodeURIComponent("../../server.ts")}`, { headers: authorization });
+    // Path traversal in the filename must never escape the camera's own
+    // folder, even unauthenticated.
+    const traversal = await fetch(`http://127.0.0.1:${serverPort}/api/camera/media/1/snapshots/${encodeURIComponent("../../server.ts")}`);
     assert.equal(traversal.status, 404, "a path-traversal filename must be refused, not served");
 
     // Real recording lifecycle.
@@ -173,8 +179,8 @@ async function main() {
 
     await new Promise((resolve) => setTimeout(resolve, 100)); // let the reader's own finally{} flush+close the file
 
-    const recordingBytes = await fetch(`http://127.0.0.1:${serverPort}/api/camera/media/1/recordings/${start.body.filename}`, { headers: authorization });
-    assert.equal(recordingBytes.status, 200);
+    const recordingBytes = await fetch(`http://127.0.0.1:${serverPort}/api/camera/media/1/recordings/${start.body.filename}`);
+    assert.equal(recordingBytes.status, 200, "serving a saved recording must not require authentication either");
     assert.match(recordingBytes.headers.get("content-type") ?? "", /multipart\/x-mixed-replace/);
     const recordingBuffer = Buffer.from(await recordingBytes.arrayBuffer());
     assert.ok(recordingBuffer.includes(`--${BOUNDARY}`), "a saved recording must contain at least one real captured frame boundary");

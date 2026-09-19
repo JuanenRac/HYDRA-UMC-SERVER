@@ -3610,7 +3610,7 @@ async function startServer() {
   // ends any in-progress recording (the partial file on disk stays valid
   // and playable, since each written frame is already a complete
   // multipart part).
-  const activeCameraRecordings = new Map<number, { filePath: string; startedAt: string; reader: any; writeStream: fs.WriteStream }>();
+  const activeCameraRecordings = new Map<number, { filePath: string; startedAt: string; reader: any; writeStream: fs.WriteStream; finished: Promise<void> }>();
 
   app.post("/api/camera/:id/recording/start", authenticate, async (req, res) => {
     const id = Number(req.params.id);
@@ -3628,7 +3628,23 @@ async function startServer() {
     const writeStream = fs.createWriteStream(filePath);
     const reader = (upstream.body as any).getReader();
     const startedAt = new Date().toISOString();
-    activeCameraRecordings.set(id, { filePath, startedAt, reader, writeStream });
+    // Real bug fixed (found via live testing on the CM5): recording/stop
+    // used to call reader.cancel() and respond immediately, without
+    // waiting for this loop to actually notice the cancellation and run
+    // its own finally{} below. If the loop was mid-`await` on the
+    // writeStream's own "drain" event (backpressure) rather than
+    // reader.read() at that exact moment, cancel() had nothing pending to
+    // reject - the loop only woke up and saw ITS OWN NEXT read() reject on
+    // the NEXT drain, which could take an arbitrarily long time (or never
+    // happen at all if writes stalled). The client had already been told
+    // "stopped", so a second stop attempt got a confusing 404 (a stale
+    // map entry looked "not recording" from that race alone) while the
+    // recording itself kept running underneath. `finished` now lets
+    // /recording/stop actually AWAIT real completion before answering, so
+    // "stopped" only ever means "truly stopped, file closed".
+    let resolveFinished!: () => void;
+    const finished = new Promise<void>(resolve => { resolveFinished = resolve; });
+    activeCameraRecordings.set(id, { filePath, startedAt, reader, writeStream, finished });
     (async () => {
       try {
         while (true) {
@@ -3641,23 +3657,26 @@ async function startServer() {
       } finally {
         writeStream.end();
         activeCameraRecordings.delete(id);
+        resolveFinished();
       }
     })();
     res.json({ success: true, cameraId: id, filename, startedAt });
   });
 
-  app.post("/api/camera/:id/recording/stop", authenticate, (req, res) => {
+  app.post("/api/camera/:id/recording/stop", authenticate, async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "camera id must be a positive integer" });
     const active = activeCameraRecordings.get(id);
     if (!active) return res.status(404).json({ error: `Camera ${id} is not currently recording.` });
-    active.reader.cancel().catch(() => {});
     const filename = path.basename(active.filePath);
     const startedAt = active.startedAt;
-    // The reader loop's own `finally` block (recording/start above) closes
-    // writeStream and clears the map entry once cancel() takes effect - not
-    // duplicated here, so there is exactly one place that ever finalizes a
-    // recording file.
+    active.reader.cancel().catch(() => {});
+    // Bounded wait for the loop's own real completion (see the real race
+    // documented above) - 5s comfortably covers a normal drain/teardown;
+    // if it's somehow still not done by then, this answers honestly
+    // rather than hanging the request forever, and the loop's own
+    // finally{} still runs and cleans up whenever it actually finishes.
+    await Promise.race([active.finished, new Promise(resolve => setTimeout(resolve, 5000))]);
     res.json({ success: true, cameraId: id, filename, startedAt, stoppedAt: new Date().toISOString() });
   });
 
@@ -3690,13 +3709,19 @@ async function startServer() {
     res.json({ items });
   });
 
-  // Serves one saved snapshot/recording. A recording is served with the
-  // exact same multipart/x-mixed-replace framing the live stream route
-  // above uses (real, not simulated - the bytes on disk already carry
-  // their own boundary/Content-Type/Content-Length per frame), so the
-  // same <img>/player that renders a live camera can render a saved
-  // recording unchanged.
-  app.get("/api/camera/media/:cameraId/:kind/:filename", authenticate, (req, res) => {
+  // Serves one saved snapshot/recording. Deliberately NOT behind
+  // `authenticate`, matching GET /api/camera/:id/stream's own established
+  // precedent above: a plain <img src="..."> element (what
+  // CameraMediaView.tsx actually uses to display a photo or play back a
+  // recording) cannot send an Authorization header, so gating this route
+  // on it made every real photo/recording render as a broken image -
+  // real bug, found via live testing on the CM5, not a hypothetical.
+  // A recording is served with the exact same multipart/x-mixed-replace
+  // framing the live stream route above uses (real, not simulated - the
+  // bytes on disk already carry their own boundary/Content-Type/
+  // Content-Length per frame), so the same <img>/player that renders a
+  // live camera can render a saved recording unchanged.
+  app.get("/api/camera/media/:cameraId/:kind/:filename", (req, res) => {
     const cameraId = Number(req.params.cameraId);
     const kind = req.params.kind;
     if (!Number.isInteger(cameraId) || cameraId < 1 || (kind !== "snapshots" && kind !== "recordings")) {
