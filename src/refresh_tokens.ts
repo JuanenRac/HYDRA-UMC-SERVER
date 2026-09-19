@@ -3,7 +3,7 @@
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
 // GPL-3.0 - see LICENSE
 //
-// C08 (client-side automatic reauthentication): until now, ANY WebSocket
+// Client-side automatic reauthentication: until now, ANY WebSocket
 // close 1008 (its own real access-token expiry, most commonly - JWT_EXPIRES_IN
 // defaults to 30d but a dashboard genuinely left open that long, or a
 // shorter deployment-configured value, does hit it) forced every client

@@ -150,7 +150,7 @@ async function main() {
     assert.equal(claim.response.status, 200);
     assert.equal(claim.body.reservation.ownerUsername, OPERATOR.username);
 
-    // I03: a real transition history entry, not just the new reservation
+    // A real transition history entry, not just the new reservation
     // itself - who claimed it, what kind of transition, and the real
     // reason the caller supplied.
     assert.equal(claim.body.reservationHistory.length, 1, "the very first claim must record exactly one history entry");
@@ -216,7 +216,7 @@ async function main() {
     assert.equal(forcedClaim.response.status, 200, "an admin with force:true must be able to override an active claim");
     assert.equal(forcedClaim.body.reservation.ownerUsername, ADMIN.username);
 
-    // I03: a forced override is its own real, distinct transition kind -
+    // A forced override is its own real, distinct transition kind -
     // never conflated with a plain "claimed" on an unclaimed robot.
     const historyAfterForce = forcedClaim.body.reservationHistory;
     const lastEntry = historyAfterForce[historyAfterForce.length - 1];
@@ -267,7 +267,7 @@ async function main() {
     });
     assert.equal(afterExpiry.response.status, 200, "an expired claim must never block a command");
 
-    // I03: a real lapsed reservation is recorded as "expired" (never
+    // A real lapsed reservation is recorded as "expired" (never
     // silently overwritten with no trace) the moment a fresh claim
     // supersedes it, distinct from an explicit release by its own holder.
     const claimAfterExpiry = await request(port, "/api/robot/1/claim", {

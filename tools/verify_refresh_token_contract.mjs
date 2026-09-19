@@ -1,5 +1,5 @@
 // =============================================================================
-// HYDRA-UMC-SERVER - C08 real refresh-token contract checks
+// HYDRA-UMC-SERVER - Real refresh-token contract checks
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
 // GPL-3.0 - see LICENSE
 // =============================================================================
