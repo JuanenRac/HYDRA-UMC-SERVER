@@ -29,6 +29,26 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.7.5] - Two real camera-media bugs found via live testing on the CM5
+
+- `GET /api/camera/media/:cameraId/:kind/:filename` required authentication,
+  but a plain `<img src="...">` element (what STUDIO's own
+  CameraMediaView.tsx actually uses to display a photo or play back a
+  recording) cannot send an `Authorization` header - every real saved
+  photo/recording rendered as a broken image. No longer requires auth,
+  matching `GET /api/camera/:id/stream`'s own already-established
+  precedent for the exact same reason.
+- `POST /api/camera/:id/recording/stop` called `reader.cancel()` and
+  answered "stopped" immediately, without waiting for the recording
+  loop to actually notice the cancellation and finish. If that loop was
+  mid-`await` on the write stream's own "drain" event (backpressure)
+  rather than `reader.read()` at that exact moment, `cancel()` had
+  nothing pending to reject - the recording kept running underneath
+  while the client had already been told it stopped, and a second stop
+  attempt got a confusing 404. `/recording/stop` now awaits the loop's
+  own real completion (bounded to 5s) before answering, so "stopped"
+  only ever means "truly stopped, file closed".
+
 ## [0.7.4] - Real camera snapshot and recording capture
 
 - Cameras had no way to actually save a photo or a recording: STUDIO's
