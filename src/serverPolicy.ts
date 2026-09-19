@@ -133,15 +133,36 @@ export function computeDeviceArg(camera: CameraSettings): string | null {
 // against the fingerprint its running process was started with to decide
 // whether a config change means "restart the capture process" or "nothing
 // that process cares about changed".
+//
+// Real bug found live on the CM5: camera 1 restarted every couple
+// minutes with no config change an operator ever made, because this
+// used to hash EVERY field unconditionally, including the ip*/rtsp*
+// fields computeDeviceArg() never even reads for a "usb" camera (and
+// vice versa for an "ip" one). A camera that had ever been reconfigured
+// from ip to usb (or usb to ip) genuinely keeps its now-irrelevant old
+// fields around (real, not a bug on its own - useful if the operator
+// switches back) - any later round trip that touched those IRRELEVANT
+// fields even slightly (a client re-serializing rtspPort as a different
+// type, a stale ipPassword getting rewritten) flipped this fingerprint
+// and triggered a real, unnecessary kill-and-respawn of a perfectly
+// healthy stream, even though computeDeviceArg()'s own actual output
+// never changed. Now only hashes the fields the ACTIVE sourceType's own
+// computeDeviceArg() branch actually reads.
 export function cameraFingerprint(camera: CameraSettings): string {
+  const sourceType = camera.sourceType ?? "usb";
+  if (sourceType === "ip") {
+    return JSON.stringify({
+      sourceType,
+      ipHost: camera.ipHost ?? null,
+      rtspPort: camera.rtspPort ?? null,
+      rtspPath: camera.rtspPath ?? null,
+      ipUsername: camera.ipUsername ?? null,
+      ipPassword: camera.ipPassword ?? null,
+    });
+  }
   return JSON.stringify({
-    sourceType: camera.sourceType ?? "usb",
+    sourceType,
     hardwareSource: camera.hardwareSource ?? null,
-    ipHost: camera.ipHost ?? null,
-    rtspPort: camera.rtspPort ?? null,
-    rtspPath: camera.rtspPath ?? null,
-    ipUsername: camera.ipUsername ?? null,
-    ipPassword: camera.ipPassword ?? null,
   });
 }
 
