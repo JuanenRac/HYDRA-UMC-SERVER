@@ -169,7 +169,7 @@ async function main() {
     assert.equal(a1.camera.connected, false, "embedded robot camera must not retain a stale enabled state");
     assert.equal(settings.body.controllers[0].cameras[0].connected, false, "controller camera must match its robot command");
 
-    // I01: a rejected speed/acceleration setpoint (outside the 10-500
+    // A rejected speed/acceleration setpoint (outside the 10-500
     // range STUDIO's own sliders enforce) used to be silently discarded -
     // `success: true` never said whether the value actually applied.
     const validSpeed = await request(port, "/api/robot/1/command", {

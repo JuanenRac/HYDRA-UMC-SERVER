@@ -209,7 +209,7 @@ export function hi3510Action(pan: number, tilt: number, zoom: number): string | 
 export function safeIdSegment(id: unknown): string {
   const s = String(id ?? "");
   const cleaned = s.replace(/[^A-Za-z0-9._-]/g, "_");
-  // H032: `.` is a deliberately allowed character (real controller/robot
+  // `.` is a deliberately allowed character (real controller/robot
   // ids use it), but that means an id of EXACTLY "." or ".." survives
   // this cleaning untouched - getPointsPath() below joins this segment
   // straight into a real filesystem path

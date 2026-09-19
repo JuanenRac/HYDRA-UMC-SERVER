@@ -30,7 +30,7 @@ export interface StoredUser {
   passwordHash: string; // "saltHex:hashHex"
   role: UserRole;
   createdAt: string;
-  // SERVER-01 (P1): a JWT's own {username, role} claims were trusted for the
+  // A JWT's own {username, role} claims were trusted for the
   // token's entire lifetime - deleting or demoting a user never revoked
   // an already-issued token, and a WebSocket only checked identity once,
   // at connect time. Every real account mutation (password/role change)
@@ -42,7 +42,7 @@ export interface StoredUser {
   // effectiveTokenVersion() treats a missing value as 1, the same
   // starting value every account created after this fix gets explicitly.
   tokenVersion?: number;
-  // REV-004 (P1): tokenVersion
+  // tokenVersion
   // alone is compared PER USERNAME - deleting an account and recreating
   // the same username reset tokenVersion back to 1 on the new account,
   // and an old, not-yet-expired JWT for the OLD (deleted) account still
@@ -58,7 +58,7 @@ export interface StoredUser {
   id?: string;
 }
 
-/** SERVER-01: the real, current session generation for `user` - see
+/** The real, current session generation for `user` - see
  * `StoredUser.tokenVersion`'s own doc comment for why a missing value
  * (an account stored before this field existed) defaults to 1 instead
  * of `undefined`, which would never equal a real token's own claim. */
@@ -66,7 +66,7 @@ export function effectiveTokenVersion(user: StoredUser): number {
   return user.tokenVersion ?? 1;
 }
 
-/** REV-004: the real, immutable account identity for `user` - see
+/** The real, immutable account identity for `user` - see
  * `StoredUser.id`'s own doc comment. A pre-migration account (stored
  * before this field existed) falls back to its own username - safe
  * because that account was never deleted-and-recreated (it is the
@@ -94,7 +94,7 @@ const usersPath = () => path.join(process.cwd(), "data", "users.json");
 // OLD N=16384 cost, not this one.
 const SCRYPT_OPTIONS: crypto.ScryptOptions = { N: 131072, r: 8, p: 1, maxmem: 256 * 1024 * 1024 };
 
-// SERVER-03 (P1): `crypto.scryptSync` runs on Node's own single main thread -
+// `crypto.scryptSync` runs on Node's own single main thread -
 // blocking it for the ~100ms this cost parameter takes (see the comment
 // above) stalls EVERY concurrent HTTP/WebSocket connection this server
 // is holding open, including real-time robot command/telemetry traffic,
@@ -117,7 +117,7 @@ function scryptAsync(password: crypto.BinaryLike, salt: crypto.BinaryLike, keyle
   });
 }
 
-// SERVER-03's own closure criterion goes further than "don't block the
+// This module's own closure criterion goes further than "don't block the
 // main thread": it also asks for a real concurrency/CPU-memory bound and
 // an explicit overload rejection, not just an unbounded queue - the async
 // scrypt above already moves the cost off the main thread, but nothing
@@ -196,7 +196,7 @@ export async function verifyPassword(password: string, stored: string): Promise<
   });
 }
 
-// SERVER-02 (P1): a real, distinct failure reason - loadUsers() below throws this
+// A real, distinct failure reason - loadUsers() below throws this
 // instead of silently returning [] for anything other than the file
 // genuinely not existing yet, so a caller (ensureSeedUser() in
 // particular) can never mistake real corruption for a fresh install.
@@ -245,7 +245,7 @@ function saveUsers(users: StoredUser[]): void {
   fs.renameSync(tmp, target);
 }
 
-// REV-003 (P1): createUser()/
+// createUser()/
 // updateUser()/deleteUser() each do a real read-modify-write cycle
 // (loadUsers() -> mutate an in-memory array -> saveUsers()) with a real
 // `await` (hashPassword()) sitting in the middle. Two concurrent calls
@@ -299,8 +299,8 @@ export async function createUser(username: string, password: string, role: UserR
   const trimmed = username.trim();
   if (!trimmed) return { ok: false, error: "Username required" };
   if (!password || password.length < 4) return { ok: false, error: "Password must be at least 4 characters" };
-  // REV-003: the hashPassword() await below is real, unavoidable async
-  // work (see SERVER-03) - withUsersLock() serializes the WHOLE
+  // The hashPassword() await below is real, unavoidable async
+  // work (see the async-scrypt comment above) - withUsersLock() serializes the WHOLE
   // read-modify-write sequence around it, so a concurrent createUser()
   // (or updateUser()/deleteUser()) can never read the same pre-mutation
   // file this call already committed to changing.
@@ -309,7 +309,7 @@ export async function createUser(username: string, password: string, role: UserR
     if (users.some(u => u.username.toLowerCase() === trimmed.toLowerCase())) {
       return { ok: false, error: "Username already exists" };
     }
-    // REV-004: a real, random, never-reused id - see StoredUser.id's own
+    // A real, random, never-reused id - see StoredUser.id's own
     // doc comment for why this (not tokenVersion alone) is what actually
     // stops an old token from re-authenticating against a same-named
     // account created after the original was deleted.
@@ -323,7 +323,7 @@ export async function updateUser(
   username: string,
   updates: { newUsername?: string; password?: string; role?: UserRole }
 ): Promise<UserResult> {
-  // REV-003: same real race as createUser() above - serialized the same way.
+  // Same real race as createUser() above - serialized the same way.
   return withUsersLock(async () => {
     const users = loadUsers();
     const idx = users.findIndex(u => u.username.toLowerCase() === username.toLowerCase());
@@ -349,7 +349,7 @@ export async function updateUser(
       }
       users[idx].role = updates.role;
     }
-    // SERVER-01: any real account mutation reaching this point (rename,
+    // Any real account mutation reaching this point (rename,
     // password change, or role change) invalidates every token/WebSocket
     // session already issued for this account - see
     // effectiveTokenVersion()'s own doc comment and server.ts's
@@ -363,7 +363,7 @@ export async function updateUser(
 }
 
 export async function deleteUser(username: string): Promise<UserResult> {
-  // REV-003: same real race as createUser() above - serialized the same
+  // Same real race as createUser() above - serialized the same
   // way even though this function itself has no `await` of its own, so
   // it can never interleave with a concurrent createUser()/updateUser()
   // either (e.g. delete racing a rename of the SAME account).

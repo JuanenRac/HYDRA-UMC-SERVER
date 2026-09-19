@@ -1,5 +1,5 @@
 // =============================================================================
-// HYDRA-UMC-SERVER - Sustained WebSocket reconnect coverage (T04/A.5)
+// HYDRA-UMC-SERVER - Sustained WebSocket reconnect coverage
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
 // GPL-3.0 - see LICENSE
 // =============================================================================
@@ -13,7 +13,7 @@
 // each time. A leak in any of the 4 real wsClients.delete() call sites
 // would show up here as a gauge that never comes back down, not just once
 // but growing across the whole run - the exact "long session, not just
-// one connect/disconnect" gap T04/A.5 asked for.
+// one connect/disconnect" gap this test was written to close.
 
 import assert from "node:assert/strict";
 import { once } from "node:events";

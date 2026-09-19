@@ -101,7 +101,7 @@ async function main() {
       assert.match(body.error, /No token provided/);
     }
 
-    // H031: GET /api/settings had NO auth middleware at all (confirmed live
+    // GET /api/settings had NO auth middleware at all (confirmed live
     // returning 200 to an anonymous request) - the loop above only ever
     // exercised the POST (write) side of this route, so it never caught
     // that the GET (read) side leaked the full settings payload, including
@@ -146,7 +146,7 @@ async function main() {
     assert.equal(workFile.response.status, 200);
     assert.equal(workFile.body.success, true);
 
-    // H030: an exact-string check against req.path used to guard
+    // An exact-string check against req.path used to guard
     // settings.json/users.json/etc. under express.static(dataPath) - real,
     // unauthenticated bypasses confirmed live before the fix: a single
     // percent-encoded character, a doubled leading slash, a case
@@ -170,7 +170,7 @@ async function main() {
       assert.equal(response.status, 404, `static bypass ${bypass} must not serve settings.json`);
     }
     const legitimateWorkFile = await fetch(`http://127.0.0.1:${port}/contract-check/operator.json`);
-    assert.equal(legitimateWorkFile.status, 200, "the H030 fix must not block legitimate WORKS file access");
+    assert.equal(legitimateWorkFile.status, 200, "this fix must not block legitimate WORKS file access");
     const legitimateBody = await legitimateWorkFile.json();
     assert.equal(legitimateBody.ok, true);
 

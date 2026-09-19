@@ -1279,9 +1279,9 @@ function authenticate(req: any, res: any, next: any) {
   // relying on the library's own current default alone.
   jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] }, (err: any, user: any) => {
     if (err) {
-      // Same 403 status for both cases, deliberately (audit #019 wanted a
-      // real 401-vs-403 split - "token expired" vs "token has no
-      // permissions" - but the 4 remote clients of this API aren't open in
+      // Same 403 status for both cases, deliberately (a real 401-vs-403 split was wanted at one point, but that
+      // "token expired" vs "token has no
+      // permissions" split - but the 4 remote clients of this API aren't open in
       // this session to confirm they don't branch on the exact status code
       // today; changing 403->401 here would be a wire-visible contract
       // change needing the same cross-client coordination already declined
@@ -1297,7 +1297,7 @@ function authenticate(req: any, res: any, next: any) {
         code: expired ? "TOKEN_EXPIRED" : "TOKEN_INVALID",
       });
     }
-    // SERVER-01 (P1): a valid JWT signature alone used to authorize for the token's
+    // A valid JWT signature alone used to authorize for the token's
     // entire lifetime - deleting or demoting a user never revoked an
     // already-issued token, since {username, role} were trusted straight
     // from the (old, stale) token claims. Re-looks up the account on
@@ -1307,7 +1307,7 @@ function authenticate(req: any, res: any, next: any) {
     // authorizes, even though it hasn't expired yet. requireAdmin below
     // reads req.user.role from THIS fresh lookup, never the token's own
     // stale claim, so a demotion takes effect on the very next request.
-    // REV-004 (P1): tokenVersion
+    // tokenVersion
     // alone is only ever compared PER USERNAME - deleting this account and
     // recreating the same username reset tokenVersion back to its own
     // starting value on the brand-new account, so an old, not-yet-expired
@@ -1332,18 +1332,18 @@ function authenticate(req: any, res: any, next: any) {
  * Gates POST /api/settings (full-tree overwrite) and every /api/users route -
  * an "operator" account can still drive robots via the atomic
  * /api/robot/:id/command endpoint, just can't touch global config or accounts. */
-// SERVER-02/SERVER-03: Express 4 does not automatically catch a rejected
+// Express 4 does not automatically catch a rejected
 // promise from an async route handler (nor a synchronous throw inside
 // one - that also becomes a rejected promise once the function is
 // async) - it would otherwise become an unhandled promise rejection
 // instead of a clean response. Needed now that users.ts's own functions
-// are real async (crypto.scrypt, SERVER-03) and can throw a real,
+// are real async (crypto.scrypt, see the async-scrypt reasoning in users.ts) and can throw a real,
 // distinct UsersFileError for a genuinely corrupted users.json
-// (SERVER-02) that a plain synchronous handler used to catch for free.
+// that a plain synchronous handler used to catch for free.
 function asyncHandler(handler: (req: any, res: any) => Promise<any>) {
   return (req: any, res: any) => {
     handler(req, res).catch((err: unknown) => {
-      // SERVER-03's own closure criterion calls for a genuine overload
+      // A real overload
       // rejection, not just an unbounded queue - users.ts bounds how many
       // password-hashing operations (login, and admin user create/update)
       // run at once and throws ScryptOverloadError once even the wait
@@ -1479,7 +1479,7 @@ async function startServer() {
   // start. Development/test retain an isolated local convenience account.
   await ensureSeedUser();
 
-  // C08: hygiene sweep for refresh_tokens.ts's own data/refresh_tokens.json
+  // A hygiene sweep for refresh_tokens.ts's own data/refresh_tokens.json
   // - see pruneExpiredRefreshTokens()'s own doc comment. Run once at
   // startup (same timing as the .tmp sweep above) and again every 6h for
   // a long-running process - an expired-but-never-rotated record (an
@@ -1536,7 +1536,7 @@ async function startServer() {
   }
 
   // Writes `json` to `finalPath` via the same crash-safe pattern
-  // queueSettingsWrite always used for settings.json itself (audit #013) -
+  // queueSettingsWrite always used for settings.json itself -
   // sibling temp file (PID + timestamp, so two overlapping writers never
   // collide on the same temp path) written first, then atomically renamed
   // over the real path, so a write interrupted partway (disk full, process
@@ -2205,7 +2205,7 @@ async function startServer() {
     return !!reservation && typeof reservation.expiresAt === "number" && reservation.expiresAt > Date.now();
   }
 
-  // I03: `robot.reservation` itself only ever held the CURRENT state -
+  // `robot.reservation` itself only ever held the CURRENT state -
   // overwritten by every claim/release with no trace of who changed it,
   // when, or why. reservationHistory is a real, bounded (last
   // RESERVATION_HISTORY_MAX_ENTRIES) append-only log living on the same
@@ -2414,10 +2414,10 @@ async function startServer() {
   // Bare filenames (no leading slash) of the same 3 sensitive files, reused
   // below by POST /api/upload-work and POST /api/models/submit - both write
   // caller-controlled filenames to disk and need to refuse landing on one of
-  // these regardless of which folder they resolve into (audit #016).
+  // these regardless of which folder they resolve into.
   const RESERVED_DATA_FILENAMES = new Set(["settings.json", "users.json", "model_submissions.json", "refresh_tokens.json"]);
   app.use((req, res, next) => {
-    // H030: an exact-string check against `req.path` (Express's own
+    // An exact-string check against `req.path` (Express's own
     // decoded/routing-normalized path) is NOT the same string
     // `express.static`/`send` below ultimately resolve to a real file
     // with - confirmed live against this exact block, all four of these
@@ -2511,7 +2511,7 @@ async function startServer() {
       return res.status(400).json({ error: "username and password required" });
     }
     const user = findUser(username);
-    // SERVER-03: verifyPassword() is now async (real crypto.scrypt, not
+    // verifyPassword() is now async (real crypto.scrypt, not
     // scryptSync) so this CPU/memory-heavy check runs on Node's own
     // libuv threadpool instead of blocking the main event loop - every
     // other concurrent HTTP/WebSocket connection (including real-time
@@ -2524,11 +2524,11 @@ async function startServer() {
     // See JWT_EXPIRES_IN's own header comment above for why this is
     // configurable instead of a hardcoded '30d' - defaults to 30d so an
     // existing trusted-LAN deployment sees no behavior change.
-    // SERVER-01: tokenVersion is the real, comparable session generation
+    // tokenVersion is the real, comparable session generation
     // authenticate()/the WS connect+heartbeat re-checks compare against
     // this account's CURRENT value on every request/tick, not just here
     // at login - see effectiveTokenVersion()'s own doc comment.
-    // REV-004: `id` is this account's own real, never-reused identity -
+    // `id` is this account's own real, never-reused identity -
     // see effectiveId()'s own doc comment for why tokenVersion alone
     // isn't enough once an account can be deleted and its username reused.
     const token = jwt.sign(
@@ -2536,7 +2536,7 @@ async function startServer() {
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN as any }
     );
-    // C08: issued alongside the access token so a client can recover from
+    // Issued alongside the access token so a client can recover from
     // its own real time-based expiry (see refresh_tokens.ts's own header
     // comment) without forcing a manual re-login - a client that predates
     // this field simply never sends refreshToken to POST /api/refresh and
@@ -2545,7 +2545,7 @@ async function startServer() {
     res.json({ success: true, token, refreshToken, role: user.role });
   }));
 
-  // C08: exchanges a still-valid refresh token for a fresh access token,
+  // Exchanges a still-valid refresh token for a fresh access token,
   // without the caller's password - see refresh_tokens.ts's own
   // consumeRefreshToken() doc comment for exactly which cases this
   // succeeds vs. correctly still fails closed (a genuinely revoked
@@ -2573,7 +2573,7 @@ async function startServer() {
     res.json({ success: true, token, refreshToken: result.refreshToken, role: result.user.role });
   }));
 
-  // C08: a real, explicit logout now revokes the refresh token
+  // A real, explicit logout now revokes the refresh token
   // server-side too (see revokeRefreshToken()'s own doc comment) instead
   // of only discarding it client-side, which would otherwise leave it
   // silently valid for the rest of its real TTL. No authenticate() gate,
@@ -2617,7 +2617,7 @@ async function startServer() {
   }));
 
   app.delete("/api/users/:username", authenticate, requireAdmin, asyncHandler(async (req, res) => {
-    // REV-003: deleteUser() is now async (see users.ts's own
+    // deleteUser() is now async (see users.ts's own
     // withUsersLock()) - awaited here like createUser/updateUser already
     // are, through the same asyncHandler() wrapper.
     const result = await deleteUser(req.params.username);
@@ -2701,7 +2701,7 @@ async function startServer() {
   });
 
   // API routes FIRST
-  // H031: this had no auth middleware at all - any unauthenticated
+  // This had no auth middleware at all - any unauthenticated
   // caller could GET the full settings object (controller IPs,
   // CAN-OTA config, complete per-robot state - see the comment on
   // RESERVED_DATA_FILENAMES above for exactly what this file holds),
@@ -2977,7 +2977,7 @@ async function startServer() {
     // small targeted patch instead of the full tree.
     const deltas: { controllerId: string; robotId: number; patch: Record<string, unknown>; cameraId?: number; cameraPatch?: Record<string, unknown> }[] = [];
 
-    // I01: real, per-robot record of a setpoint this command tried to
+    // Real, per-robot record of a setpoint this command tried to
     // apply but couldn't because it fell outside a documented limit - see
     // the "speed" case below. Never affects `success`/affectedCount (this
     // is about a still-valid request where one field's value was
@@ -3036,7 +3036,7 @@ async function startServer() {
               // (kinematics.ts's own {x,y,z,a,b,c}) - params.axis is
               // caller-controlled and used directly as an object key on
               // robot.pos. Investigated as a possible prototype-pollution
-              // vector (external audit #036/#235): NOT exploitable as
+              // vector (found in an external review): NOT exploitable as
               // written even before this fix (JS's own `__proto__` setter
               // silently ignores a non-object assignment, and `+=` here
               // always produces a number/string, never an object) - but an
@@ -3225,7 +3225,7 @@ async function startServer() {
               // step.
               const validSpeedField = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v >= 10 && v <= 500;
               let touched = false;
-              // I01: a rejected setpoint used to be indistinguishable from
+              // A rejected setpoint used to be indistinguishable from
               // one that was simply never sent - the response's own
               // `success: true` never said WHY playbackState.speed/
               // acceleration didn't change, so an out-of-range value from
@@ -3356,7 +3356,7 @@ async function startServer() {
     const requestedTtlMs = typeof req.body?.ttlMs === "number" ? req.body.ttlMs : DEFAULT_RESERVATION_TTL_MS;
     const ttlMs = Math.min(Math.max(requestedTtlMs, 1000), MAX_RESERVATION_TTL_MS);
     const force = req.body?.force === true;
-    // I03: an optional, real reason recorded alongside who/when - never
+    // An optional, real reason recorded alongside who/when - never
     // required (every existing caller that never sends one still works
     // exactly as before), capped so one caller can't grow the bounded
     // history's stored payload unreasonably.
@@ -3368,7 +3368,7 @@ async function startServer() {
       return res.status(409).json({ error: `robot is already claimed by ${existing.ownerUsername}`, reservation: existing });
     }
 
-    // I03: which kind of transition this really is depends on the
+    // Which kind of transition this really is depends on the
     // PREVIOUS state, not just the new claim being written below.
     let action: "claimed" | "renewed" | "force-claimed";
     if (heldByAnother) {
@@ -3425,7 +3425,7 @@ async function startServer() {
     const reason = typeof req.body?.reason === "string" && req.body.reason.trim() ? req.body.reason.trim().slice(0, 200) : undefined;
     if (robot.reservation) {
       if (isReservationActive(robot.reservation)) {
-        // I03: a real active claim is genuinely being released here -
+        // A real active claim is genuinely being released here -
         // distinguish the holder releasing their own claim from an admin
         // force-releasing someone else's, same real distinction claim
         // already makes for "claimed" vs "force-claimed".
@@ -4781,14 +4781,14 @@ async function startServer() {
         return;
       }
 
-      // SERVER-01: same real re-check authenticate() runs for HTTP,
+      // Same real re-check authenticate() runs for HTTP,
       // applied at WS connect time too - a signature-valid token whose
       // account was deleted, or whose tokenVersion has since moved on
       // (password/role changed), must not even open the connection.
       // (ws as any).tokenVersion is cached below so the heartbeat
       // interval can re-check this SAME connection periodically too,
       // without re-verifying the JWT signature on every tick.
-      // REV-004: same real identity check authenticate() runs for HTTP -
+      // Same real identity check authenticate() runs for HTTP -
       // see its own comment for why tokenVersion alone is not enough.
       const currentUser = findUser(decoded?.username || "");
       if (!currentUser || effectiveTokenVersion(currentUser) !== decoded?.tokenVersion || effectiveId(currentUser) !== decoded?.id) {
@@ -4822,17 +4822,17 @@ async function startServer() {
         connectedAt: new Date().toISOString(),
         remoteApiVersion: (ws as any).schema,
       };
-      // SERVER-01: this connection's own claimed session generation,
+      // This connection's own claimed session generation,
       // re-checked against the account's CURRENT one on every heartbeat
       // tick below - a password/role change or account deletion that
       // happens WHILE this socket is open must still close it, not wait
       // for the client to reconnect on its own.
       (ws as any).authTokenVersion = decoded?.tokenVersion;
-      // REV-004: this connection's own claimed real identity, re-checked
+      // This connection's own claimed real identity, re-checked
       // against the account's CURRENT one on every heartbeat tick below,
       // same reasoning as authTokenVersion above.
       (ws as any).authUserId = decoded?.id;
-      // Heartbeat state for this connection (audit #017) - see the
+      // Heartbeat state for this connection - see the
       // setInterval below for why this exists.
       (ws as any).isAlive = true;
       ws.on("pong", () => { (ws as any).isAlive = true; });
@@ -4853,7 +4853,7 @@ async function startServer() {
             // "operator" token could just open a WebSocket and send this
             // message to do the one thing requireAdmin exists to stop it
             // from doing over REST. Same admin-only rule, enforced here too.
-            // SERVER-01: a live lookup, not the connection's own
+            // A live lookup, not the connection's own
             // possibly-stale `decoded.role` from connect time - a
             // demotion takes effect on this very next message, not only
             // once the next heartbeat tick happens to close the socket.
@@ -4874,7 +4874,7 @@ async function startServer() {
     });
   });
 
-  // Application-level heartbeat (audit #017): TCP alone doesn't notice a
+  // Application-level heartbeat: TCP alone doesn't notice a
   // client that vanished without a clean close (laptop went to sleep, Wi-Fi
   // dropped, phone app was killed) - that socket looks OPEN to `ws` and
   // stays in wsClients indefinitely, silently eating a slot in every
@@ -4895,7 +4895,7 @@ async function startServer() {
         wsClients.delete(ws);
         continue;
       }
-      // SERVER-01: the same real re-check as WS connect time, run again
+      // The same real re-check as WS connect time, run again
       // on every heartbeat tick - a password/role change or account
       // deletion that happens WHILE this socket is already open closes
       // it here instead of leaving an already-revoked session connected
@@ -4903,7 +4903,7 @@ async function startServer() {
       const username = (ws as any).meta?.username;
       if (username) {
         const currentUser = findUser(username);
-        // REV-004: same real identity check as WS connect time above.
+        // Same real identity check as WS connect time above.
         if (!currentUser || effectiveTokenVersion(currentUser) !== (ws as any).authTokenVersion || effectiveId(currentUser) !== (ws as any).authUserId) {
           authFailuresTotal.inc({ reason: "ws_session_revoked" });
           ws.close(1008, "Access denied: session revoked");
