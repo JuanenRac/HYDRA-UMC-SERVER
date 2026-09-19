@@ -3555,6 +3555,59 @@ async function startServer() {
     return buffer.subarray(payloadStart, payloadStart + length);
   }
 
+  // Real frame count for a finished recording file on disk - same
+  // Content-Length-based parsing as extractFirstJpegFrame above (never
+  // JPEG SOI/EOI sniffing), just walked across the whole file instead of
+  // stopping at the first frame. Used once, right after a recording
+  // finishes writing, to produce the honest frameCount/durationMs a
+  // real player needs for a seek bar - never estimated or guessed.
+  function countMjpegFrames(buffer: Buffer): number {
+    let offset = 0;
+    let count = 0;
+    while (offset < buffer.length) {
+      const headerEnd = buffer.indexOf("\r\n\r\n", offset);
+      if (headerEnd === -1) break;
+      const head = buffer.subarray(offset, headerEnd).toString("ascii");
+      const match = head.match(/Content-Length:\s*(\d+)/i);
+      if (!match) break;
+      const length = Number(match[1]);
+      const payloadStart = headerEnd + 4;
+      if (buffer.length < payloadStart + length) break;
+      count++;
+      offset = payloadStart + length;
+    }
+    return count;
+  }
+
+  function recordingSidecarPath(filePath: string): string {
+    return `${filePath}.json`;
+  }
+
+  interface RecordingMetadata {
+    startedAt: string;
+    stoppedAt: string;
+    durationMs: number;
+    frameCount: number;
+  }
+
+  function readRecordingSidecar(filePath: string): RecordingMetadata | null {
+    try {
+      const raw = fs.readFileSync(recordingSidecarPath(filePath), "utf-8");
+      const parsed = JSON.parse(raw);
+      if (
+        typeof parsed.startedAt === "string" &&
+        typeof parsed.stoppedAt === "string" &&
+        typeof parsed.durationMs === "number" &&
+        typeof parsed.frameCount === "number"
+      ) {
+        return parsed as RecordingMetadata;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   async function connectToLocalCameraStream(id: number): Promise<Response> {
     const port = cameraStreamPort(id);
     const connectController = new AbortController();
@@ -3677,13 +3730,30 @@ async function startServer() {
     // rather than hanging the request forever, and the loop's own
     // finally{} still runs and cleans up whenever it actually finishes.
     await Promise.race([active.finished, new Promise(resolve => setTimeout(resolve, 5000))]);
-    res.json({ success: true, cameraId: id, filename, startedAt, stoppedAt: new Date().toISOString() });
+    const stoppedAt = new Date().toISOString();
+    // Real, honest playback metadata - written only once the file is
+    // genuinely fully closed (finished resolved above, not the 5s
+    // fallback path racing it) so frameCount always matches the bytes
+    // actually on disk. A player needs frameCount/durationMs for a real
+    // seek bar; nothing here is estimated - both come straight from the
+    // real elapsed time and the real frame boundaries just counted.
+    try {
+      const buffer = fs.readFileSync(active.filePath);
+      const frameCount = countMjpegFrames(buffer);
+      const durationMs = Math.max(0, new Date(stoppedAt).getTime() - new Date(startedAt).getTime());
+      const metadata: RecordingMetadata = { startedAt, stoppedAt, durationMs, frameCount };
+      fs.writeFileSync(recordingSidecarPath(active.filePath), JSON.stringify(metadata));
+    } catch {
+      // A missing sidecar just means the player falls back to frame-only
+      // scrubbing (see GET /api/camera/media below) - never fatal.
+    }
+    res.json({ success: true, cameraId: id, filename, startedAt, stoppedAt });
   });
 
   // Every saved snapshot/recording across every camera, newest first -
   // what STUDIO/SUITE's own camera media viewer lists.
   app.get("/api/camera/media", authenticate, (req, res) => {
-    const items: { cameraId: number; kind: "snapshots" | "recordings"; filename: string; sizeBytes: number; capturedAt: string; recording: boolean }[] = [];
+    const items: { cameraId: number; kind: "snapshots" | "recordings"; filename: string; sizeBytes: number; capturedAt: string; recording: boolean; durationMs?: number; frameCount?: number }[] = [];
     if (fs.existsSync(CAMERA_MEDIA_ROOT)) {
       for (const idDir of fs.readdirSync(CAMERA_MEDIA_ROOT)) {
         const cameraId = Number(idDir);
@@ -3692,7 +3762,10 @@ async function startServer() {
           const dir = path.join(CAMERA_MEDIA_ROOT, idDir, kind);
           if (!fs.existsSync(dir)) continue;
           for (const filename of fs.readdirSync(dir)) {
-            const stat = fs.statSync(path.join(dir, filename));
+            if (filename.endsWith(".json")) continue; // sidecar metadata, not a real media item of its own
+            const filePath = path.join(dir, filename);
+            const stat = fs.statSync(filePath);
+            const sidecar = kind === "recordings" ? readRecordingSidecar(filePath) : null;
             items.push({
               cameraId,
               kind,
@@ -3700,6 +3773,7 @@ async function startServer() {
               sizeBytes: stat.size,
               capturedAt: stat.mtime.toISOString(),
               recording: kind === "recordings" && activeCameraRecordings.get(cameraId)?.filePath.endsWith(filename) === true,
+              ...(sidecar ? { durationMs: sidecar.durationMs, frameCount: sidecar.frameCount } : {}),
             });
           }
         }
@@ -3740,6 +3814,30 @@ async function startServer() {
     const fileStream = fs.createReadStream(resolved);
     fileStream.pipe(res);
     req.on("close", () => fileStream.destroy());
+  });
+
+  // Permanently deletes one saved snapshot/recording (and its sidecar
+  // metadata, if any) - a real, destructive, authenticated operation
+  // (unlike the GET route above, which deliberately stays open for
+  // <img>/player elements). Refuses a recording still actively being
+  // written to, rather than deleting a file another part of this
+  // process still holds an open write stream against.
+  app.delete("/api/camera/media/:cameraId/:kind/:filename", authenticate, (req, res) => {
+    const cameraId = Number(req.params.cameraId);
+    const kind = req.params.kind;
+    if (!Number.isInteger(cameraId) || cameraId < 1 || (kind !== "snapshots" && kind !== "recordings")) {
+      return res.status(400).json({ error: "invalid camera id or media kind" });
+    }
+    const resolved = resolveWithinDataDir("camera-media", String(cameraId), kind, req.params.filename);
+    if (!resolved || !fs.existsSync(resolved)) return res.status(404).json({ error: "media file not found" });
+    const active = activeCameraRecordings.get(cameraId);
+    if (active && active.filePath === resolved) {
+      return res.status(409).json({ error: `Camera ${cameraId}'s recording is still in progress - stop it before deleting.` });
+    }
+    fs.unlinkSync(resolved);
+    const sidecar = recordingSidecarPath(resolved);
+    if (fs.existsSync(sidecar)) fs.unlinkSync(sidecar);
+    res.json({ success: true, cameraId, kind, filename: req.params.filename });
   });
 
   // Real, live status of every camera's own local stream serve process

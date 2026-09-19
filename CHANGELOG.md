@@ -29,6 +29,31 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.7.6] - Real recording metadata and permanent delete for camera media
+
+A saved recording was served as raw multipart bytes with no per-frame
+timing at all - enough for a browser to display it via a plain `<img>`,
+never enough for a real player to build a seek bar or a "current time /
+total time" readout. And there was no way to remove a saved snapshot or
+recording at all once captured - the library only ever grew.
+
+- `POST /api/camera/:id/recording/stop` now counts the recording's own
+  real frames (same `Content-Length`-based parsing `extractFirstJpegFrame`
+  already used, just walked across the whole file) and writes a small
+  sidecar `<filename>.json` with the real `startedAt`/`stoppedAt`/
+  `durationMs`/`frameCount` - nothing estimated or assumed. `GET
+  /api/camera/media` folds this into each recording's own entry when
+  present; an older recording saved before this shipped simply has no
+  `durationMs`/`frameCount` fields, never a fabricated value.
+- New `DELETE /api/camera/media/:cameraId/:kind/:filename` - a real,
+  authenticated, permanent delete (unlike the GET route, which stays
+  open for `<img>`/player elements). Refuses with `409` if the file
+  named is the one an active recording is still writing to.
+- Contract test extended: `recording_metadata=1 delete=3` - a stopped
+  recording's real frameCount/durationMs, an in-progress recording
+  refusing deletion, an anonymous delete attempt refused, and a deleted
+  file genuinely gone from disk (not just hidden from the list).
+
 ## [0.7.5] - Two real camera-media bugs found via live testing on the CM5
 
 - `GET /api/camera/media/:cameraId/:kind/:filename` required authentication,
