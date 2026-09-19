@@ -29,6 +29,25 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.7.7] - Real bug found live on the CM5: a camera's own live stream restarted every couple minutes
+
+Camera 1 kept losing its live view in Vision Center - the raw local
+capture process and this server's own proxy both verified fine on
+request, but the underlying `mjpeg_server.py` child process itself was
+being killed and respawned every 2-5 minutes with no operator-made
+config change at all, so the browser's own reconnect kept racing a
+process that was never up for long. Root cause: `cameraFingerprint()`
+hashed every real ip*/rtsp*/hardwareSource field unconditionally, even
+the ones `computeDeviceArg()` never actually reads for the camera's
+current `sourceType` - a camera that had ever been reconfigured from ip
+to usb (or back) genuinely keeps its now-irrelevant old fields around
+(useful if switched back later, not itself a bug), and ANY later round
+trip that so much as reformatted one of those irrelevant fields flipped
+the fingerprint and triggered a real, unnecessary kill-and-respawn of a
+perfectly healthy stream. `cameraFingerprint()` now only hashes the
+fields the camera's own active `sourceType` branch of
+`computeDeviceArg()` actually reads. 3 new regression tests.
+
 ## [0.7.6] - Real recording metadata and permanent delete for camera media
 
 A saved recording was served as raw multipart bytes with no per-frame

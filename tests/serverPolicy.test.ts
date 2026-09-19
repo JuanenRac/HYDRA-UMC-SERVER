@@ -121,6 +121,30 @@ test("cameraFingerprint", async (t) => {
     const b = cameraFingerprint({ sourceType: "ip", ipHost: "10.0.0.6" });
     assert.notEqual(a, b);
   });
+  await t.test(
+    "is stable for a usb camera when its leftover ip fields change - real bug found live on the CM5 (camera 1 restarting every couple minutes with no operator-made config change)",
+    () => {
+      const a = cameraFingerprint({
+        sourceType: "usb", hardwareSource: "USB_DEV_0",
+        ipHost: "192.168.0.203", ipUsername: "admin", ipPassword: "admin123456", rtspPort: 8554, rtspPath: "/profile0",
+      });
+      const b = cameraFingerprint({
+        sourceType: "usb", hardwareSource: "USB_DEV_0",
+        ipHost: "192.168.0.204", ipUsername: "root", ipPassword: "different", rtspPort: 554, rtspPath: "/other",
+      });
+      assert.equal(a, b);
+    },
+  );
+  await t.test("is stable for an ip camera when hardwareSource (irrelevant to it) changes", () => {
+    const a = cameraFingerprint({ sourceType: "ip", ipHost: "10.0.0.5", hardwareSource: "USB_DEV_0" });
+    const b = cameraFingerprint({ sourceType: "ip", ipHost: "10.0.0.5", hardwareSource: "/dev/video3" });
+    assert.equal(a, b);
+  });
+  await t.test("still changes for a usb camera when its own real hardwareSource changes", () => {
+    const a = cameraFingerprint({ sourceType: "usb", hardwareSource: "USB_DEV_0" });
+    const b = cameraFingerprint({ sourceType: "usb", hardwareSource: "USB_DEV_1" });
+    assert.notEqual(a, b);
+  });
 });
 
 test("cameraStreamPort", () => {
@@ -164,7 +188,7 @@ test("safeIdSegment", async (t) => {
   await t.test("truncates an absurdly long id to 128 characters", () => {
     assert.equal(safeIdSegment("a".repeat(500)).length, 128);
   });
-  await t.test("H032: neutralizes a bare '.' or '..' id, which the allowlist regex alone lets through unchanged", () => {
+  await t.test("neutralizes a bare '.' or '..' id, which the allowlist regex alone lets through unchanged", () => {
     // "." is a deliberately allowed character (real ids use it), so an id
     // of EXACTLY "." or ".." previously survived cleaning untouched -
     // confirmed live to make getPointsPath() resolve outside its own
@@ -174,7 +198,7 @@ test("safeIdSegment", async (t) => {
     assert.equal(safeIdSegment(".."), "_");
     assert.equal(safeIdSegment("."), "_");
   });
-  await t.test("H032: still allows a real id that merely contains dots", () => {
+  await t.test("still allows a real id that merely contains dots", () => {
     assert.equal(safeIdSegment("192.168.0.10"), "192.168.0.10");
     assert.equal(safeIdSegment("robot.1"), "robot.1");
   });
