@@ -193,9 +193,33 @@ async function main() {
     assert.ok(snapshotEntry, "the captured snapshot must be listed");
     assert.ok(recordingEntry, "the finished recording must be listed");
     assert.equal(recordingEntry.recording, false, "a stopped recording must not still be marked as recording");
+    assert.equal(typeof recordingEntry.frameCount, "number", "a stopped recording must carry a real frameCount");
+    assert.ok(recordingEntry.frameCount > 0, "a recording that captured real frames must report frameCount > 0");
+    assert.equal(typeof recordingEntry.durationMs, "number", "a stopped recording must carry a real durationMs");
+    assert.equal(snapshotEntry.frameCount, undefined, "a snapshot must never carry recording-only metadata");
+
+    // Deleting media is real and permanent, and refuses an in-progress recording.
+    const start2 = await requestJson(serverPort, "/api/camera/1/recording/start", { method: "POST", headers: authorization });
+    assert.equal(start2.response.status, 200, JSON.stringify(start2.body));
+    const deleteWhileRecording = await requestJson(serverPort, `/api/camera/media/1/recordings/${start2.body.filename}`, { method: "DELETE", headers: authorization });
+    assert.equal(deleteWhileRecording.response.status, 409, "deleting a recording still in progress must be refused");
+    await requestJson(serverPort, "/api/camera/1/recording/stop", { method: "POST", headers: authorization });
+
+    const deleteAnonymous = await fetch(`http://127.0.0.1:${serverPort}/api/camera/media/1/snapshots/${snapshot.body.filename}`, { method: "DELETE" });
+    assert.equal(deleteAnonymous.status, 401, "deleting media must require authentication, unlike serving it");
+
+    const deleteSnapshot = await requestJson(serverPort, `/api/camera/media/1/snapshots/${snapshot.body.filename}`, { method: "DELETE", headers: authorization });
+    assert.equal(deleteSnapshot.response.status, 200, JSON.stringify(deleteSnapshot.body));
+    const afterDelete = await requestJson(serverPort, "/api/camera/media", { headers: authorization });
+    assert.ok(
+      !afterDelete.body.items.some((item) => item.kind === "snapshots" && item.filename === snapshot.body.filename),
+      "a deleted snapshot must never appear in a later media list",
+    );
+    const refetchDeleted = await fetch(`http://127.0.0.1:${serverPort}/api/camera/media/1/snapshots/${snapshot.body.filename}`);
+    assert.equal(refetchDeleted.status, 404, "a deleted snapshot must genuinely be gone from disk, not just hidden from the list");
 
     console.log(
-      `SERVER_CAMERA_MEDIA_CONTRACT=PASS anon=3 no_stream=1 snapshot=1 traversal_blocked=1 recording_lifecycle=1 double_start_blocked=1 double_stop_blocked=1 media_list=2`,
+      `SERVER_CAMERA_MEDIA_CONTRACT=PASS anon=3 no_stream=1 snapshot=1 traversal_blocked=1 recording_lifecycle=1 double_start_blocked=1 double_stop_blocked=1 media_list=2 recording_metadata=1 delete=3`,
     );
   } finally {
     if (child && child.exitCode === null) {
