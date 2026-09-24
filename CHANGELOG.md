@@ -34,6 +34,11 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.8.0.0] - Stable route list across version bumps
+
+- `docs/openapi.json` now carries the API contract version instead of the package
+  version, so a routine version increment no longer makes the committed file stale.
+
 ## [0.7.9] - Route modules and a richer route list
 
 - **More of `server.ts` split out:** the Bluetooth routes moved to

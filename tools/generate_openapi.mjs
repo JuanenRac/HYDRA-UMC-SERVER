@@ -99,6 +99,12 @@ function collectRoutes() {
   return [...routes.values()].sort((a, b) => compare(a.path, b.path) || compare(a.method, b.method));
 }
 
+function apiVersion() {
+  const source = fs.readFileSync(path.join(root, "src", "server.ts"), "utf8");
+  const match = /const REMOTE_API_VERSION\s*=\s*(\d+)/.exec(source);
+  return match ? match[1] : "1";
+}
+
 function buildDocument() {
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   const paths = {};
@@ -143,7 +149,9 @@ function buildDocument() {
     openapi: "3.1.0",
     info: {
       title: "HYDRA-UMC-SERVER API",
-      version: pkg.version,
+      // The API contract version, not the package version: a routine version
+      // bump must not make the committed file stale.
+      version: apiVersion(),
       description:
         "Generated from the routes registered in src/. It lists paths, methods, required access, the status codes each handler can return, and the names of the JSON body fields and query parameters it reads. Value types and the response bodies are described in docs/REMOTE_API.md.",
     },
