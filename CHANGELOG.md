@@ -34,6 +34,11 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.8.0.3] - Camera, robot and command route modules
+
+- Moved the camera routes, robot claim/release and the robot command route out of server.ts into src/routes/, unchanged; the settings object is handed over as a getter so it is read at the moment of use.
+- The OpenAPI generator now ends each handler at its closing line instead of the next route, so a route is no longer credited with the status codes of the code that follows it.
+
 ## [0.8.0.2] - System routes module and typed API schemas
 
 - Moved the system metrics, supervisor and ecosystem routes out of server.ts into src/routes/systemRoutes.ts, unchanged.

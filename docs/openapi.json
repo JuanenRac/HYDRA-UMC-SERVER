@@ -365,16 +365,6 @@
           "200": {
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
-          "404": {
-            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
           "500": {
             "description": "Server error. The body is documented in docs/REMOTE_API.md.",
             "content": {
@@ -1088,16 +1078,6 @@
         "responses": {
           "200": {
             "description": "Success. The body is documented in docs/REMOTE_API.md."
-          },
-          "403": {
-            "description": "Signed in but not allowed. The body is documented in docs/REMOTE_API.md.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
           },
           "404": {
             "description": "Not found. The body is documented in docs/REMOTE_API.md.",
@@ -2059,16 +2039,6 @@
         "responses": {
           "200": {
             "description": "Success. The body is documented in docs/REMOTE_API.md."
-          },
-          "503": {
-            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
           }
         },
         "security": [
