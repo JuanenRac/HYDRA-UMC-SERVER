@@ -18,6 +18,11 @@ rule rather than semantic-versioning judgment calls:
 - when `patch` would exceed 9, it resets to 0 and `minor` +1 instead (e.g. `0.0.9` -> `0.1.0`, never `0.0.10`)
 - the same carry cascades into `major` if `minor` would exceed 9
 
+`admin-ui/package.json` (`private: true`, version `0.0.0`) is a build
+artifact of this repository, not a separately released package: it is
+compiled into `public/admin/` and versioned only through this project's own
+version above.
+
 The running version is readable live from the API itself: `GET /api/hydra-info`
 returns `appVersion`, read straight from this project's own `package.json` at
 startup - the same field every client of this server (HYDRA-UMC STUDIO's
