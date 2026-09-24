@@ -13,6 +13,7 @@
 //   node tools/generate_openapi.mjs           rewrite docs/openapi.json
 //   node tools/generate_openapi.mjs --check   fail if the file is out of date
 // =============================================================================
+import { SCHEMAS, RESPONSES, REQUESTS, errorResponse, jsonContent } from "./openapi_types.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -108,7 +109,12 @@ function apiVersion() {
 function buildDocument() {
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   const paths = {};
-  for (const r of collectRoutes()) {
+  const routes = collectRoutes();
+  const known = new Set(routes.map((r) => `${r.method.toUpperCase()} ${r.path}`));
+  for (const key of [...Object.keys(RESPONSES), ...Object.keys(REQUESTS)]) {
+    if (!known.has(key)) throw new Error(`tools/openapi_types.mjs describes ${key}, which is not a registered route`);
+  }
+  for (const r of routes) {
     const params = [...r.path.matchAll(/\{([A-Za-z0-9_]+)\}/g)].map((p) => ({
       name: p[1],
       in: "path",
@@ -132,9 +138,19 @@ function buildDocument() {
         ]),
       ),
     };
+    const key = `${r.method.toUpperCase()} ${r.path}`;
+    for (const [code, response] of Object.entries(operation.responses)) {
+      if (Number(code) >= 400) response.content = jsonContent(errorResponse);
+      else if (code === "200" && RESPONSES[key]) response.content = jsonContent(RESPONSES[key]);
+    }
     for (const name of r.query) params.push({ name, in: "query", required: false, schema: { type: "string" } });
     if (params.length) operation.parameters = params;
-    if (r.body.length && r.method !== "get" && r.method !== "delete") {
+    if (REQUESTS[key]) {
+      operation.requestBody = {
+        required: REQUESTS[key].required.length > 0,
+        content: jsonContent({ type: "object", required: REQUESTS[key].required, properties: REQUESTS[key].fields }),
+      };
+    } else if (r.body.length && r.method !== "get" && r.method !== "delete") {
       operation.requestBody = {
         required: false,
         description: "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
@@ -153,9 +169,9 @@ function buildDocument() {
       // bump must not make the committed file stale.
       version: apiVersion(),
       description:
-        "Generated from the routes registered in src/. It lists paths, methods, required access, the status codes each handler can return, and the names of the JSON body fields and query parameters it reads. Value types and the response bodies are described in docs/REMOTE_API.md.",
+        "Generated from the routes registered in src/. It lists paths, methods, required access, the status codes each handler can return, and the names of the JSON body fields and query parameters it reads. Routes with a stable shape carry typed request and response schemas; the others are described in docs/REMOTE_API.md.",
     },
-    components: { securitySchemes: { bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" } } },
+    components: { securitySchemes: { bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" } }, schemas: SCHEMAS },
     paths,
   };
 }

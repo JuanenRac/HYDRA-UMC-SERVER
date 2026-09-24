@@ -34,6 +34,11 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.8.0.2] - System routes module and typed API schemas
+
+- Moved the system metrics, supervisor and ecosystem routes out of server.ts into src/routes/systemRoutes.ts, unchanged.
+- docs/openapi.json now carries typed request and response schemas for the login, refresh, logout, users, metrics, upload and service-control routes, and a shared error schema for every 4xx/5xx response.
+
 ## [0.8.0.1] - CAN-OTA relay runs on older Node releases
 
 - The CAN-OTA relay module imports `WebSocket` from `ws` itself instead of relying on
