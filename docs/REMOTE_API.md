@@ -84,6 +84,14 @@ never runs `build-frontend` stays headless (this server serves 404s at
 separate process/origin exactly as described in its own README, talking
 to this API remotely like any other client.
 
+## Machine-readable route list
+
+[`openapi.json`](openapi.json) is an OpenAPI 3.1 inventory of every route this
+server registers: path, method and the access each one demands (public, any
+signed-in user, or admin). It is generated from the source with
+`npm run openapi` and `npm test` fails when it is out of date. It does not
+describe request or response bodies - those are the sections below.
+
 ## 1. Discovery: `GET /api/hydra-info`
 
 The response includes `schema_version: "1.0"` and conforms to the SDK v1
