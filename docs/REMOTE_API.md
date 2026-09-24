@@ -88,9 +88,11 @@ to this API remotely like any other client.
 
 [`openapi.json`](openapi.json) is an OpenAPI 3.1 inventory of every route this
 server registers: path, method and the access each one demands (public, any
-signed-in user, or admin). It is generated from the source with
-`npm run openapi` and `npm test` fails when it is out of date. It does not
-describe request or response bodies - those are the sections below.
+signed-in user, or admin), the status codes each handler can return, and
+the names of the JSON body fields and query parameters it reads. It is
+generated from the source with `npm run openapi` and `npm test` fails when
+it is out of date. Field types and the response bodies are not described
+there - those are the sections below.
 
 ## 1. Discovery: `GET /api/hydra-info`
 
