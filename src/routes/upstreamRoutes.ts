@@ -8,6 +8,7 @@
 // server.ts unchanged. The upstream settings arrive through `deps` so this
 // module never reads the process environment on its own.
 import express from "express";
+import { WebSocket } from "ws";
 import { probeTcp } from "../ecosystemStatus";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
