@@ -57,7 +57,7 @@ function writeRawUsersJson(dir: string, content: string): void {
 }
 
 test("effectiveTokenVersion", async (t) => {
-  await t.test("defaults a users.json written before SERVER-01 (no tokenVersion field) to 1", () => {
+  await t.test("defaults a users.json written before tokenVersion existed (no tokenVersion field) to 1", () => {
     const legacy = { username: "x", passwordHash: "s:h", role: "admin", createdAt: "" } as StoredUser;
     assert.equal(effectiveTokenVersion(legacy), 1);
   });
@@ -67,8 +67,8 @@ test("effectiveTokenVersion", async (t) => {
   });
 });
 
-test("effectiveId - REV-004", async (t) => {
-  await t.test("defaults a users.json written before REV-004 (no id field) to the username", () => {
+test("effectiveId", async (t) => {
+  await t.test("defaults a users.json written before ids existed (no id field) to the username", () => {
     const legacy = { username: "x", passwordHash: "s:h", role: "admin", createdAt: "" } as StoredUser;
     assert.equal(effectiveId(legacy), "x");
   });
@@ -78,7 +78,7 @@ test("effectiveId - REV-004", async (t) => {
   });
 });
 
-test("loadUsers (via findUser/listUsers) - SERVER-02", async (t) => {
+test("loadUsers (via findUser/listUsers)", async (t) => {
   await t.test("a genuinely missing users.json is a fresh install, not an error", async () => {
     await withTempCwd(() => {
       assert.deepEqual(listUsers(), []);
@@ -112,7 +112,7 @@ test("loadUsers (via findUser/listUsers) - SERVER-02", async (t) => {
   });
 });
 
-test("saveUsers atomicity (via createUser) - SERVER-02", async (t) => {
+test("saveUsers atomicity (via createUser)", async (t) => {
   await t.test("leaves no orphaned .tmp file behind after a normal write", async () => {
     await withTempCwd(async (dir) => {
       const result = await createUser("operator-1", "a-real-password", "operator");
@@ -134,7 +134,7 @@ test("saveUsers atomicity (via createUser) - SERVER-02", async (t) => {
   });
 });
 
-test("createUser - SERVER-01 tokenVersion seeding", async (t) => {
+test("createUser - tokenVersion seeding", async (t) => {
   await t.test("a freshly created account starts at tokenVersion 1, explicitly", async () => {
     await withTempCwd(async () => {
       await createUser("operator-1", "a-real-password", "operator");
@@ -152,7 +152,7 @@ test("createUser - SERVER-01 tokenVersion seeding", async (t) => {
     });
   });
 
-  await t.test("a freshly created account gets a real id, distinct from its own username - REV-004", async () => {
+  await t.test("a freshly created account gets a real id, distinct from its own username", async () => {
     await withTempCwd(async () => {
       await createUser("operator-1", "a-real-password", "operator");
       const stored = findUser("operator-1")!;
@@ -162,7 +162,7 @@ test("createUser - SERVER-01 tokenVersion seeding", async (t) => {
   });
 });
 
-test("updateUser bumps tokenVersion on every real mutation - SERVER-01", async (t) => {
+test("updateUser bumps tokenVersion on every real mutation", async (t) => {
   await t.test("a password change bumps tokenVersion, revoking every already-issued token/session", async () => {
     await withTempCwd(async () => {
       await createUser("operator-1", "old-password", "operator");
@@ -243,7 +243,7 @@ test("deleteUser", async (t) => {
   });
 });
 
-test("REV-003 - concurrent mutations no longer lose a real account", async (t) => {
+test("concurrent mutations no longer lose a real account", async (t) => {
   await t.test("two concurrent createUser calls for DIFFERENT usernames both survive", async () => {
     // Before the withUsersLock() fix, both calls' own loadUsers() read the
     // same pre-mutation file (the race window is hashPassword()'s own
@@ -288,7 +288,7 @@ test("REV-003 - concurrent mutations no longer lose a real account", async (t) =
   });
 });
 
-test("REV-004 - a recreated account never reuses a deleted account's identity", async (t) => {
+test("a recreated account never reuses a deleted account's identity", async (t) => {
   await t.test("deleting and recreating the same username produces a real, different id", async () => {
     await withTempCwd(async () => {
       await createUser("recycled", "old-password", "operator");
@@ -320,7 +320,7 @@ test("REV-004 - a recreated account never reuses a deleted account's identity", 
   });
 });
 
-test("hashPassword/verifyPassword (async, SERVER-03)", async (t) => {
+test("hashPassword/verifyPassword (async)", async (t) => {
   await t.test("a login with the correct password succeeds and a wrong one fails, now that both are async", async () => {
     await withTempCwd(async () => {
       await createUser("operator-1", "correct-password", "operator");
@@ -348,7 +348,7 @@ test("hashPassword/verifyPassword (async, SERVER-03)", async (t) => {
   });
 });
 
-test("scrypt concurrency bound - SERVER-03 overload rejection", async (t) => {
+test("scrypt concurrency bound - overload rejection", async (t) => {
   await t.test("once concurrent + queued operations are exhausted, further attempts fail closed with ScryptOverloadError instead of queueing forever", async () => {
     let stored: string;
     await withTempCwd(async () => {
@@ -371,7 +371,7 @@ test("scrypt concurrency bound - SERVER-03 overload rejection", async (t) => {
   });
 });
 
-test("ensureSeedUser - SERVER-01 tokenVersion seeding", async (t) => {
+test("ensureSeedUser - tokenVersion seeding", async (t) => {
   await t.test("the bootstrap admin starts at tokenVersion 1", async () => {
     await withTempCwd(async () => {
       const originalEnv = { ...process.env };
