@@ -430,6 +430,218 @@
           }
         }
       },
+      "Passthrough": {
+        "type": "object",
+        "description": "The body of the upstream service, relayed unchanged; its shape is that service's own."
+      },
+      "Settings": {
+        "type": "object",
+        "description": "The full settings document. Controllers and their robots are listed under controllers[].robots.",
+        "properties": {
+          "controllers": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "SupervisorSnapshot": {
+        "type": "object",
+        "description": "Host deep-dive: CPU per core, memory, disks, network, temperatures. Fields the host cannot report are null."
+      },
+      "WatchStatus": {
+        "type": "object",
+        "required": [
+          "type",
+          "headline",
+          "detail",
+          "level",
+          "speak"
+        ],
+        "properties": {
+          "type": {
+            "const": "system_status"
+          },
+          "headline": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "NOMINAL",
+              "WARNING",
+              "CRITICAL"
+            ]
+          },
+          "speak": {
+            "type": "boolean"
+          }
+        }
+      },
+      "VoiceReply": {
+        "type": "object",
+        "required": [
+          "type",
+          "requestId",
+          "text",
+          "level",
+          "speak",
+          "requiresConfirmation"
+        ],
+        "properties": {
+          "type": {
+            "const": "assistant_reply"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string"
+          },
+          "speak": {
+            "type": "boolean"
+          },
+          "requiresConfirmation": {
+            "type": "boolean"
+          },
+          "visualState": {
+            "type": "string"
+          },
+          "intent": {
+            "type": "object"
+          },
+          "interpretation": {
+            "type": "object"
+          },
+          "confirmationToken": {
+            "type": "string"
+          },
+          "confirmationValiditySeconds": {
+            "type": "number"
+          }
+        }
+      },
+      "EcosystemStatus": {
+        "type": "object",
+        "required": [
+          "available",
+          "scannedAt",
+          "projects"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "scannedAt": {
+            "type": "string"
+          },
+          "projects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "name"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "stack": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "maturity": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "family": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "version": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "deploymentTarget": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "servicePort": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "serviceHealthPath": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "serviceHost": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "systemdUnit": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "pid": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "activeState": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "subState": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "live": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
       "UserList": {
         "type": "object",
         "required": [
@@ -457,7 +669,14 @@
         "x-access": "user",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Passthrough"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1409,7 +1628,14 @@
         "x-access": "public",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EcosystemStatus"
+                }
+              }
+            }
           }
         }
       }
@@ -1481,7 +1707,14 @@
         "x-access": "user",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Passthrough"
+                }
+              }
+            }
           },
           "503": {
             "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
@@ -2196,7 +2429,14 @@
         "x-access": "user",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            }
           },
           "500": {
             "description": "Server error. The body is documented in docs/REMOTE_API.md.",
@@ -2568,7 +2808,14 @@
         "x-access": "public",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupervisorSnapshot"
+                }
+              }
+            }
           }
         }
       }
@@ -2583,7 +2830,14 @@
         "x-access": "user",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Passthrough"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2603,7 +2857,14 @@
         "x-access": "user",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Passthrough"
+                }
+              }
+            }
           }
         },
         "security": [

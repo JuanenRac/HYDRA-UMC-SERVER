@@ -34,6 +34,10 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.8.0.5] - Remaining API schemas
+
+- docs/openapi.json now types the ecosystem status, watch status, voice reply, settings and supervisor responses, and marks the relayed telemetry, adapter and CAN OTA version routes as passing the upstream body through unchanged.
+
 ## [0.8.0.4] - More typed API schemas
 
 - docs/openapi.json now carries typed request and response schemas for discovery info, robot claim/release, camera capture and media, PTZ, admin clients/logs/server config, models, Bluetooth and CAN OTA flashing, in addition to the ones added earlier.
