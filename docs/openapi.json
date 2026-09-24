@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "HYDRA-UMC-SERVER API",
-    "version": "0.7.8",
+    "version": "0.7.9",
     "description": "Generated from the routes registered in src/. It lists paths, methods, required access, the status codes each handler can return, and the names of the JSON body fields and query parameters it reads. Value types and the response bodies are described in docs/REMOTE_API.md."
   },
   "components": {
