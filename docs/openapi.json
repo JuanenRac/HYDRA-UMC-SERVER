@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "HYDRA-UMC-SERVER API",
-    "version": "0.7.7",
+    "version": "0.7.8",
     "description": "Route inventory generated from the routes registered in src/. It lists paths, methods and required access only; request and response bodies are described in docs/REMOTE_API.md."
   },
   "components": {
@@ -163,151 +163,6 @@
         ]
       }
     },
-    "/api/camera/{id}/ptz": {
-      "post": {
-        "tags": [
-          "camera"
-        ],
-        "summary": "POST /api/camera/{id}/ptz",
-        "description": "Requires a signed-in account with the admin role.",
-        "x-access": "admin",
-        "responses": {
-          "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
-      }
-    },
-    "/api/camera/{id}/recording/start": {
-      "post": {
-        "tags": [
-          "camera"
-        ],
-        "summary": "POST /api/camera/{id}/recording/start",
-        "description": "Requires a signed-in account (bearer token).",
-        "x-access": "user",
-        "responses": {
-          "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
-      }
-    },
-    "/api/camera/{id}/recording/stop": {
-      "post": {
-        "tags": [
-          "camera"
-        ],
-        "summary": "POST /api/camera/{id}/recording/stop",
-        "description": "Requires a signed-in account (bearer token).",
-        "x-access": "user",
-        "responses": {
-          "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
-      }
-    },
-    "/api/camera/{id}/snapshot": {
-      "post": {
-        "tags": [
-          "camera"
-        ],
-        "summary": "POST /api/camera/{id}/snapshot",
-        "description": "Requires a signed-in account (bearer token).",
-        "x-access": "user",
-        "responses": {
-          "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
-      }
-    },
-    "/api/camera/{id}/stream": {
-      "get": {
-        "tags": [
-          "camera"
-        ],
-        "summary": "GET /api/camera/{id}/stream",
-        "description": "No authentication required by the route itself.",
-        "x-access": "public",
-        "responses": {
-          "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
-      }
-    },
     "/api/camera/discover-rtsp-path": {
       "post": {
         "tags": [
@@ -444,6 +299,151 @@
           },
           {
             "name": "filename",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/camera/{id}/ptz": {
+      "post": {
+        "tags": [
+          "camera"
+        ],
+        "summary": "POST /api/camera/{id}/ptz",
+        "description": "Requires a signed-in account with the admin role.",
+        "x-access": "admin",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md."
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/camera/{id}/recording/start": {
+      "post": {
+        "tags": [
+          "camera"
+        ],
+        "summary": "POST /api/camera/{id}/recording/start",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md."
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/camera/{id}/recording/stop": {
+      "post": {
+        "tags": [
+          "camera"
+        ],
+        "summary": "POST /api/camera/{id}/recording/stop",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md."
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/camera/{id}/snapshot": {
+      "post": {
+        "tags": [
+          "camera"
+        ],
+        "summary": "POST /api/camera/{id}/snapshot",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md."
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/camera/{id}/stream": {
+      "get": {
+        "tags": [
+          "camera"
+        ],
+        "summary": "GET /api/camera/{id}/stream",
+        "description": "No authentication required by the route itself.",
+        "x-access": "public",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md."
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
             "in": "path",
             "required": true,
             "schema": {
@@ -647,6 +647,26 @@
         }
       }
     },
+    "/api/models/submit": {
+      "post": {
+        "tags": [
+          "models"
+        ],
+        "summary": "POST /api/models/submit",
+        "description": "Requires a signed-in account with the admin role.",
+        "x-access": "admin",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/models/{category}/{slug}/download": {
       "get": {
         "tags": [
@@ -676,26 +696,6 @@
             "schema": {
               "type": "string"
             }
-          }
-        ]
-      }
-    },
-    "/api/models/submit": {
-      "post": {
-        "tags": [
-          "models"
-        ],
-        "summary": "POST /api/models/submit",
-        "description": "Requires a signed-in account with the admin role.",
-        "x-access": "admin",
-        "responses": {
-          "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
           }
         ]
       }

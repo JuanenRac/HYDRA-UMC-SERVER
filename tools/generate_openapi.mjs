@@ -26,6 +26,10 @@ function sourceFiles() {
   return fs.readdirSync(dir).filter((f) => f.endsWith(".ts")).sort().map((f) => path.join(dir, f));
 }
 
+// Plain code-unit order: localeCompare varies with the ICU version of the
+// Node that runs this, and the output must be identical everywhere.
+const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
 function collectRoutes() {
   const routes = new Map();
   for (const file of sourceFiles()) {
@@ -37,7 +41,7 @@ function collectRoutes() {
       routes.set(`${method} ${templated}`, { method, path: templated, access, rateLimited: /RateLimiter/.test(rest) });
     }
   }
-  return [...routes.values()].sort((a, b) => a.path.localeCompare(b.path) || a.method.localeCompare(b.method));
+  return [...routes.values()].sort((a, b) => compare(a.path, b.path) || compare(a.method, b.method));
 }
 
 function buildDocument() {
