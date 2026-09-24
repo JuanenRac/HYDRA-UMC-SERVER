@@ -3,7 +3,7 @@
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
 // GPL-3.0 - see LICENSE
 // =============================================================================
-// Found while auditing the code (SERVER-01/02/03,
+// Found while auditing the code (/02/03,
 // all P1): this store had zero direct unit tests of its own - the only
 // coverage touching it at all was tools/verify_auth_negative.mjs, a real
 // end-to-end contract script that proves anonymous/invalid-token/wrong-role
@@ -201,7 +201,7 @@ test("updateUser bumps tokenVersion on every real mutation - SERVER-01", async (
         role: "admin",
         createdAt: new Date().toISOString(),
         // tokenVersion intentionally omitted - simulates a users.json
-        // written before SERVER-01 existed.
+        // written before existed.
       };
       writeRawUsersJson(dir, JSON.stringify([legacyUser]));
       await updateUser("legacy-admin", { role: "admin" === legacyUser.role ? "admin" : "operator" });
@@ -297,7 +297,7 @@ test("REV-004 - a recreated account never reuses a deleted account's identity", 
       await createUser("recycled", "new-password", "admin"); // even with a different role
       const recreated = findUser("recycled")!;
       assert.notEqual(effectiveId(recreated), effectiveId(original), "a recreated account must never reuse the deleted account's own identity");
-      // tokenVersion alone (SERVER-01's own fix) resets to 1 on the new
+      // tokenVersion alone (this project's own fix) resets to 1 on the new
       // account too - this is the exact real gap effectiveId() closes.
       assert.equal(recreated.tokenVersion, 1);
       assert.equal(original.tokenVersion, 1);
@@ -312,7 +312,7 @@ test("REV-004 - a recreated account never reuses a deleted account's identity", 
         role: "admin",
         createdAt: new Date().toISOString(),
         // id intentionally omitted - simulates a users.json written
-        // before REV-004's fix existed.
+        // before 's fix existed.
       };
       writeRawUsersJson(dir, JSON.stringify([legacyUser]));
       assert.equal(effectiveId(findUser("legacy-admin")!), "legacy-admin");
@@ -338,7 +338,7 @@ test("hashPassword/verifyPassword (async, SERVER-03)", async (t) => {
     await withTempCwd(async () => {
       const salt = crypto.randomBytes(16).toString("hex");
       // Deliberately built with NO options object, matching exactly what
-      // this codebase's own hashPassword() used to call before SERVER-03
+      // this codebase's own hashPassword used to call before 
       // bumped the cost parameters - this is the real shape an account
       // created before that fix still has on disk today.
       const legacyHash = crypto.scryptSync("legacy-password", salt, 64).toString("hex");

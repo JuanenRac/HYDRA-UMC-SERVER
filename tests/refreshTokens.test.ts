@@ -3,7 +3,7 @@
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
 // GPL-3.0 - see LICENSE
 // =============================================================================
-// C08: real unit coverage for the refresh-token store, same in-process/
+// real unit coverage for the refresh-token store, same in-process/
 // temp-cwd convention as tests/users.test.ts (usersPath()/refreshTokensPath()
 // both resolve against process.cwd(), the same real mechanism the running
 // server itself uses - no mocked file I/O).
