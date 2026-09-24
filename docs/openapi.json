@@ -3,7 +3,7 @@
   "info": {
     "title": "HYDRA-UMC-SERVER API",
     "version": "2",
-    "description": "Generated from the routes registered in src/. It lists paths, methods, required access, the status codes each handler can return, and the names of the JSON body fields and query parameters it reads. Value types and the response bodies are described in docs/REMOTE_API.md."
+    "description": "Generated from the routes registered in src/. It lists paths, methods, required access, the status codes each handler can return, and the names of the JSON body fields and query parameters it reads. Routes with a stable shape carry typed request and response schemas; the others are described in docs/REMOTE_API.md."
   },
   "components": {
     "securitySchemes": {
@@ -11,6 +11,108 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "Success": {
+        "type": "object",
+        "required": [
+          "success"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          }
+        }
+      },
+      "LoginResult": {
+        "type": "object",
+        "required": [
+          "success",
+          "token",
+          "refreshToken",
+          "role"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "token": {
+            "type": "string"
+          },
+          "refreshToken": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        }
+      },
+      "SystemMetrics": {
+        "type": "object",
+        "required": [
+          "cpu_load",
+          "memory_usage",
+          "temp",
+          "temp_is_real",
+          "rp1_temp",
+          "uptime",
+          "network"
+        ],
+        "properties": {
+          "cpu_load": {
+            "type": "number"
+          },
+          "memory_usage": {
+            "type": "number"
+          },
+          "temp": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "temp_is_real": {
+            "type": "boolean"
+          },
+          "rp1_temp": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "uptime": {
+            "type": "number"
+          },
+          "network": {
+            "type": "object"
+          }
+        }
+      },
+      "UserList": {
+        "type": "object",
+        "required": [
+          "users"
+        ],
+        "properties": {
+          "users": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
       }
     }
   },
@@ -45,7 +147,14 @@
         "x-access": "user",
         "responses": {
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -166,7 +275,14 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "requestBody": {
@@ -203,7 +319,14 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "requestBody": {
@@ -243,13 +366,34 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "404": {
-            "description": "Not found. The body is documented in docs/REMOTE_API.md."
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "500": {
-            "description": "Server error. The body is documented in docs/REMOTE_API.md."
+            "description": "Server error. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "503": {
-            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md."
+            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -292,13 +436,34 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Not found. The body is documented in docs/REMOTE_API.md."
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Conflict with the current state. The body is documented in docs/REMOTE_API.md."
+            "description": "Conflict with the current state. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -342,10 +507,24 @@
         "x-access": "public",
         "responses": {
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Not found. The body is documented in docs/REMOTE_API.md."
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -389,10 +568,24 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "502": {
-            "description": "Upstream service rejected the request. The body is documented in docs/REMOTE_API.md."
+            "description": "Upstream service rejected the request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -446,13 +639,34 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Conflict with the current state. The body is documented in docs/REMOTE_API.md."
+            "description": "Conflict with the current state. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "503": {
-            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md."
+            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -485,10 +699,24 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Not found. The body is documented in docs/REMOTE_API.md."
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -521,13 +749,34 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "502": {
-            "description": "Upstream service rejected the request. The body is documented in docs/REMOTE_API.md."
+            "description": "Upstream service rejected the request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "503": {
-            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md."
+            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -560,13 +809,34 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "502": {
-            "description": "Upstream service rejected the request. The body is documented in docs/REMOTE_API.md."
+            "description": "Upstream service rejected the request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "503": {
-            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md."
+            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -611,19 +881,54 @@
         "x-access": "admin",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
           },
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Signed in but not allowed. The body is documented in docs/REMOTE_API.md."
+            "description": "Signed in but not allowed. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Not found. The body is documented in docs/REMOTE_API.md."
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "503": {
-            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md."
+            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -679,13 +984,34 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "502": {
-            "description": "Upstream service rejected the request. The body is documented in docs/REMOTE_API.md."
+            "description": "Upstream service rejected the request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "503": {
-            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md."
+            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -708,7 +1034,14 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "503": {
-            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md."
+            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -757,10 +1090,24 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "403": {
-            "description": "Signed in but not allowed. The body is documented in docs/REMOTE_API.md."
+            "description": "Signed in but not allowed. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Not found. The body is documented in docs/REMOTE_API.md."
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
@@ -778,7 +1125,14 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "requestBody": {
@@ -813,25 +1167,53 @@
         "x-access": "public",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResult"
+                }
+              }
+            }
           },
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "401": {
-            "description": "Not signed in or token rejected. The body is documented in docs/REMOTE_API.md."
+            "description": "Not signed in or token rejected. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "requestBody": {
-          "required": false,
-          "description": "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "username",
+                  "password"
+                ],
                 "properties": {
-                  "password": {},
-                  "username": {}
+                  "username": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -850,18 +1232,27 @@
         "x-access": "public",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
           }
         },
         "requestBody": {
           "required": false,
-          "description": "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [],
                 "properties": {
-                  "refreshToken": {}
+                  "refreshToken": {
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -897,16 +1288,44 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Signed in but not allowed. The body is documented in docs/REMOTE_API.md."
+            "description": "Signed in but not allowed. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Conflict with the current state. The body is documented in docs/REMOTE_API.md."
+            "description": "Conflict with the current state. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "500": {
-            "description": "Server error. The body is documented in docs/REMOTE_API.md."
+            "description": "Server error. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "requestBody": {
@@ -948,13 +1367,34 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "403": {
-            "description": "Signed in but not allowed. The body is documented in docs/REMOTE_API.md."
+            "description": "Signed in but not allowed. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Not found. The body is documented in docs/REMOTE_API.md."
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "500": {
-            "description": "Server error. The body is documented in docs/REMOTE_API.md."
+            "description": "Server error. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -987,24 +1427,49 @@
         "x-access": "public",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResult"
+                }
+              }
+            }
           },
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "401": {
-            "description": "Not signed in or token rejected. The body is documented in docs/REMOTE_API.md."
+            "description": "Not signed in or token rejected. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "requestBody": {
-          "required": false,
-          "description": "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "refreshToken"
+                ],
                 "properties": {
-                  "refreshToken": {}
+                  "refreshToken": {
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -1026,10 +1491,24 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "404": {
-            "description": "Not found. The body is documented in docs/REMOTE_API.md."
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Conflict with the current state. The body is documented in docs/REMOTE_API.md."
+            "description": "Conflict with the current state. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -1078,13 +1557,34 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Not found. The body is documented in docs/REMOTE_API.md."
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Conflict with the current state. The body is documented in docs/REMOTE_API.md."
+            "description": "Conflict with the current state. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -1098,15 +1598,21 @@
           }
         ],
         "requestBody": {
-          "required": false,
-          "description": "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "command"
+                ],
                 "properties": {
-                  "command": {},
-                  "params": {}
+                  "command": {
+                    "type": "string"
+                  },
+                  "params": {
+                    "type": "object"
+                  }
                 }
               }
             }
@@ -1132,10 +1638,24 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "404": {
-            "description": "Not found. The body is documented in docs/REMOTE_API.md."
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Conflict with the current state. The body is documented in docs/REMOTE_API.md."
+            "description": "Conflict with the current state. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -1182,7 +1702,14 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "500": {
-            "description": "Server error. The body is documented in docs/REMOTE_API.md."
+            "description": "Server error. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1203,7 +1730,14 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "500": {
-            "description": "Server error. The body is documented in docs/REMOTE_API.md."
+            "description": "Server error. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1226,21 +1760,39 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "503": {
-            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md."
+            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "requestBody": {
-          "required": false,
-          "description": "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "mac"
+                ],
                 "properties": {
-                  "mac": {}
+                  "mac": {
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -1266,21 +1818,39 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "503": {
-            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md."
+            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "requestBody": {
-          "required": false,
-          "description": "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "on"
+                ],
                 "properties": {
-                  "on": {}
+                  "on": {
+                    "type": "boolean"
+                  }
                 }
               }
             }
@@ -1306,21 +1876,39 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "503": {
-            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md."
+            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "requestBody": {
-          "required": false,
-          "description": "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "mac"
+                ],
                 "properties": {
-                  "mac": {}
+                  "mac": {
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -1346,7 +1934,14 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "503": {
-            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md."
+            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1369,7 +1964,14 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "503": {
-            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md."
+            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1389,7 +1991,14 @@
         "x-access": "public",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemMetrics"
+                }
+              }
+            }
           }
         }
       }
@@ -1452,7 +2061,14 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "503": {
-            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md."
+            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1492,29 +2108,67 @@
         "x-access": "user",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
           },
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Signed in but not allowed. The body is documented in docs/REMOTE_API.md."
+            "description": "Signed in but not allowed. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "500": {
-            "description": "Server error. The body is documented in docs/REMOTE_API.md."
+            "description": "Server error. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "requestBody": {
-          "required": false,
-          "description": "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "folderPath",
+                  "fileName",
+                  "content"
+                ],
                 "properties": {
-                  "content": {},
-                  "fileName": {},
-                  "folderPath": {}
+                  "folderPath": {
+                    "type": "string"
+                  },
+                  "fileName": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -1537,7 +2191,14 @@
         "x-access": "admin",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserList"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1558,20 +2219,37 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "requestBody": {
-          "required": false,
-          "description": "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "username",
+                  "password",
+                  "role"
+                ],
                 "properties": {
-                  "password": {},
-                  "role": {},
-                  "username": {}
+                  "username": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -1597,7 +2275,14 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -1628,7 +2313,14 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -1674,16 +2366,44 @@
         "x-access": "user",
         "responses": {
           "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md."
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Not found. The body is documented in docs/REMOTE_API.md."
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "502": {
-            "description": "Upstream service rejected the request. The body is documented in docs/REMOTE_API.md."
+            "description": "Upstream service rejected the request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "503": {
-            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md."
+            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "requestBody": {
@@ -1717,7 +2437,14 @@
         "x-access": "user",
         "responses": {
           "404": {
-            "description": "Not found. The body is documented in docs/REMOTE_API.md."
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1740,7 +2467,14 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "500": {
-            "description": "Server error. The body is documented in docs/REMOTE_API.md."
+            "description": "Server error. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         }
       }
