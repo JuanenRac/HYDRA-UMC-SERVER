@@ -34,6 +34,12 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.8.0.1] - CAN-OTA relay runs on older Node releases
+
+- The CAN-OTA relay module imports `WebSocket` from `ws` itself instead of relying on
+  the global one, which older Node releases do not have (found by the CI run on
+  Node 20; the same code passed locally on a newer Node).
+
 ## [0.8.0.0] - Stable route list across version bumps
 
 - `docs/openapi.json` now carries the API contract version instead of the package
