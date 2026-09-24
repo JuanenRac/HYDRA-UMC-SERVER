@@ -126,7 +126,7 @@ export function ecosystemRoot(): string {
 // CONTAINING directory name is resolved dynamically via each sibling's
 // own `hydra-umc.project.json` `name` field (same real
 // manifest-driven-discovery this file's own getEcosystemStatus() already
-// uses - see [[project_manifest_dynamic_discovery]]) rather than a
+// uses) rather than a
 // hardcoded `"HYDRA-UMC-VISION-STREAMER"` literal - a real CM5
 // deployment's own directory naming (`/opt/hydra-umc/vision-streamer`,
 // no prefix, matching every other service under `/opt/hydra-umc/`)
