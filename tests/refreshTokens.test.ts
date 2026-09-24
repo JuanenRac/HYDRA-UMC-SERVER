@@ -136,7 +136,7 @@ test("consumeRefreshToken - a deleted account revokes its outstanding refresh to
   });
 });
 
-test("consumeRefreshToken - REV-004 style: recreating the same username never inherits the old refresh token", async () => {
+test("consumeRefreshToken - recreating the same username never inherits the old refresh token", async () => {
   await withTempCwd(async () => {
     const { deleteUser } = await import("../src/users");
     await createUser("admin2", "correcthorsebattery", "admin");
