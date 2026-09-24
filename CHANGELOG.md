@@ -34,6 +34,19 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.7.9] - Route modules and a richer route list
+
+- **More of `server.ts` split out:** the Bluetooth routes moved to
+  `routes/bluetoothRoutes.ts` and the relays to DATALAKE, CONNECTOR-HUB and the
+  CAN-OTA spi_bridge plus the connection test to `routes/upstreamRoutes.ts`.
+  Code moved unchanged; each module receives what it needs (auth middlewares,
+  logger, upstream settings) as arguments. The entry point is now about 3,730
+  lines and the full contract suite still passes.
+- **`docs/openapi.json` is richer:** every operation now lists the status
+  codes its handler can return, the JSON body fields it reads and its query
+  parameters, taken from the handler source. The generator also reads
+  `src/routes/`.
+
 ## [0.7.8] - Smaller entry point and a machine-readable route list
 
 - **`server.ts` split:** the IP-camera probing and PTZ code moved to

@@ -23,23 +23,78 @@ const ROUTE = /^[ \t]*app\.(get|post|put|patch|delete)\(\s*(["'`])(\/[^"'`]+)\2\
 
 function sourceFiles() {
   const dir = path.join(root, "src");
-  return fs.readdirSync(dir).filter((f) => f.endsWith(".ts")).sort().map((f) => path.join(dir, f));
+  const files = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isFile() && entry.name.endsWith(".ts")) files.push(path.join(dir, entry.name));
+    // Route modules live one level down (src/routes/).
+    if (entry.isDirectory() && entry.name === "routes") {
+      for (const f of fs.readdirSync(path.join(dir, "routes"))) if (f.endsWith(".ts")) files.push(path.join(dir, "routes", f));
+    }
+  }
+  return files.sort();
 }
 
 // Plain code-unit order: localeCompare varies with the ICU version of the
 // Node that runs this, and the output must be identical everywhere.
 const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
+const STATUS_TEXT = {
+  200: "Success",
+  201: "Created",
+  204: "No content",
+  400: "Invalid request",
+  401: "Not signed in or token rejected",
+  403: "Signed in but not allowed",
+  404: "Not found",
+  409: "Conflict with the current state",
+  413: "Payload too large",
+  429: "Rate limited",
+  500: "Server error",
+  502: "Upstream service rejected the request",
+  503: "Not configured or unavailable",
+};
+
+// What the handler's own source reveals: the status codes it can answer with,
+// the JSON body fields it reads, and the query parameters it reads. Names
+// only - types and validation live in the handler, and the prose contract in
+// docs/REMOTE_API.md stays the reference for values.
+function inspectHandler(text) {
+  const statuses = new Set();
+  for (const m of text.matchAll(/res\s*\.\s*status\(\s*(\d{3})\s*\)/g)) statuses.add(Number(m[1]));
+  for (const m of text.matchAll(/res\s*\.\s*sendStatus\(\s*(\d{3})\s*\)/g)) statuses.add(Number(m[1]));
+  if (/res\s*\.\s*(json|send|end|download|sendFile)\(/.test(text) && ![...statuses].some((c) => c < 300)) statuses.add(200);
+  const body = new Set();
+  for (const m of text.matchAll(/req\.body\??\.([A-Za-z_][A-Za-z0-9_]*)/g)) body.add(m[1]);
+  for (const m of text.matchAll(/const\s*\{([^}]*)\}\s*=\s*\(?\s*req\.body/g)) {
+    for (const part of m[1].split(",")) {
+      const name = part.split(":")[0].split("=")[0].trim();
+      if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) body.add(name);
+    }
+  }
+  const query = new Set();
+  for (const m of text.matchAll(/req\.query\??\.([A-Za-z_][A-Za-z0-9_]*)/g)) query.add(m[1]);
+  return { statuses: [...statuses].sort((a, b) => a - b), body: [...body].sort(compare), query: [...query].sort(compare) };
+}
+
 function collectRoutes() {
   const routes = new Map();
   for (const file of sourceFiles()) {
-    for (const m of fs.readFileSync(file, "utf8").matchAll(ROUTE)) {
+    const text = fs.readFileSync(file, "utf8");
+    const matches = [...text.matchAll(ROUTE)];
+    matches.forEach((m, i) => {
       const [, method, , route, rest] = m;
       // Express path params (:id) become OpenAPI templates ({id}).
       const templated = route.replace(/:([A-Za-z0-9_]+)/g, "{$1}");
       const access = /requireAdmin/.test(rest) ? "admin" : /authenticate/.test(rest) ? "user" : "public";
-      routes.set(`${method} ${templated}`, { method, path: templated, access, rateLimited: /RateLimiter/.test(rest) });
-    }
+      const handler = text.slice(m.index + m[0].length, i + 1 < matches.length ? matches[i + 1].index : text.length);
+      routes.set(`${method} ${templated}`, {
+        method,
+        path: templated,
+        access,
+        rateLimited: /RateLimiter/.test(rest),
+        ...inspectHandler(handler),
+      });
+    });
   }
   return [...routes.values()].sort((a, b) => compare(a.path, b.path) || compare(a.method, b.method));
 }
@@ -64,9 +119,22 @@ function buildDocument() {
             ? "Requires a signed-in account (bearer token)."
             : "No authentication required by the route itself.",
       "x-access": r.access,
-      responses: { "200": { description: "Success. The body is documented in docs/REMOTE_API.md." } },
+      responses: Object.fromEntries(
+        (r.statuses.length ? r.statuses : [200]).map((code) => [
+          String(code),
+          { description: `${STATUS_TEXT[code] ?? "Response"}. The body is documented in docs/REMOTE_API.md.` },
+        ]),
+      ),
     };
+    for (const name of r.query) params.push({ name, in: "query", required: false, schema: { type: "string" } });
     if (params.length) operation.parameters = params;
+    if (r.body.length && r.method !== "get" && r.method !== "delete") {
+      operation.requestBody = {
+        required: false,
+        description: "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
+        content: { "application/json": { schema: { type: "object", properties: Object.fromEntries(r.body.map((n) => [n, {}])) } } },
+      };
+    }
     if (r.access !== "public") operation.security = [{ bearerAuth: [] }];
     if (r.rateLimited) operation["x-rate-limited"] = true;
     (paths[r.path] ??= {})[r.method] = operation;
@@ -77,7 +145,7 @@ function buildDocument() {
       title: "HYDRA-UMC-SERVER API",
       version: pkg.version,
       description:
-        "Route inventory generated from the routes registered in src/. It lists paths, methods and required access only; request and response bodies are described in docs/REMOTE_API.md.",
+        "Generated from the routes registered in src/. It lists paths, methods, required access, the status codes each handler can return, and the names of the JSON body fields and query parameters it reads. Value types and the response bodies are described in docs/REMOTE_API.md.",
     },
     components: { securitySchemes: { bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" } } },
     paths,
