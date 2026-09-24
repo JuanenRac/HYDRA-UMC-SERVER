@@ -87,7 +87,15 @@ function collectRoutes() {
       // Express path params (:id) become OpenAPI templates ({id}).
       const templated = route.replace(/:([A-Za-z0-9_]+)/g, "{$1}");
       const access = /requireAdmin/.test(rest) ? "admin" : /authenticate/.test(rest) ? "user" : "public";
-      const handler = text.slice(m.index + m[0].length, i + 1 < matches.length ? matches[i + 1].index : text.length);
+      // The handler ends at the first line that closes the call at the same
+      // indentation the route was registered at; if there is none, at the
+      // next route. Reading on to the next route would credit a handler with
+      // the status codes of whatever code follows it.
+      const nextRoute = i + 1 < matches.length ? matches[i + 1].index : text.length;
+      const indent = /^[ 	]*/.exec(m[0])[0];
+      const closing = new RegExp("^" + indent + "\\}\\);[ \\t]*$", "m").exec(text.slice(m.index + m[0].length));
+      const handlerEnd = closing ? Math.min(nextRoute, m.index + m[0].length + closing.index) : nextRoute;
+      const handler = text.slice(m.index + m[0].length, handlerEnd);
       routes.set(`${method} ${templated}`, {
         method,
         path: templated,
