@@ -100,6 +100,336 @@
           }
         }
       },
+      "HydraInfo": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "product",
+          "remoteApiVersion",
+          "appVersion",
+          "hostname",
+          "controllerCount",
+          "robotCount",
+          "uptimeSeconds"
+        ],
+        "properties": {
+          "schema_version": {
+            "type": "string"
+          },
+          "product": {
+            "type": "string"
+          },
+          "remoteApiVersion": {
+            "type": "integer"
+          },
+          "appVersion": {
+            "type": "string"
+          },
+          "hostname": {
+            "type": "string"
+          },
+          "controllerCount": {
+            "type": "integer"
+          },
+          "robotCount": {
+            "type": "integer"
+          },
+          "uptimeSeconds": {
+            "type": "integer"
+          }
+        }
+      },
+      "Reservation": {
+        "type": "object",
+        "required": [
+          "success",
+          "reservationHistory"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "reservation": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "reservationHistory": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "CameraCapture": {
+        "type": "object",
+        "required": [
+          "success",
+          "cameraId",
+          "filename"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "cameraId": {
+            "type": "integer"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "capturedAt": {
+            "type": "string"
+          },
+          "sizeBytes": {
+            "type": "integer"
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "stoppedAt": {
+            "type": "string"
+          }
+        }
+      },
+      "CameraMediaList": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "cameraId",
+                "kind",
+                "filename",
+                "sizeBytes",
+                "capturedAt",
+                "recording"
+              ],
+              "properties": {
+                "cameraId": {
+                  "type": "integer"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "snapshots",
+                    "recordings"
+                  ]
+                },
+                "filename": {
+                  "type": "string"
+                },
+                "sizeBytes": {
+                  "type": "integer"
+                },
+                "capturedAt": {
+                  "type": "string"
+                },
+                "recording": {
+                  "type": "boolean"
+                },
+                "durationMs": {
+                  "type": "integer"
+                },
+                "frameCount": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "CameraProcessStatus": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "required": [
+            "status",
+            "lastError",
+            "port"
+          ],
+          "properties": {
+            "status": {
+              "type": "string"
+            },
+            "lastError": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "port": {
+              "type": "integer"
+            }
+          }
+        }
+      },
+      "UsbDevices": {
+        "type": "object",
+        "required": [
+          "devices"
+        ],
+        "properties": {
+          "devices": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "Clients": {
+        "type": "object",
+        "required": [
+          "clients"
+        ],
+        "properties": {
+          "clients": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "LogLines": {
+        "type": "object",
+        "required": [
+          "lines"
+        ],
+        "properties": {
+          "lines": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ServerConfig": {
+        "type": "object",
+        "required": [
+          "port",
+          "pendingPort"
+        ],
+        "properties": {
+          "port": {
+            "type": "integer"
+          },
+          "pendingPort": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "ServerConfigSaved": {
+        "type": "object",
+        "required": [
+          "success",
+          "appliesOnRestart"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "appliesOnRestart": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Reachable": {
+        "type": "object",
+        "required": [
+          "reachable"
+        ],
+        "properties": {
+          "reachable": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ModelList": {
+        "type": "object",
+        "required": [
+          "models"
+        ],
+        "properties": {
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "ModelSubmitted": {
+        "type": "object",
+        "required": [
+          "success",
+          "slug"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "slug": {
+            "type": "string"
+          }
+        }
+      },
+      "BluetoothScan": {
+        "type": "object",
+        "required": [
+          "success",
+          "devices"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "devices": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "CanotaFlash": {
+        "type": "object",
+        "required": [
+          "success",
+          "finalPhase"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "finalPhase": {
+            "type": "string"
+          }
+        }
+      },
+      "PtzResult": {
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        }
+      },
       "UserList": {
         "type": "object",
         "required": [
@@ -184,7 +514,14 @@
         "x-access": "admin",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Clients"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -204,7 +541,14 @@
         "x-access": "admin",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogLines"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -234,7 +578,14 @@
         "x-access": "admin",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -254,7 +605,14 @@
         "x-access": "admin",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerConfig"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -272,7 +630,14 @@
         "x-access": "admin",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerConfigSaved"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
@@ -286,14 +651,18 @@
           }
         },
         "requestBody": {
-          "required": false,
-          "description": "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "port"
+                ],
                 "properties": {
-                  "port": {}
+                  "port": {
+                    "type": "integer"
+                  }
                 }
               }
             }
@@ -330,17 +699,27 @@
           }
         },
         "requestBody": {
-          "required": false,
-          "description": "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "host"
+                ],
                 "properties": {
-                  "host": {},
-                  "password": {},
-                  "port": {},
-                  "username": {}
+                  "host": {
+                    "type": "string"
+                  },
+                  "port": {
+                    "type": "integer"
+                  },
+                  "username": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -363,7 +742,14 @@
         "x-access": "user",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsbDevices"
+                }
+              }
+            }
           },
           "500": {
             "description": "Server error. The body is documented in docs/REMOTE_API.md.",
@@ -403,7 +789,14 @@
         "x-access": "user",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraMediaList"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -423,7 +816,14 @@
         "x-access": "user",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraCapture"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
@@ -555,7 +955,14 @@
         "x-access": "admin",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PtzResult"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
@@ -589,21 +996,39 @@
           }
         ],
         "requestBody": {
-          "required": false,
-          "description": "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "host"
+                ],
                 "properties": {
-                  "channel": {},
-                  "host": {},
-                  "pan": {},
-                  "password": {},
-                  "port": {},
-                  "tilt": {},
-                  "username": {},
-                  "zoom": {}
+                  "host": {
+                    "type": "string"
+                  },
+                  "port": {
+                    "type": "integer"
+                  },
+                  "username": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "channel": {
+                    "type": "integer"
+                  },
+                  "pan": {
+                    "type": "number"
+                  },
+                  "tilt": {
+                    "type": "number"
+                  },
+                  "zoom": {
+                    "type": "number"
+                  }
                 }
               }
             }
@@ -626,7 +1051,14 @@
         "x-access": "user",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraCapture"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
@@ -686,7 +1118,14 @@
         "x-access": "user",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraCapture"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
@@ -736,7 +1175,14 @@
         "x-access": "user",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraCapture"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
@@ -851,7 +1297,14 @@
         "x-access": "user",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CameraProcessStatus"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -971,7 +1424,14 @@
         "x-access": "admin",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanotaFlash"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
@@ -1077,7 +1537,14 @@
         "x-access": "public",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HydraInfo"
+                }
+              }
+            }
           },
           "404": {
             "description": "Not found. The body is documented in docs/REMOTE_API.md.",
@@ -1102,7 +1569,14 @@
         "x-access": "user",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reachable"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
@@ -1116,15 +1590,22 @@
           }
         },
         "requestBody": {
-          "required": false,
-          "description": "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "host",
+                  "port"
+                ],
                 "properties": {
-                  "host": {},
-                  "port": {}
+                  "host": {
+                    "type": "string"
+                  },
+                  "port": {
+                    "type": "integer"
+                  }
                 }
               }
             }
@@ -1250,7 +1731,14 @@
         "x-access": "public",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelList"
+                }
+              }
+            }
           }
         }
       }
@@ -1265,7 +1753,14 @@
         "x-access": "admin",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelSubmitted"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
@@ -1468,7 +1963,14 @@
         "x-access": "user",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reservation"
+                }
+              }
+            }
           },
           "404": {
             "description": "Not found. The body is documented in docs/REMOTE_API.md.",
@@ -1503,15 +2005,21 @@
         ],
         "requestBody": {
           "required": false,
-          "description": "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [],
                 "properties": {
-                  "force": {},
-                  "reason": {},
-                  "ttlMs": {}
+                  "ttlMs": {
+                    "type": "number"
+                  },
+                  "force": {
+                    "type": "boolean"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -1615,7 +2123,14 @@
         "x-access": "user",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reservation"
+                }
+              }
+            }
           },
           "404": {
             "description": "Not found. The body is documented in docs/REMOTE_API.md.",
@@ -1650,13 +2165,15 @@
         ],
         "requestBody": {
           "required": false,
-          "description": "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [],
                 "properties": {
-                  "reason": {}
+                  "reason": {
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -1707,7 +2224,14 @@
         "x-access": "admin",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
           },
           "500": {
             "description": "Server error. The body is documented in docs/REMOTE_API.md.",
@@ -1795,7 +2319,14 @@
         "x-access": "admin",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
@@ -1853,7 +2384,14 @@
         "x-access": "admin",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
@@ -1911,7 +2449,14 @@
         "x-access": "admin",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BluetoothScan"
+                }
+              }
+            }
           },
           "503": {
             "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
@@ -2186,7 +2731,14 @@
         "x-access": "admin",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
@@ -2242,7 +2794,14 @@
         "x-access": "admin",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
@@ -2280,7 +2839,14 @@
         "x-access": "admin",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
@@ -2305,15 +2871,21 @@
         ],
         "requestBody": {
           "required": false,
-          "description": "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [],
                 "properties": {
-                  "newUsername": {},
-                  "password": {},
-                  "role": {}
+                  "newUsername": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "role": {
+                    "type": "string"
+                  }
                 }
               }
             }

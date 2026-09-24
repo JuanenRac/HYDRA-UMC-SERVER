@@ -34,6 +34,10 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.8.0.4] - More typed API schemas
+
+- docs/openapi.json now carries typed request and response schemas for discovery info, robot claim/release, camera capture and media, PTZ, admin clients/logs/server config, models, Bluetooth and CAN OTA flashing, in addition to the ones added earlier.
+
 ## [0.8.0.3] - Camera, robot and command route modules
 
 - Moved the camera routes, robot claim/release and the robot command route out of server.ts into src/routes/, unchanged; the settings object is handed over as a getter so it is read at the moment of use.
