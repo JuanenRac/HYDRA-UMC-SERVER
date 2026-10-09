@@ -34,6 +34,11 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.8.0.6] - Users and admin routes in their own file, and the power routes typed
+
+- `server.ts` no longer holds `/api/users` and `/api/admin/*`: they live in `src/routes/adminRoutes.ts`, moved unchanged and registered with one small object of dependencies (the auth middlewares, the open WebSocket connections, the log file, the listen port and the stored server config). `server.ts` is 113 lines shorter; every contract script and the unit tests give the same results.
+- `POST /api/system/reboot` and `POST /api/system/shutdown` now have a typed response in `docs/openapi.json`, so every route of the file has one.
+
 ## [0.8.0.5] - Remaining API schemas
 
 - docs/openapi.json now types the ecosystem status, watch status, voice reply, settings and supervisor responses, and marks the relayed telemetry, adapter and CAN OTA version routes as passing the upstream body through unchanged.

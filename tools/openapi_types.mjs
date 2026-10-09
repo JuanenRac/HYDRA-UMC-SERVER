@@ -216,6 +216,8 @@ export const RESPONSES = {
   "GET /api/admin/server-config": ref("ServerConfig"),
   "PUT /api/admin/server-config": ref("ServerConfigSaved"),
   "POST /api/admin/restart": ref("Success"),
+  "POST /api/system/reboot": ref("Success"),
+  "POST /api/system/shutdown": ref("Success"),
   "POST /api/settings": ref("Success"),
   "PUT /api/users/{username}": ref("Success"),
   "DELETE /api/users/{username}": ref("Success"),
