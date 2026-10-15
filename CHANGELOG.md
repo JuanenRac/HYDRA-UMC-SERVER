@@ -576,7 +576,7 @@ filesystem). Both fixed here, each with new regression tests:
 
 ## [0.5.3] - Real session revocation, users.json corruption handling, and non-blocking login
 
-Found while auditing the code (three separate
+Found on code review (three separate
 findings against `src/users.ts`/`src/server.ts`, all fixed together since
 they touch the same account/authentication surface):
 
@@ -634,7 +634,7 @@ they touch the same account/authentication surface):
 
 ## [0.5.2] - Extracted pure helpers into src/serverPolicy.ts, with real direct unit tests
 
-- Found while auditing the code: this repository
+- Found on code review: this repository
   had zero direct unit tests - only the real, valuable but end-to-end
   `tools/verify_*_contract.mjs` scripts, each spinning up a whole real
   server process. `server.ts` itself has several genuinely pure functions
@@ -643,7 +643,7 @@ they touch the same account/authentication surface):
   `hi3510Action`), others were declared INSIDE `startServer()`'s own
   closure despite never touching anything from it (`cameraFingerprint`,
   `safeIdSegment`, `slugify`, `cameraStreamPort`) - a real example of the
-  exact "pure function trapped in a closure" pattern flagged while auditing the code.
+  exact "pure function trapped in a closure" pattern flagged on code review.
 - **`src/serverPolicy.ts`** (new) - all 8 functions above moved here
   unchanged (same logic, same comments, same behavior), each `export`ed
   and independently importable. `server.ts` now imports them back and
@@ -677,8 +677,7 @@ they touch the same account/authentication surface):
 
 ## [0.5.1]
 
-- **Fixed a real remote-access gate gap, found while
-  auditing the code: HYDRA-UMC-DSI's own client already sent
+- **Fixed a real remote-access gate gap, found on code review: HYDRA-UMC-DSI's own client already sent
   `X-Hydra-Client: dsi`, but `remoteAccessAllowed()` never recognized
   "dsi" as one of the gated client types.** A DSI request fell into the
   same bucket as an ungated plain browser tab (any unrecognized header
@@ -714,7 +713,7 @@ they touch the same account/authentication surface):
 ## [0.4.9]
 
 - **Fixed a real wrong-error-message bug in the admin UI's login screen,
-  found while auditing the code.** `admin-ui/src/api.ts`'s own
+  found on code review.** `admin-ui/src/api.ts`'s own
   `apiFetch()` intercepted every real `401` response globally and
   rewrote it to `"Session expired - please log in again."` - correct for
   an already-authenticated call whose token stopped being valid, but
