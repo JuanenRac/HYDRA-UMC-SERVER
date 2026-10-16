@@ -26,7 +26,7 @@
 </p>
 
 
-**正直な現状確認 - 実際に今動くもの:** Express + WebSocket エンジン、その REST/WS API サーフェス、リフレッシュトークンのローテーションを伴う JWT 認証、scrypt によるパスワードハッシュ、mDNS ディスカバリー、ロボットの所有権/占有の裁定、再生（プレイバック）、そして CAN-OTA/テレメトリ/音声/ローカルAI/connector-hub へのリレー（`src/server.ts`、`src/users.ts`、`src/kinematics.ts`、`src/metrics.ts`）は本物であり、テスト済みです - モックに対してではなく、テストツール自身が起動する、まさにこのサーバーの実インスタンスに対してテストされています: 104件のユニットテスト（`npm run test:unit`、`src/serverPolicy.ts`/`src/kinematics.ts` に対する `node:test`）に加え、`tools/` 配下の19個のエンドツーエンドの契約/認証否定スクリプト（discovery、認証否定、本番ブートストラップ、ロボットコマンド/所有権、リフレッシュトークン、音声リレーとその独自のエラーパス、再生、永続化されたXYテーブル、エコシステムのステータス/サービス制御、テレメトリリレー、統合の test-connection、CAN-OTAリレー、ローカルAIプロキシ、connector-hubリレー、システムスーパーバイザー、持続的なWS再接続）があり、すべて `npm run test` で成功しています。ここで本当にハードウェアに近いものの完全には検証されていないもの: 実際の HYDRA-UMC CM5+STM32H745 ボードへの `spi_bridge` リンクと、STUDIO/admin-ui の静的フロントエンドを提供するオプションの経路は本物のコードであり、上記のAPI/契約層を通じて実際に動かされていますが、この環境にはその最後の接続を締めくくる物理的な CM5/STM32 がありません。TLS/HTTPS と `monitoring/` の Prometheus/Grafana スタックは本物でオプションであり、デフォルトでは無効です。これまでに実際に出荷されたものの詳細は `CHANGELOG.md` を参照してください。
+**正直な現状確認 - 実際に今動くもの:** Express + WebSocket エンジン、その REST/WS API サーフェス、リフレッシュトークンのローテーションを伴う JWT 認証、scrypt によるパスワードハッシュ、mDNS ディスカバリー、ロボットの所有権/占有の裁定、再生（プレイバック）、そして CAN-OTA/テレメトリ/音声/ローカルAI/connector-hub へのリレー（`src/server.ts`、`src/users.ts`、`src/kinematics.ts`、`src/metrics.ts`）は本物であり、テスト済みです - モックに対してではなく、テストツール自身が起動する、まさにこのサーバーの実インスタンスに対してテストされています: 118件のユニットテスト（`npm run test:unit`、`src/serverPolicy.ts`/`src/kinematics.ts` に対する `node:test`）に加え、`tools/` 配下の19個のエンドツーエンドの契約/認証否定スクリプト（discovery、認証否定、本番ブートストラップ、ロボットコマンド/所有権、リフレッシュトークン、音声リレーとその独自のエラーパス、再生、永続化されたXYテーブル、エコシステムのステータス/サービス制御、テレメトリリレー、統合の test-connection、CAN-OTAリレー、ローカルAIプロキシ、connector-hubリレー、システムスーパーバイザー、持続的なWS再接続）があり、すべて `npm run test` で成功しています。ここで本当にハードウェアに近いものの完全には検証されていないもの: 実際の HYDRA-UMC CM5+STM32H745 ボードへの `spi_bridge` リンクと、STUDIO/admin-ui の静的フロントエンドを提供するオプションの経路は本物のコードであり、上記のAPI/契約層を通じて実際に動かされていますが、この環境にはその最後の接続を締めくくる物理的な CM5/STM32 がありません。TLS/HTTPS と `monitoring/` の Prometheus/Grafana スタックは本物でオプションであり、デフォルトでは無効です。これまでに実際に出荷されたものの詳細は `CHANGELOG.md` を参照してください。
 
 ---
 
@@ -57,7 +57,7 @@ HYDRA-UMC SERVER は、HYDRA-UMC マルチロボット・マイクロファク�
 すべてのルート、WebSocket メッセージの契約、認証、そしてクライアントごとのリモートアクセスモデルは、**[`docs/REMOTE_API.md`](docs/REMOTE_API.md)** に記載されています——本サーバーと通信するあらゆるもの（HYDRA-UMC STUDIO 自身のクライアントコードを含む）にとっての唯一の信頼できる情報源です。要約すると：
 
 - `/api/*` 配下の REST API —— 設定の読み書き、原子的なロボット指令（ジョグ／再生／一時停止／停止／ツール／バルブ／ポンプ／速度／ビジョン）、アカウント管理、ワークファイルのアップロード／ダウンロード、モデル提出、システムメトリクス、ディスカバリー。
-- 単一の `/ws` WebSocket エンドポイント（クエリ文字列内にベアラートークン）で、状態が変化するたびに全接続クライアントへ完全なツリー形式の `settings` スナップショットと、より軽量な `delta` 更新をブロードキャストします。
+- 単一の `/ws` WebSocket エンドポイント（ベアラートークンは `hydra.bearer` サブプロトコルで、まだ移行していないクライアントはクエリ文字列内で）で、状態が変化するたびに全接続クライアントへ完全なツリー形式の `settings` スナップショットと、より軽量な `delta` 更新をブロードキャストします。
 - すべての書き込みに JWT ベアラートークン認証が必要です。2 つのアカウントロール（`admin`、`operator`）が、設定／ユーザー管理の書き込みと日常のロボット操作の権限をそれぞれ制御します。
 - ローカルネットワーク上でのゼロコンフィグ発見のための `_hydra._tcp` mDNS/Bonjour 広告、加えてサブネットスキャン用の単純な `GET /api/hydra-info`。
 - `GET /metrics` —— Prometheus エクスポジション形式（`prom-client`）。下記「📊 モニタリング」で説明する任意の Grafana ダッシュボード向け。
@@ -106,7 +106,7 @@ HYDRA-UMC-SERVER/
 │   └── hydra-umc-server.service # CM5 上のローカル systemd ユニット
 ├── tools/
 │   ├── ci_validate.py                                   # CI が使用する manifest/CHANGELOG/docs の検証
-│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 実サーバーに対する 19 個の実際の契約/認証否定
+│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 実サーバーに対する 22 個の実際の契約/認証否定
 │                                                           チェック（discovery、認証否定、本番ブートストラップ、
 │                                                           ロボットコマンド/所有権、リフレッシュトークン、
 │                                                           音声リレーとその独自のエラーパス、再生、永続化

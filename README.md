@@ -26,7 +26,7 @@
 </p>
 
 
-**Honesty check - what actually runs today:** the Express + WebSocket engine, its REST/WS API surface, JWT auth with refresh-token rotation, scrypt password hashing, mDNS discovery, robot-ownership/claim arbitration, playback, and the relays to CAN-OTA/telemetry/voice/local-AI/connector-hub (`src/server.ts`, `src/users.ts`, `src/kinematics.ts`, `src/metrics.ts`) are real and tested - not against mocks, but against a live instance of this same server spun up by the test tooling itself: 107 unit tests (`npm run test:unit`, `node:test` over `src/serverPolicy.ts`/`src/kinematics.ts`) plus 19 end-to-end contract/negative-auth scripts under `tools/` (discovery, auth-negative, production bootstrap, robot command/ownership, refresh tokens, voice relay + its error paths, playback, the persisted work/XY table, ecosystem status/service control, telemetry relay, integrations test-connection, CAN-OTA relay, local-AI proxy, connector-hub relay, system supervisor, sustained WS reconnect), all passing via `npm run test`. What's genuinely hardware-adjacent rather than fully verified here: the `spi_bridge` link to a real HYDRA-UMC CM5+STM32H745 board and the optional STUDIO/admin-ui static-frontend serving path are real code, exercised through the API/contract layer above, but this environment has no physical CM5/STM32 to close that last hop against. TLS/HTTPS and the Prometheus/Grafana `monitoring/` stack are real and optional, off by default. See `CHANGELOG.md` for exactly what has shipped so far.
+**Honesty check - what actually runs today:** the Express + WebSocket engine, its REST/WS API surface, JWT auth with refresh-token rotation, scrypt password hashing, mDNS discovery, robot-ownership/claim arbitration, playback, and the relays to CAN-OTA/telemetry/voice/local-AI/connector-hub (`src/server.ts`, `src/users.ts`, `src/kinematics.ts`, `src/metrics.ts`) are real and tested - not against mocks, but against a live instance of this same server spun up by the test tooling itself: 118 unit tests (`npm run test:unit`, `node:test` over `src/serverPolicy.ts`/`src/kinematics.ts`) plus 22 end-to-end contract/negative-auth scripts under `tools/` (discovery, auth-negative, production bootstrap, robot command/ownership, refresh tokens, voice relay + its error paths, playback, the persisted work/XY table, ecosystem status/service control, telemetry relay, integrations test-connection, CAN-OTA relay, local-AI proxy, connector-hub relay, system supervisor, sustained WS reconnect), all passing via `npm run test`. What's genuinely hardware-adjacent rather than fully verified here: the `spi_bridge` link to a real HYDRA-UMC CM5+STM32H745 board and the optional STUDIO/admin-ui static-frontend serving path are real code, exercised through the API/contract layer above, but this environment has no physical CM5/STM32 to close that last hop against. TLS/HTTPS and the Prometheus/Grafana `monitoring/` stack are real and optional, off by default. See `CHANGELOG.md` for exactly what has shipped so far.
 
 ---
 
@@ -105,7 +105,7 @@ STUDIO's own client code. In short:
 - REST API under `/api/*` - settings read/write, atomic robot commands
   (jog/play/pause/stop/tool/valve/pump/speed/vision), account management,
   work-file upload/download, model submissions, system metrics, discovery.
-- A single `/ws` WebSocket endpoint (bearer token in the query string)
+- A single `/ws` WebSocket endpoint (bearer token as the `hydra.bearer` subprotocol, or in the query string for clients that have not moved yet)
   broadcasting full-tree `settings` snapshots and lighter `delta` updates
   to every connected client whenever state changes.
 - JWT bearer-token authentication on every write; two account roles
@@ -173,7 +173,7 @@ HYDRA-UMC-SERVER/
 │   └── hydra-umc-server.service # Local CM5 systemd unit
 ├── tools/
 │   ├── ci_validate.py                                   # Manifest/CHANGELOG/docs validation used by CI
-│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 19 real contract/negative-auth checks run
+│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 22 real contract/negative-auth checks run
 │                                                           against a live server (discovery, auth-negative,
 │                                                           production bootstrap, robot command, robot
 │                                                           ownership, refresh tokens, voice relay + its own

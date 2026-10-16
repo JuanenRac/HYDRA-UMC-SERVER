@@ -26,7 +26,7 @@
 </p>
 
 
-**诚实核查——今天真正能跑起来的部分：** Express + WebSocket 引擎、它的 REST/WS API 接口、带刷新令牌轮换的 JWT 认证、scrypt 密码哈希、mDNS 发现、机器人所有权/占用仲裁、回放（playback），以及通往 CAN-OTA/遥测/语音/本地 AI/connector-hub 的中继（`src/server.ts`、`src/users.ts`、`src/kinematics.ts`、`src/metrics.ts`）都是真实且经过测试的——不是针对模拟对象（mock），而是针对测试工具自身启动的这个服务器的一个真实实例：104 个单元测试（`npm run test:unit`，基于 `node:test` 针对 `src/serverPolicy.ts`/`src/kinematics.ts`），外加 `tools/` 目录下 19 个端到端契约/负向认证脚本（discovery、负向认证、生产环境 bootstrap、机器人指令/所有权、刷新令牌、语音中继及其自身错误路径、回放、持久化的 XY 表、生态系统状态/服务控制、遥测中继、集成 test-connection、CAN-OTA 中继、本地 AI 代理、connector-hub 中继、系统监控、持续 WS 重连），全部通过 `npm run test`。真正属于"贴近硬件但尚未在此完全验证"的部分：连接到真实 HYDRA-UMC CM5+STM32H745 主板的 `spi_bridge` 链路，以及提供 STUDIO/admin-ui 静态前端的可选路径，都是真实代码，并通过上述 API/契约层得到了验证，但本环境没有物理的 CM5/STM32 来闭合最后这一环。TLS/HTTPS 以及 `monitoring/` 中的 Prometheus/Grafana 技术栈都是真实且可选的，默认关闭。已交付的具体内容见 `CHANGELOG.md`。
+**诚实核查——今天真正能跑起来的部分：** Express + WebSocket 引擎、它的 REST/WS API 接口、带刷新令牌轮换的 JWT 认证、scrypt 密码哈希、mDNS 发现、机器人所有权/占用仲裁、回放（playback），以及通往 CAN-OTA/遥测/语音/本地 AI/connector-hub 的中继（`src/server.ts`、`src/users.ts`、`src/kinematics.ts`、`src/metrics.ts`）都是真实且经过测试的——不是针对模拟对象（mock），而是针对测试工具自身启动的这个服务器的一个真实实例：118 个单元测试（`npm run test:unit`，基于 `node:test` 针对 `src/serverPolicy.ts`/`src/kinematics.ts`），外加 `tools/` 目录下 22 个端到端契约/负向认证脚本（discovery、负向认证、生产环境 bootstrap、机器人指令/所有权、刷新令牌、语音中继及其自身错误路径、回放、持久化的 XY 表、生态系统状态/服务控制、遥测中继、集成 test-connection、CAN-OTA 中继、本地 AI 代理、connector-hub 中继、系统监控、持续 WS 重连），全部通过 `npm run test`。真正属于"贴近硬件但尚未在此完全验证"的部分：连接到真实 HYDRA-UMC CM5+STM32H745 主板的 `spi_bridge` 链路，以及提供 STUDIO/admin-ui 静态前端的可选路径，都是真实代码，并通过上述 API/契约层得到了验证，但本环境没有物理的 CM5/STM32 来闭合最后这一环。TLS/HTTPS 以及 `monitoring/` 中的 Prometheus/Grafana 技术栈都是真实且可选的，默认关闭。已交付的具体内容见 `CHANGELOG.md`。
 
 ---
 
@@ -57,7 +57,7 @@ HYDRA-UMC SERVER 是驱动 HYDRA-UMC 多机器人微工厂单元的独立后端�
 每一个路由、WebSocket 消息契约、身份验证机制以及逐客户端的远程访问模型，均记录于 **[`docs/REMOTE_API.md`](docs/REMOTE_API.md)** 中——这是与本服务器通信的任何组件（包括 HYDRA-UMC STUDIO 自身的客户端代码）的唯一权威来源。简而言之：
 
 - `/api/*` 下的 REST API——设置读写、原子化机器人指令（点动/播放/暂停/停止/工具/阀门/泵/速度/视觉）、账户管理、工作文件上传/下载、模型提交、系统指标、发现服务。
-- 单一的 `/ws` WebSocket 端点（查询字符串中携带承载令牌），在状态发生变化时向所有已连接客户端广播完整树形的 `settings` 快照及更轻量的 `delta` 更新。
+- 单一的 `/ws` WebSocket 端点（承载令牌通过 `hydra.bearer` 子协议传递，尚未迁移的客户端则放在查询字符串中），在状态发生变化时向所有已连接客户端广播完整树形的 `settings` 快照及更轻量的 `delta` 更新。
 - 每次写入均需 JWT 承载令牌身份验证；两种账户角色（`admin`、`operator`）分别控制设置/用户管理写入与日常机器人操作的权限。
 - `_hydra._tcp` mDNS/Bonjour 广播，实现局域网内零配置发现，另配有一个纯粹的 `GET /api/hydra-info` 供子网扫描使用。
 - `GET /metrics`——Prometheus 导出格式（`prom-client`），供下文“📊 监控”一节所述的可选 Grafana 仪表盘使用。
@@ -106,7 +106,7 @@ HYDRA-UMC-SERVER/
 │   └── hydra-umc-server.service # CM5 本地 systemd 单元
 ├── tools/
 │   ├── ci_validate.py                                   # CI 使用的 manifest/CHANGELOG/docs 校验
-│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 针对真实服务器的 19 项真实契约/负向认证
+│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 针对真实服务器的 22 项真实契约/负向认证
 │                                                           检查（discovery、负向认证、生产环境 bootstrap、
 │                                                           机器人指令/所有权、刷新令牌、语音中继及其自身
 │                                                           错误路径、回放、持久化的 XY 表、生态系统状态/

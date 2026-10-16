@@ -24,7 +24,7 @@
 </p>
 
 
-**Ehrlichkeitscheck - was heute wirklich läuft:** die Express + WebSocket-Engine, ihre REST/WS-API-Oberfläche, die JWT-Authentifizierung mit Refresh-Token-Rotation, das scrypt-Passwort-Hashing, die mDNS-Erkennung, die Roboter-Eigentums-/Beanspruchungs-Arbitrierung, die Wiedergabe (Playback) sowie die Relays zu CAN-OTA/Telemetrie/Sprache/lokaler KI/Connector-Hub (`src/server.ts`, `src/users.ts`, `src/kinematics.ts`, `src/metrics.ts`) sind real und getestet - nicht gegen Mocks, sondern gegen eine echte, von der Testinfrastruktur selbst gestartete Instanz genau dieses Servers: 104 Unit-Tests (`npm run test:unit`, `node:test` über `src/serverPolicy.ts`/`src/kinematics.ts`) plus 19 End-to-End-Vertrags-/Negativ-Auth-Skripte unter `tools/` (Discovery, Negativ-Auth, Produktions-Bootstrap, Roboterbefehle/-eigentum, Refresh-Token, Sprach-Relay + seine eigenen Fehlerpfade, Playback, die persistierte XY-Tabelle, Ecosystem-Status/-Service-Steuerung, Telemetrie-Relay, Integrations-Test-Connection, CAN-OTA-Relay, lokaler-KI-Proxy, Connector-Hub-Relay, System-Supervisor, dauerhafte WS-Wiederverbindung), alle erfolgreich über `npm run test`. Was hier echt hardwarenah, aber nicht vollständig verifiziert ist: die `spi_bridge`-Verbindung zu einem echten HYDRA-UMC-CM5+STM32H745-Board und der optionale Pfad zum Ausliefern des statischen STUDIO/admin-ui-Frontends sind echter Code, der über die obige API-/Vertragsschicht durchgeübt wird - diese Umgebung besitzt aber keine physische CM5/STM32, um diesen letzten Schritt tatsächlich zu schließen. TLS/HTTPS und der Prometheus/Grafana-Stack unter `monitoring/` sind real und optional, standardmäßig deaktiviert. Siehe `CHANGELOG.md` für genau das, was bisher ausgeliefert wurde.
+**Ehrlichkeitscheck - was heute wirklich läuft:** die Express + WebSocket-Engine, ihre REST/WS-API-Oberfläche, die JWT-Authentifizierung mit Refresh-Token-Rotation, das scrypt-Passwort-Hashing, die mDNS-Erkennung, die Roboter-Eigentums-/Beanspruchungs-Arbitrierung, die Wiedergabe (Playback) sowie die Relays zu CAN-OTA/Telemetrie/Sprache/lokaler KI/Connector-Hub (`src/server.ts`, `src/users.ts`, `src/kinematics.ts`, `src/metrics.ts`) sind real und getestet - nicht gegen Mocks, sondern gegen eine echte, von der Testinfrastruktur selbst gestartete Instanz genau dieses Servers: 118 Unit-Tests (`npm run test:unit`, `node:test` über `src/serverPolicy.ts`/`src/kinematics.ts`) plus 22 End-to-End-Vertrags-/Negativ-Auth-Skripte unter `tools/` (Discovery, Negativ-Auth, Produktions-Bootstrap, Roboterbefehle/-eigentum, Refresh-Token, Sprach-Relay + seine eigenen Fehlerpfade, Playback, die persistierte XY-Tabelle, Ecosystem-Status/-Service-Steuerung, Telemetrie-Relay, Integrations-Test-Connection, CAN-OTA-Relay, lokaler-KI-Proxy, Connector-Hub-Relay, System-Supervisor, dauerhafte WS-Wiederverbindung), alle erfolgreich über `npm run test`. Was hier echt hardwarenah, aber nicht vollständig verifiziert ist: die `spi_bridge`-Verbindung zu einem echten HYDRA-UMC-CM5+STM32H745-Board und der optionale Pfad zum Ausliefern des statischen STUDIO/admin-ui-Frontends sind echter Code, der über die obige API-/Vertragsschicht durchgeübt wird - diese Umgebung besitzt aber keine physische CM5/STM32, um diesen letzten Schritt tatsächlich zu schließen. TLS/HTTPS und der Prometheus/Grafana-Stack unter `monitoring/` sind real und optional, standardmäßig deaktiviert. Siehe `CHANGELOG.md` für genau das, was bisher ausgeliefert wurde.
 
 ---
 
@@ -117,7 +117,7 @@ zusammengefasst:
   Roboterbefehle (jog/play/pause/stop/tool/valve/pump/speed/vision),
   Kontoverwaltung, Upload/Download von Arbeitsdateien, Modell-Einreichung,
   Systemmetriken, Erkennung.
-- Ein einziger `/ws` WebSocket-Endpunkt (Bearer-Token im Query-String),
+- Ein einziger `/ws` WebSocket-Endpunkt (Bearer-Token als Subprotokoll `hydra.bearer` oder im Query-String für Clients, die noch nicht umgestellt haben),
   der bei jeder Zustandsänderung vollständige `settings`-Snapshots und
   leichtere `delta`-Updates an jeden verbundenen Client sendet.
 - JWT-Bearer-Token-Authentifizierung bei jedem Schreibvorgang; zwei
@@ -194,7 +194,7 @@ HYDRA-UMC-SERVER/
 │   └── hydra-umc-server.service # Lokale systemd-Unit auf der CM5
 ├── tools/
 │   ├── ci_validate.py                                   # Manifest-/CHANGELOG-/Doku-Validierung, von der CI genutzt
-│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 19 echte Vertrags-/Negativ-Auth-Prüfungen gegen
+│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 22 echte Vertrags-/Negativ-Auth-Prüfungen gegen
 │                                                           einen laufenden Server (Discovery, Negativ-Auth,
 │                                                           Produktions-Bootstrap, Roboterbefehle/-eigentum,
 │                                                           Refresh-Token, Sprach-Relay + seine eigenen

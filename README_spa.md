@@ -25,7 +25,7 @@
 </p>
 
 
-**Verificación de honestidad - qué funciona de verdad hoy:** el motor Express + WebSocket, su superficie de API REST/WS, la autenticación JWT con rotación de tokens de refresco, el hash de contraseñas con scrypt, el descubrimiento mDNS, el arbitraje de propiedad/reclamo de robots, el playback, y los relés hacia CAN-OTA/telemetría/voz/IA local/connector-hub (`src/server.ts`, `src/users.ts`, `src/kinematics.ts`, `src/metrics.ts`) son reales y están probados - no contra mocks, sino contra una instancia real de este mismo servidor levantada por las propias herramientas de test: 107 tests unitarios (`npm run test:unit`, `node:test` sobre `src/serverPolicy.ts`/`src/kinematics.ts`) más 19 scripts de contrato/auth-negativo de extremo a extremo bajo `tools/` (discovery, auth negativo, bootstrap de producción, comandos/propiedad de robot, tokens de refresco, relé de voz + sus propias rutas de error, playback, la tabla XY persistida, estado/control de servicios del ecosistema, relé de telemetría, test-connection de integraciones, relé CAN-OTA, proxy de IA local, relé de connector-hub, supervisor del sistema, reconexión WS sostenida), todos pasando vía `npm run test`. Lo que es genuinamente adyacente a hardware más que totalmente verificado aquí: el enlace `spi_bridge` a una placa HYDRA-UMC CM5+STM32H745 real y la ruta opcional de servir el frontend estático de STUDIO/admin-ui son código real, ejercitado a través de la capa de API/contrato de arriba, pero este entorno no tiene una CM5/STM32 física para cerrar ese último salto. TLS/HTTPS y el stack Prometheus/Grafana de `monitoring/` son reales y opcionales, desactivados por defecto. Ver `CHANGELOG.md` para lo que ya se ha entregado exactamente.
+**Verificación de honestidad - qué funciona de verdad hoy:** el motor Express + WebSocket, su superficie de API REST/WS, la autenticación JWT con rotación de tokens de refresco, el hash de contraseñas con scrypt, el descubrimiento mDNS, el arbitraje de propiedad/reclamo de robots, el playback, y los relés hacia CAN-OTA/telemetría/voz/IA local/connector-hub (`src/server.ts`, `src/users.ts`, `src/kinematics.ts`, `src/metrics.ts`) son reales y están probados - no contra mocks, sino contra una instancia real de este mismo servidor levantada por las propias herramientas de test: 118 tests unitarios (`npm run test:unit`, `node:test` sobre `src/serverPolicy.ts`/`src/kinematics.ts`) más 22 scripts de contrato/auth-negativo de extremo a extremo bajo `tools/` (discovery, auth negativo, bootstrap de producción, comandos/propiedad de robot, tokens de refresco, relé de voz + sus propias rutas de error, playback, la tabla XY persistida, estado/control de servicios del ecosistema, relé de telemetría, test-connection de integraciones, relé CAN-OTA, proxy de IA local, relé de connector-hub, supervisor del sistema, reconexión WS sostenida), todos pasando vía `npm run test`. Lo que es genuinamente adyacente a hardware más que totalmente verificado aquí: el enlace `spi_bridge` a una placa HYDRA-UMC CM5+STM32H745 real y la ruta opcional de servir el frontend estático de STUDIO/admin-ui son código real, ejercitado a través de la capa de API/contrato de arriba, pero este entorno no tiene una CM5/STM32 física para cerrar ese último salto. TLS/HTTPS y el stack Prometheus/Grafana de `monitoring/` son reales y opcionales, desactivados por defecto. Ver `CHANGELOG.md` para lo que ya se ha entregado exactamente.
 
 ---
 
@@ -112,7 +112,7 @@ propio código cliente de HYDRA-UMC STUDIO. En resumen:
   atómicos de robot (jog/play/pause/stop/tool/valve/pump/speed/vision),
   gestión de cuentas, subida/descarga de archivos de trabajo, envío de
   modelos, métricas de sistema, descubrimiento.
-- Un único endpoint WebSocket `/ws` (token bearer en la query string) que
+- Un único endpoint WebSocket `/ws` (token bearer como subprotocolo `hydra.bearer`, o en la query string para los clientes que aún no migraron) que
   difunde snapshots completos `settings` y actualizaciones más ligeras
   `delta` a cada cliente conectado cuando cambia el estado.
 - Autenticación JWT por bearer token en cada escritura; dos roles de
@@ -189,7 +189,7 @@ HYDRA-UMC-SERVER/
 │   └── hydra-umc-server.service # Unidad systemd local en la CM5
 ├── tools/
 │   ├── ci_validate.py                                   # Validación de manifest/CHANGELOG/docs usada por la CI
-│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 19 comprobaciones reales de contrato/auth negativo
+│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 22 comprobaciones reales de contrato/auth negativo
 │                                                           contra un servidor real (discovery, auth negativo,
 │                                                           bootstrap de producción, comandos de robot,
 │                                                           propiedad de robot, tokens de refresco, relé de
