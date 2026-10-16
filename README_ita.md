@@ -280,6 +280,7 @@ il che cambia il modello di minaccia da "solo LAN affidabile" a
   listener) da HTTP/WS in chiaro a HTTPS/WSS. Vedi "TLS / HTTPS" più
   sotto. Lasciarne una qualsiasi non impostata mantiene il comportamento
   HTTP in chiaro attuale invariato.
+- `HYDRA_UMC_CAMERA_AUTH=required` / `HYDRA_UMC_INFO_AUTH=required` - richiedono un client autenticato per le immagini delle telecamere (stream in diretta, foto e registrazioni salvate, tramite un `?ticket=` di breve durata che `POST /api/camera/ticket` consegna a un client autenticato) e per le informazioni di sola lettura del dispositivo (`/metrics`, `/api/system/metrics`, `/api/system/supervisor`, `/api/ecosystem/status`, `/api/models`). Disattivato di default perché un client che non chiede ancora ticket continui a funzionare; un avvio in produzione avvisa finché sono disattivati. In produzione il server rifiuta inoltre di avviarsi con un `JWT_SECRET` o una password di avvio di esempio da un modello di distribuzione, un `JWT_SECRET` sotto i 32 caratteri o una password di avvio sotto i 12.
 
 ### TLS / HTTPS
 

@@ -18,6 +18,9 @@
 // without needing to spawn a real server process. server.ts imports every
 // one of these back and calls them exactly as it did before this move.
 
+import nodeCrypto from "node:crypto";
+import nodePath from "node:path";
+
 // Per-client remote-access toggles (Config > Remote Access in the browser
 // UI, src/store.tsx's own SystemSettings.remoteAccess) - 5 independent
 // toggles (SUITE/Android/iOS/Watch/DSI) instead of one combined switch, so
@@ -235,4 +238,97 @@ export function safeIdSegment(id: unknown): string {
 export function slugify(name: string): string {
   const slug = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   return slug || "model";
+}
+
+// ---- secrets that never leave the server for a non-administrator ------------------------------------------------------------------------------
+
+const CAMERA_SECRET_KEYS = new Set(["ipUsername", "ipPassword"]);
+
+/**
+ * The settings tree without the credentials of the IP cameras. Everyone signed in receives the settings (an operator drives the robots), but the user name and password of a
+ * camera are an administrator's: the full tree used to be broadcast to every client, an operator's tablet included. Returns a copy; the original is not touched.
+ */
+export function redactSettingsSecrets<T>(payload: T): T {
+  const walk = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(walk);
+    if (value !== null && typeof value === "object") {
+      const out: Record<string, unknown> = {};
+      for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+        if (CAMERA_SECRET_KEYS.has(key)) continue;
+        out[key] = walk(item);
+      }
+      return out;
+    }
+    return value;
+  };
+  return walk(payload) as T;
+}
+
+// ---- paths -------------------------------------------------------------------------------------------------------------------------------------
+
+/** Is `target` the folder `base` or something inside it? A plain `startsWith` also accepts a sibling that merely shares the prefix (`/data-old` for `/data`). */
+export function isPathInside(base: string, target: string): boolean {
+  const relation = nodePath.relative(nodePath.resolve(base), nodePath.resolve(target));
+  return relation === "" || (!relation.startsWith("..") && !nodePath.isAbsolute(relation));
+}
+
+// ---- who may power the machine off ---------------------------------------------------------------------------------------------------------
+
+const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+
+/**
+ * Why a request to reboot or power off the machine is refused, or null when it may go on. The caller must be on this device itself (the kiosk's own browser), and it must not be
+ * a request a web page or a proxy made on somebody else's behalf: a page open in the kiosk's browser can send a plain POST to localhost without a preflight, and a reverse
+ * proxy or tunnel on this machine turns every remote request into a loopback one. So a forwarded request is refused, and so is one whose Origin is not this device or whose
+ * browser says it came from another site.
+ */
+export function loopbackCallerProblem(remoteAddress: string | undefined, headers: Record<string, string | string[] | undefined>): string | null {
+  if (!LOOPBACK_ADDRESSES.has(remoteAddress ?? "")) return "This endpoint only accepts requests from this device itself.";
+  for (const name of ["x-forwarded-for", "x-forwarded-host", "x-real-ip", "forwarded", "via"]) {
+    if (headers[name] !== undefined) return "This endpoint does not accept proxied requests.";
+  }
+  const first = (value: string | string[] | undefined): string => (Array.isArray(value) ? value[0] ?? "" : value ?? "");
+  const origin = first(headers["origin"]);
+  if (origin) {
+    let host = "";
+    try { host = new URL(origin).hostname.toLowerCase(); } catch { return "This endpoint refused the request's origin."; }
+    if (!LOOPBACK_HOSTS.has(host) && !LOOPBACK_HOSTS.has(`[${host}]`)) return "This endpoint refused the request's origin.";
+  }
+  if (first(headers["sec-fetch-site"]).toLowerCase() === "cross-site") return "This endpoint refused a cross-site request.";
+  return null;
+}
+
+// ---- the revision of the settings --------------------------------------------------------------------------------------------------------------
+
+/**
+ * A short fingerprint of the whole settings tree. A client that reads the settings keeps it (the `ETag` of GET /api/settings) and sends it back as `If-Match` when it saves: if the
+ * tree changed in between (another administrator's tab, a command that moved a robot) the save is refused with 409 instead of overwriting what the other one wrote. A client that
+ * sends no `If-Match` is saved as before.
+ */
+export function settingsRevision(settings: unknown): string {
+  return nodeCrypto.createHash("sha256").update(JSON.stringify(settings ?? null)).digest("hex").slice(0, 16);
+}
+
+/** Does the `If-Match` of a request (a quoted or bare revision, `*` for "whatever it is") agree with the current revision? No header always agrees. */
+export function ifMatchAgrees(header: string | undefined, currentRevision: string): boolean {
+  if (header === undefined || header.trim() === "" || header.trim() === "*") return true;
+  return header.split(",").map(part => part.trim().replace(/^W\//, "").replace(/^"|"$/g, "")).includes(currentRevision);
+}
+
+// ---- the token of a WebSocket connection ------------------------------------------------------------------------------------------------------------
+
+export const WS_TOKEN_SUBPROTOCOL = "hydra.bearer";
+
+/**
+ * The token a client sent as a WebSocket subprotocol: `Sec-WebSocket-Protocol: hydra.bearer, <token>`. It is the way that keeps the token out of the address, which proxies and the
+ * server's own log record (`/ws?token=` still works for the clients that have not moved yet). Null when the header does not carry it.
+ */
+export function wsTokenFromSubprotocol(header: string | string[] | undefined): string | null {
+  const text = Array.isArray(header) ? header.join(",") : header ?? "";
+  const parts = text.split(",").map(part => part.trim()).filter(Boolean);
+  const at = parts.indexOf(WS_TOKEN_SUBPROTOCOL);
+  if (at === -1) return null;
+  const token = parts[at + 1];   // the token is the protocol that follows the marker
+  return token && /^[A-Za-z0-9._~+-]+$/.test(token) ? token : null;
 }

@@ -174,10 +174,13 @@ POST /api/login
 -> { "success": true, "token": "<JWT>", "refreshToken": "<opaque>", "role": "admin" }
 ```
 
-- Every server seeds exactly one account on its own first-ever start:
-  username `admin`, password `admin` (see `users.ts` for the underlying
-  account store). Change it from the browser UI's own Config -> Users tab
-  as soon as a server is exposed beyond a fully trusted LAN.
+- Every server seeds exactly one account on its own first-ever start. In
+  development and test it is `admin`/`admin`; **in production the account comes from
+  `HYDRA_UMC_BOOTSTRAP_ADMIN_USERNAME`/`HYDRA_UMC_BOOTSTRAP_ADMIN_PASSWORD`, and the
+  server refuses to start with the example values of a deployment template, a
+  password of fewer than 12 characters, or a `JWT_SECRET` that is an example
+  value or has fewer than 32 characters** (see `docs/PRODUCTION_BOOTSTRAP.md`).
+  Passwords of accounts created afterwards need at least 8 characters.
 - Two roles: `admin` (full access - can overwrite global settings, manage
   accounts, and send robot commands) and `operator` (can sign in, read
   state, and send robot commands via section 2c's atomic endpoint, but
@@ -217,8 +220,10 @@ POST /api/login
   SUITE, the Android/iOS apps) needs to sign out and back in once to get a
   fresh token with a `role` claim - there is no way to upgrade an old token
   in place.
-- For the WebSocket upgrade (section 3), pass the token as a query param:
-  `ws://<host>:3000/ws?token=<JWT>`.
+- For the WebSocket upgrade (section 3), pass the token as a subprotocol
+  (`Sec-WebSocket-Protocol: hydra.bearer, <JWT>`, which keeps it out of the
+  address that proxies and logs record) or, for the clients that have not moved
+  yet, as a query param: `ws://<host>:3000/ws?token=<JWT>`.
 
 ## 2b. Account management: `/api/users` (admin only)
 
@@ -249,8 +254,16 @@ a separate one.
   `{ settings: SystemSettings, controllers: HydraController[], activeControllerId: string }`
   (see `src/store.tsx` for the real TypeScript shapes - this document
   doesn't restate every field, since that would drift out of sync with
-  the actual source of truth). No auth required.
-- `POST /api/settings` (body: the same shape) overwrites the whole thing.
+  the actual source of truth). Requires a signed-in client. The credentials of
+  the IP cameras (`ipUsername`/`ipPassword`) are only in what an `admin` reads:
+  an `operator` receives the same tree without them, over REST and over the
+  WebSocket alike. The answer carries the revision of the tree as an `ETag`.
+- `POST /api/settings` (body: the same shape) overwrites the whole thing. A
+  client that sends the `ETag` it read back as `If-Match` is refused with `409`
+  (`{ error, revision }`) when the tree changed in between (another administrator's
+  tab, a command that moved a robot) instead of overwriting what the other one
+  wrote; a client that sends no `If-Match` is saved as before. A successful save
+  answers `{ success: true, revision }`.
   **Requires an `admin` token** (`403` for `operator`) -
   this is the same full-tree write the web UI's own panels still use for
   most of their edits, so an `operator` account is effectively
@@ -427,13 +440,18 @@ deployment, keep Voice UI on `127.0.0.1:8091` and do not expose its port.
   from a real `vcgencmd measure_temp` read on a CM5/Pi host; on any other
   OS the command isn't found and this falls back to a clearly-marked
   mock value (`temp_is_real: false`) rather than silently lying. No auth
-  required.
+  required, unless the installation sets `HYDRA_UMC_INFO_AUTH=required` (see
+  section 2k).
 - `GET /metrics` - a Prometheus text-exposition scrape endpoint
   (`prom-client`, metric definitions in `src/metrics.ts`), including the
   same `hydra_system_*` gauges `/api/system/metrics` reports as JSON, from
   the identical underlying read. Deliberately unauthenticated, same
   trusted-LAN posture as every other unauthenticated `GET` in this
   document - see section 4 before exposing this server beyond a LAN.
+- `POST /api/camera/ticket` (signed-in client) -> `{ ticket, expiresInSeconds }`: a
+  five-minute ticket that a picture's address carries (`?ticket=...`), because an
+  `<img>` or `<video>` cannot send an `Authorization` header. It opens the live
+  streams and the saved photos and recordings, and nothing else (section 2k).
 - `GET /api/camera/:id/stream` - an MJPEG multipart stream
   (`multipart/x-mixed-replace`). **Currently a placeholder**: no real
   camera/`libcamera`/`ffmpeg` pipe exists yet, so this sends a fixed
@@ -557,10 +575,27 @@ of its own to hold here - the catalog is read-only manifest metadata, and
 `authenticationRef` in a manifest is always a reference, never the
 credential itself.
 
+## 2k. Settings of the installation that harden this API
+
+Environment variables, read once at start (see `docs/PRODUCTION_BOOTSTRAP.md`):
+
+| Variable | Effect |
+|---|---|
+| `JWT_SECRET` | Required in production, at least 32 characters, not an example value. |
+| `HYDRA_UMC_CAMERA_AUTH=required` | The live camera streams and the saved photos and recordings demand a ticket (`POST /api/camera/ticket`, `?ticket=` in the address) or a signed-in client (`401` otherwise). Off by default so that a client that does not ask for tickets yet keeps working; a production start says so. |
+| `HYDRA_UMC_INFO_AUTH=required` | `GET /metrics`, `/api/system/metrics`, `/api/system/supervisor`, `/api/ecosystem/status` and `/api/models` demand a signed-in client. Off by default for the same reason. |
+
+Always on: `POST /api/system/reboot` and `/shutdown` accept only a plain request from this
+device itself; a request that went through a proxy (`X-Forwarded-For`, `Forwarded`, `Via`...), that
+carries an `Origin` of another site, or that the browser marks `Sec-Fetch-Site: cross-site` gets
+`403`, so a page open in the kiosk's browser cannot power the cell off.
+
 ## 3. Live sync: `WebSocket /ws`
 
-Connect with `ws://<host>:3000/ws?token=<JWT_TOKEN>` (see section 2a for
-obtaining one). The token is always mandatory - a missing or invalid one
+Connect with `new WebSocket("ws://<host>:3000/ws", ["hydra.bearer", "<JWT_TOKEN>"])`
+(the token as a subprotocol; the server answers `hydra.bearer`) or, for the
+clients that have not moved yet, with `ws://<host>:3000/ws?token=<JWT_TOKEN>` (see
+section 2a for obtaining one). The token is always mandatory - a missing or invalid one
 gets an `{"error": "..."}` message followed by a close with code `1008`.
 A client that sees code `1008` should treat it as "log in again," not
 retry the same token in a reconnect loop; see e.g.

@@ -258,6 +258,7 @@ threat model from "trusted LAN only" to "reachable by anyone" (see
   (REST API + the `/ws` WebSocket, which shares the same listener) from
   plain HTTP/WS to HTTPS/WSS. See "TLS / HTTPS" below. Leaving either
   unset keeps today's plain HTTP behavior unchanged.
+- `HYDRA_UMC_CAMERA_AUTH=required` / `HYDRA_UMC_INFO_AUTH=required` - make the camera pictures (live streams, saved photos and recordings, through a short-lived `?ticket=` that `POST /api/camera/ticket` hands to a signed-in client) and the read-only host information (`/metrics`, `/api/system/metrics`, `/api/system/supervisor`, `/api/ecosystem/status`, `/api/models`) demand a signed-in client. Off by default so that a client that does not ask for tickets yet keeps working; a production start warns while they are off. In production the server also refuses to start with an example `JWT_SECRET`/bootstrap password from a deployment template, a `JWT_SECRET` under 32 characters or a bootstrap password under 12.
 
 ### TLS / HTTPS
 

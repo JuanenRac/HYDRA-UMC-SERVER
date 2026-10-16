@@ -22,6 +22,7 @@
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import { bootstrapPasswordProblem, MIN_PASSWORD_LENGTH } from "./secretsPolicy";
 
 export type UserRole = "admin" | "operator";
 
@@ -280,6 +281,11 @@ export async function ensureSeedUser(): Promise<void> {
   if (process.env.NODE_ENV === "production" && (!username || !password)) {
     throw new Error("Production first start requires HYDRA_UMC_BOOTSTRAP_ADMIN_USERNAME and HYDRA_UMC_BOOTSTRAP_ADMIN_PASSWORD");
   }
+  // The deployment template carries an example password: it must never become the real one.
+  if (process.env.NODE_ENV === "production") {
+    const problem = bootstrapPasswordProblem(password ?? "", username ?? "");
+    if (problem) throw new Error(`Production first start refused: ${problem}`);
+  }
   saveUsers([
     { id: crypto.randomUUID(), username: username || "admin", passwordHash: await hashPassword(password || "admin"), role: "admin", createdAt: new Date().toISOString(), tokenVersion: 1 },
   ]);
@@ -298,7 +304,7 @@ export function listUsers(): Array<Omit<StoredUser, "passwordHash">> {
 export async function createUser(username: string, password: string, role: UserRole): Promise<UserResult> {
   const trimmed = username.trim();
   if (!trimmed) return { ok: false, error: "Username required" };
-  if (!password || password.length < 4) return { ok: false, error: "Password must be at least 4 characters" };
+  if (!password || password.length < MIN_PASSWORD_LENGTH) return { ok: false, error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` };
   // The hashPassword() await below is real, unavoidable async
   // work (see the async-scrypt comment above) - withUsersLock() serializes the WHOLE
   // read-modify-write sequence around it, so a concurrent createUser()
@@ -338,7 +344,7 @@ export async function updateUser(
       users[idx].username = newName;
     }
     if (updates.password !== undefined) {
-      if (updates.password.length < 4) return { ok: false, error: "Password must be at least 4 characters" };
+      if (updates.password.length < MIN_PASSWORD_LENGTH) return { ok: false, error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` };
       users[idx].passwordHash = await hashPassword(updates.password);
     }
     if (updates.role) {

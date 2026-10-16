@@ -24,6 +24,10 @@ type Middleware = (req: any, res: any, next: any) => unknown;
 export interface CameraRouteDeps {
   authenticate: Middleware;
   requireAdmin: Middleware;
+  /** Lets a request through to a live picture or a saved photo/recording: a valid ticket, or (when the installation demands it) a signed-in client. See ../mediaTickets.ts. */
+  mediaAccess: Middleware;
+  /** Issues the short-lived ticket a picture's address carries (POST /api/camera/ticket). */
+  issueMediaTicket: (username: string) => { ticket: string; expiresInSeconds: number };
   /** Absolute path of the data directory. */
   dataPath: string;
   /** Resolves segments inside the data directory, or null when they would leave it. */
@@ -33,7 +37,12 @@ export interface CameraRouteDeps {
 }
 
 export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps): void {
-  const { authenticate, requireAdmin, dataPath, resolveWithinDataDir, cameraProcesses } = deps;
+  const { authenticate, requireAdmin, mediaAccess, issueMediaTicket, dataPath, resolveWithinDataDir, cameraProcesses } = deps;
+
+  // <img> and <video> cannot send an Authorization header, so a signed-in client asks for a ticket and puts it in the picture's address (?ticket=...).
+  app.post("/api/camera/ticket", authenticate, (req, res) => {
+    res.json(issueMediaTicket(String((req as any).user?.username ?? "")));
+  });
 
   // Real proxy to HYDRA-UMC-VISION-STREAMER's own real MJPEG capture+serve
   // (mjpeg_server.py, "hydra-umc-vision-streamer stream serve") - this
@@ -51,7 +60,7 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
   // lives in ./serverPolicy (see that module's own header comment), moved
   // unchanged so it's directly unit-testable.
 
-  app.get("/api/camera/:id/stream", async (req, res) => {
+  app.get("/api/camera/:id/stream", mediaAccess, async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id < 1) {
       return res.status(400).json({ error: "camera id must be a positive integer" });
@@ -379,7 +388,7 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
   // bytes on disk already carry their own boundary/Content-Type/
   // Content-Length per frame), so the same <img>/player that renders a
   // live camera can render a saved recording unchanged.
-  app.get("/api/camera/media/:cameraId/:kind/:filename", (req, res) => {
+  app.get("/api/camera/media/:cameraId/:kind/:filename", mediaAccess, (req, res) => {
     const cameraId = Number(req.params.cameraId);
     const kind = req.params.kind;
     if (!Number.isInteger(cameraId) || cameraId < 1 || (kind !== "snapshots" && kind !== "recordings")) {

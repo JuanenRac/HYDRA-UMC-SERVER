@@ -59,11 +59,20 @@ import {
   hi3510Action,
   safeIdSegment,
   slugify,
+  isPathInside,
+  WS_TOKEN_SUBPROTOCOL,
+  wsTokenFromSubprotocol,
+  ifMatchAgrees,
+  settingsRevision,
+  loopbackCallerProblem,
+  redactSettingsSecrets,
 } from "./serverPolicy";
 import Bonjour from 'bonjour-service';
 import jwt from 'jsonwebtoken';
 import { ensureSeedUser, findUser, verifyPassword, effectiveTokenVersion, effectiveId, ScryptOverloadError, type UserRole } from './users';
 import { issueRefreshToken, consumeRefreshToken, revokeRefreshToken, pruneExpiredRefreshTokens } from './refresh_tokens';
+import { jwtSecretProblem } from './secretsPolicy';
+import { cameraAuthRequired, issueMediaTicket, mediaTicketKey, verifyMediaTicket } from './mediaTickets';
 import {
   registry as metricsRegistry,
   authFailuresTotal,
@@ -93,6 +102,11 @@ const configuredJwtSecret = process.env.JWT_SECRET?.trim();
 const JWT_SECRET_IS_DEFAULT = !configuredJwtSecret;
 if (NODE_ENV === "production" && JWT_SECRET_IS_DEFAULT) {
   throw new Error("Production startup requires a non-empty JWT_SECRET");
+}
+// A deployment template carries an example secret; accepting it would let anybody who has read the template forge an administrator's token.
+if (NODE_ENV === "production") {
+  const problem = jwtSecretProblem(configuredJwtSecret ?? "");
+  if (problem) throw new Error(`Production startup refused: ${problem}`);
 }
 const JWT_SECRET = configuredJwtSecret || "hydra_industrial_secret_2026";
 if (JWT_SECRET_IS_DEFAULT) {
@@ -1177,6 +1191,9 @@ async function startServer() {
   // (compare setSystemMetricsSource(getSystemMetrics) above, which doesn't
   // need to wait for anything).
   setWsClientsSource(() => wsClients.size);
+  // Only an administrator's connection receives the credentials of the IP cameras.
+  const clientMaySeeSecrets = (client: WebSocket): boolean => (client as any).meta?.role === "admin";
+
   function broadcastSettings(payload: any, deltaOnly: boolean = false, originator?: WebSocket) {
     lastKnownSettings = payload;
     const type = deltaOnly ? "delta" : "settings";
@@ -1187,9 +1204,11 @@ async function startServer() {
     // server/client pair a version to negotiate against before "delta"
     // ever means a real partial patch.
     const msg = JSON.stringify({ type, payload, schema: 1 });
+    // an operator's connection gets the tree without the credentials of the IP cameras
+    const safeMsg = JSON.stringify({ type, payload: redactSettingsSecrets(payload), schema: 1 });
     for (const client of wsClients) {
       if (client !== originator && client.readyState === WebSocket.OPEN) {
-        client.send(msg);
+        client.send(clientMaySeeSecrets(client) ? msg : safeMsg);
       }
     }
     const newServerName = realSettings(payload)?.serverName;
@@ -1220,6 +1239,7 @@ async function startServer() {
   ) {
     lastKnownSettings = fullPayload;
     const fullMsg = JSON.stringify({ type: "delta", schema: 1, payload: fullPayload });
+    const safeFullMsg = JSON.stringify({ type: "delta", schema: 1, payload: redactSettingsSecrets(fullPayload) });
     for (const client of wsClients) {
       if (client.readyState !== WebSocket.OPEN) continue;
       if ((client as any).schema >= 2) {
@@ -1232,7 +1252,7 @@ async function startServer() {
           client.send(JSON.stringify(msg));
         }
       } else {
-        client.send(fullMsg);
+        client.send(clientMaySeeSecrets(client) ? fullMsg : safeFullMsg);
       }
     }
   }
@@ -1691,7 +1711,9 @@ async function startServer() {
   // writing it already correctly requires admin.
   app.get("/api/settings", authenticate, (req, res) => {
     try {
-      res.json(loadFullSettingsFromDisk());
+      const settings = loadFullSettingsFromDisk();
+      res.setHeader("ETag", `"${settingsRevision(settings)}"`);   // see ifMatchAgrees(): a client sends it back as If-Match when it saves
+      res.json((req as any).user?.role === "admin" ? settings : redactSettingsSecrets(settings));
     } catch (e) {
       console.error("Error reading settings", e);
       res.status(500).json({ error: "Failed to read settings" });
@@ -1701,8 +1723,13 @@ async function startServer() {
   app.post("/api/settings", authenticate, requireAdmin, async (req, res) => {
     try {
       const payload = req.body;
+      // The tree changed since this client read it (another administrator's tab, a command that moved a robot): refuse instead of overwriting what the other one wrote.
+      const currentRevision = settingsRevision(loadFullSettingsFromDisk());
+      if (!ifMatchAgrees(req.headers["if-match"] as string | undefined, currentRevision)) {
+        return res.status(409).json({ error: "The settings changed since you read them: reload and apply your change again.", revision: currentRevision });
+      }
       await applySettingsUpdate(payload);
-      res.json({ success: true });
+      res.json({ success: true, revision: settingsRevision(loadFullSettingsFromDisk()) });
     } catch (e) {
       console.error("Error writing settings", e);
       res.status(500).json({ error: "Failed to save settings" });
@@ -1861,7 +1888,27 @@ async function startServer() {
     MAX_RESERVATION_TTL_MS,
   });
 
-  registerCameraRoutes(app, { authenticate, requireAdmin, dataPath, resolveWithinDataDir, cameraProcesses });
+  // The live pictures and the saved photos and recordings: open to the LAN unless the installation sets HYDRA_UMC_CAMERA_AUTH=required, which makes them ask for a ticket
+  // (POST /api/camera/ticket) or a signed-in client. A client that does not ask for tickets yet keeps working until it does.
+  // The read-only host and project information (metrics, the process supervisor, the ecosystem status, the model catalogue) used to answer anybody on the LAN. HYDRA_UMC_INFO_AUTH=required
+  // makes it ask for a signed-in client, once every client sends its token on those requests; until then it stays as it was, and a production start says so.
+  const INFO_AUTH_REQUIRED = cameraAuthRequired(process.env.HYDRA_UMC_INFO_AUTH);
+  if (!INFO_AUTH_REQUIRED && NODE_ENV === "production") {
+    console.warn("[SECURITY] Host metrics, the process supervisor and the ecosystem status are readable by the whole LAN. Set HYDRA_UMC_INFO_AUTH=required once every client sends its token on them.");
+  }
+  const infoAccess = (req: express.Request, res: express.Response, next: express.NextFunction) => (INFO_AUTH_REQUIRED ? authenticate(req, res, next) : next());
+  const MEDIA_KEY = mediaTicketKey(JWT_SECRET);
+  const CAMERA_AUTH_REQUIRED = cameraAuthRequired(process.env.HYDRA_UMC_CAMERA_AUTH);
+  if (!CAMERA_AUTH_REQUIRED && NODE_ENV === "production") {
+    console.warn("[SECURITY] The camera pictures are open to the whole LAN. Set HYDRA_UMC_CAMERA_AUTH=required once every client asks for a ticket (POST /api/camera/ticket).");
+  }
+  const mediaAccess = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (!CAMERA_AUTH_REQUIRED) return next();
+    if (verifyMediaTicket(MEDIA_KEY, req.query.ticket, Date.now()) !== null) return next();
+    return authenticate(req, res, next);
+  };
+  const issueMediaTicketFor = (username: string) => issueMediaTicket(MEDIA_KEY, username, Date.now());
+  registerCameraRoutes(app, { authenticate, requireAdmin, mediaAccess, issueMediaTicket: issueMediaTicketFor, dataPath, resolveWithinDataDir, cameraProcesses });
 
   // Real proxy to this cell's own local Hailo-accelerated AI services -
   // each one already runs as its own real systemd unit
@@ -1925,7 +1972,7 @@ async function startServer() {
     res.send(text);
   });
 
-  registerSystemRoutes(app, { authenticate, requireAdmin, industrialLog });
+  registerSystemRoutes(app, { authenticate, requireAdmin, industrialLog, infoAccess });
 
   registerBluetoothRoutes(app, { authenticate, requireAdmin, industrialLog });
 
@@ -1946,7 +1993,7 @@ async function startServer() {
   // with the bearer-token scheme every other write route uses - Prometheus
   // itself supports a bearer_token in its scrape config if that's ever
   // wanted, but nothing here requires it today.
-  app.get("/metrics", async (req, res) => {
+  app.get("/metrics", infoAccess, async (req, res) => {
     try {
       res.set("Content-Type", metricsRegistry.contentType);
       res.end(await metricsRegistry.metrics());
@@ -2010,9 +2057,11 @@ async function startServer() {
   // genuinely originate from 127.0.0.1/::1 - nothing else on the LAN can
   // spoof req.socket.remoteAddress.
   function requireLoopbackCaller(req: express.Request, res: express.Response): boolean {
-    const addr = req.socket.remoteAddress || "";
-    if (addr === "127.0.0.1" || addr === "::1" || addr === "::ffff:127.0.0.1") return true;
-    res.status(403).json({ error: "This endpoint only accepts requests from this device itself." });
+    // loopbackCallerProblem also refuses a proxied request (a reverse proxy or tunnel on this machine would turn every remote request into a loopback one) and a request
+    // a web page made from another origin (a plain POST to localhost needs no preflight), so a page open in the kiosk's browser cannot power the cell off.
+    const problem = loopbackCallerProblem(req.socket.remoteAddress, req.headers);
+    if (problem === null) return true;
+    res.status(403).json({ error: problem });
     return false;
   }
 
@@ -2067,7 +2116,7 @@ async function startServer() {
       const sanitizedFolderPath = folderPath.replace(/\.\./g, "");
       const absoluteFolderPath = path.resolve(dataPath, sanitizedFolderPath);
 
-      if (!absoluteFolderPath.startsWith(dataPath)) {
+      if (!isPathInside(dataPath, absoluteFolderPath)) {
         return res.status(403).json({ error: "Access denied: Path traversal detected" });
       }
 
@@ -2167,7 +2216,7 @@ async function startServer() {
   function resolveWithinDataDir(...segments: string[]): string | null {
     const sanitized = segments.map(s => String(s).replace(/\.\./g, ""));
     const resolved = path.resolve(dataPath, ...sanitized);
-    return resolved.startsWith(dataPath) ? resolved : null;
+    return isPathInside(dataPath, resolved) ? resolved : null;
   }
 
   app.post("/api/models/submit", authenticate, requireAdmin, (req, res) => {
@@ -2232,7 +2281,7 @@ async function startServer() {
     }
   });
 
-  app.get("/api/models", (req, res) => {
+  app.get("/api/models", infoAccess, (req, res) => {
     res.json({ models: readModelSubmissionsIndex() });
   });
 
@@ -2299,12 +2348,14 @@ async function startServer() {
   if (tlsEnabled) {
     console.log(`[TLS] HTTPS/WSS enabled - cert: ${TLS_CERT_PATH}, key: ${TLS_KEY_PATH}`);
   }
-  const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+  // A client may send its token as a subprotocol (`Sec-WebSocket-Protocol: hydra.bearer, <token>`), which keeps it out of the address that proxies and logs record; the server
+  // answers with the `hydra.bearer` subprotocol only. `/ws?token=` still works for the clients that have not moved yet.
+  const wss = new WebSocketServer({ server: httpServer, path: "/ws", handleProtocols: protocols => (protocols.has(WS_TOKEN_SUBPROTOCOL) ? WS_TOKEN_SUBPROTOCOL : false) });
 
   wss.on("connection", (ws, req) => {
-    // Extract token from query string (?token=...)
+    // The token: the subprotocol first, then the query string (?token=..., which is kept for the clients that have not moved yet)
     const url = new URL(req.url || "", "http://localhost");
-    const token = url.searchParams.get("token");
+    const token = wsTokenFromSubprotocol(req.headers["sec-websocket-protocol"]) ?? url.searchParams.get("token");
 
     if (!token) {
       authFailuresTotal.inc({ reason: "ws_no_token" });
@@ -2382,7 +2433,7 @@ async function startServer() {
       // broadcast - a client (e.g. HYDRA-UMC SUITE, freshly connected to one
       // controller in a swarm) doesn't have to also do a separate REST GET
       // /api/settings just to get its first real payload.
-      ws.send(JSON.stringify({ type: "settings", payload: lastKnownSettings }));
+      ws.send(JSON.stringify({ type: "settings", payload: decoded?.role === "admin" ? lastKnownSettings : redactSettingsSecrets(lastKnownSettings) }));
 
       ws.on("message", async (raw) => {
         try {

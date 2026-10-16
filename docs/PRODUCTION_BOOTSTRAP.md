@@ -23,6 +23,15 @@ bootstrap credentials are supplied. The values are used only to create the
 local password hash; do not commit them, add them to a README or expose them to
 clients.
 
+The server also refuses a production start when these values are the examples of a
+deployment template (anything with `SET_LOCALLY`, `CHANGE_ME`, `example`...), when
+`JWT_SECRET` has fewer than 32 characters or is too repetitive, or when the
+administrator password has fewer than 12 characters or contains the user name. Generate
+real values (`openssl rand -hex 32` for the secret). Two more settings harden what the
+LAN can read while clients move to tokens: `HYDRA_UMC_CAMERA_AUTH=required` and
+`HYDRA_UMC_INFO_AUTH=required` (see `docs/REMOTE_API.md` section 2k); a production start
+warns while they are off.
+
 ## Development and test
 
 Development and test mode preserve their isolated convenience fallback so a

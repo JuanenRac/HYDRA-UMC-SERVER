@@ -1164,6 +1164,26 @@
         ]
       }
     },
+    "/api/camera/ticket": {
+      "post": {
+        "tags": [
+          "camera"
+        ],
+        "summary": "POST /api/camera/ticket",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/camera/{id}/ptz": {
       "post": {
         "tags": [
@@ -2469,6 +2489,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict with the current state. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

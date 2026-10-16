@@ -34,6 +34,16 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.8.0.7] - Camera credentials, tickets and power routes hardened
+
+- An operator no longer receives the IP-camera credentials (`ipUsername`/`ipPassword`), over REST or over the WebSocket; only an administrator reads them.
+- The camera pictures and the read-only host information can demand a ticket or a token (`HYDRA_UMC_CAMERA_AUTH=required`, `HYDRA_UMC_INFO_AUTH=required`); `POST /api/camera/ticket` issues five-minute tickets.
+- `GET /api/settings` carries an `ETag`; a save with a stale `If-Match` gets `409` instead of overwriting what another client wrote.
+- The WebSocket accepts the token as the `hydra.bearer` subprotocol, which keeps it out of the address.
+- `POST /api/system/reboot` and `/shutdown` refuse proxied, cross-origin and cross-site requests.
+- A production start refuses example secrets from a deployment template, a `JWT_SECRET` under 32 characters and a bootstrap password under 12.
+- New `tools/verify_hardening_contract.mjs` runs in `npm test`; `docs/REMOTE_API.md`, `docs/PRODUCTION_BOOTSTRAP.md` and the READMEs describe the new settings.
+
 ## [0.8.0.6] - Users and admin routes in their own file, and the power routes typed
 
 - `server.ts` no longer holds `/api/users` and `/api/admin/*`: they live in `src/routes/adminRoutes.ts`, moved unchanged and registered with one small object of dependencies (the auth middlewares, the open WebSocket connections, the log file, the listen port and the stored server config). `server.ts` is 113 lines shorter; every contract script and the unit tests give the same results.

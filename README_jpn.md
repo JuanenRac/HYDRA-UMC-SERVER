@@ -157,6 +157,7 @@ npm install
 - `JWT_EXPIRES_IN` —— ログイントークンの有効期間。`jsonwebtoken` 自身の `expiresIn` オプションが受け付ける任意の文字列（`"24h"`、`"7d"`、秒数の裸の数値など）を指定できます。未設定の場合、デフォルトは `30d`（本プロジェクト当初の信頼済み LAN を前提とした値）です。**信頼済み LAN の外から到達可能なサーバーでは、これをより短く設定すべきです —— `24h` は妥当な出発点です** —— 漏洩した長期有効トークンは、そのアカウントのパスワードを変更する以外に個別に無効化する方法がありません。
 - `LOGIN_RATE_LIMIT_MAX` / `LOGIN_RATE_LIMIT_WINDOW_MS` —— `POST /api/login` のみをスロットリングします（他のすべてのルートは影響を受けません）。いずれか未設定の場合、デフォルトは IP ごとに 15 分あたり 5 回の試行です。制限に達した場合は、一般的な `500` ではなく、明確な JSON エラーを伴う `429` を返します。
 - `TLS_CERT_PATH` / `TLS_KEY_PATH` —— **両方を** 設定すると、サーバー（REST API + 同じリスナーを共有する `/ws` WebSocket）がプレーンな HTTP/WS から HTTPS/WSS へ切り替わります。詳細は下記「TLS / HTTPS」を参照してください。いずれか一方でも未設定の場合、現在のプレーン HTTP の挙動が維持されます。
+- `HYDRA_UMC_CAMERA_AUTH=required` / `HYDRA_UMC_INFO_AUTH=required` —— カメラ映像(ライブストリーム、保存済みの写真と録画。ログイン済みクライアントに `POST /api/camera/ticket` が渡す短寿命の `?ticket=` を使用)と、読み取り専用のホスト情報(`/metrics`、`/api/system/metrics`、`/api/system/supervisor`、`/api/ecosystem/status`、`/api/models`)にログイン済みクライアントを要求します。まだチケットを要求しないクライアントが動き続けるよう既定ではオフで、本番起動時はオフの間警告します。本番では、デプロイ用テンプレートの例の `JWT_SECRET` やブートストラップパスワード、32 文字未満の `JWT_SECRET`、12 文字未満のブートストラップパスワードでは起動を拒否します。
 
 ### TLS / HTTPS
 

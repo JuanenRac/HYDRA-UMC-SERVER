@@ -287,6 +287,7 @@ menace de "LAN de confiance uniquement" à "accessible par n'importe qui"
   listener) de HTTP/WS en clair à HTTPS/WSS. Voir "TLS / HTTPS"
   ci-dessous. Laisser l'une ou l'autre non définie conserve le
   comportement HTTP en clair actuel sans changement.
+- `HYDRA_UMC_CAMERA_AUTH=required` / `HYDRA_UMC_INFO_AUTH=required` - exigent un client connecté pour les images des caméras (flux en direct, photos et enregistrements sauvegardés, via un `?ticket=` de courte durée que `POST /api/camera/ticket` remet à un client connecté) et pour les informations en lecture seule de la machine (`/metrics`, `/api/system/metrics`, `/api/system/supervisor`, `/api/ecosystem/status`, `/api/models`). Désactivé par défaut pour qu'un client qui ne demande pas encore de tickets continue de fonctionner ; un démarrage en production avertit tant qu'ils sont désactivés. En production, le serveur refuse aussi de démarrer avec un `JWT_SECRET` ou un mot de passe d'amorçage d'exemple issu d'un modèle de déploiement, un `JWT_SECRET` de moins de 32 caractères ou un mot de passe d'amorçage de moins de 12.
 
 ### TLS / HTTPS
 

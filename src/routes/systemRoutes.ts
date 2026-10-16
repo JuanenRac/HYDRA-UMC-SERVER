@@ -16,15 +16,15 @@ const execFileAsync = promisify(execFile);
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
-export function registerSystemRoutes(app: express.Express, auth: { authenticate: Middleware; requireAdmin: Middleware; industrialLog: (msg: string) => void }): void {
-  const { authenticate, requireAdmin, industrialLog } = auth;
+export function registerSystemRoutes(app: express.Express, auth: { authenticate: Middleware; requireAdmin: Middleware; industrialLog: (msg: string) => void; infoAccess: Middleware }): void {
+  const { authenticate, requireAdmin, industrialLog, infoAccess } = auth;
 
   // System Metrics API for industrial monitoring - powers the Overview
   // footer's CPU/memory/temp/network readout (Dashboard.tsx StatusFooter).
   // The actual read now lives in the module-level getSystemMetrics() above
   // (shared with GET /metrics's own hydra_system_* gauges below) - this
   // route is just that function's own JSON wire shape, unchanged.
-  app.get("/api/system/metrics", async (req, res) => {
+  app.get("/api/system/metrics", infoAccess, async (req, res) => {
     res.json(await getSystemMetrics());
   });
 
@@ -33,7 +33,7 @@ export function registerSystemRoutes(app: express.Express, auth: { authenticate:
   // tier as /api/system/metrics right above (read-only host introspection;
   // see getSupervisorSnapshot's own header comment for the full field
   // list and what's real vs. honestly null on a non-Linux host).
-  app.get("/api/system/supervisor", async (req, res) => {
+  app.get("/api/system/supervisor", infoAccess, async (req, res) => {
     res.json(await getSupervisorSnapshot());
   });
 
@@ -42,7 +42,7 @@ export function registerSystemRoutes(app: express.Express, auth: { authenticate:
   // tier as /api/system/metrics right above (read-only host introspection,
   // no auth) - this exposes local directory names and per-project manifest
   // fields, nothing about running robots/credentials.
-  app.get("/api/ecosystem/status", async (req, res) => {
+  app.get("/api/ecosystem/status", infoAccess, async (req, res) => {
     res.json(await getEcosystemStatus());
   });
 

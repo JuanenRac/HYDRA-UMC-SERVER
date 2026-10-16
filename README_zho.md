@@ -154,6 +154,7 @@ npm install
 - `JWT_EXPIRES_IN`——登录令牌的有效期。可使用 `jsonwebtoken` 自身 `expiresIn` 选项所接受的任意字符串（`"24h"`、`"7d"`、纯数字秒数等）。若未设置则默认为 `30d`（本项目最初对受信局域网的假设）。**可从受信局域网之外访问的服务器应将其设置得更短——`24h` 是一个合理的起始值**——泄露的长期有效令牌除了修改该账户密码之外，无法单独撤销。
 - `LOGIN_RATE_LIMIT_MAX` / `LOGIN_RATE_LIMIT_WINDOW_MS`——仅对 `POST /api/login` 进行限流（其他所有路由均不受影响）。若两者均未设置，默认为每个 IP 每 15 分钟 5 次尝试；触发限流时返回明确的 JSON 错误 `429`，而非泛泛的 `500`。
 - `TLS_CERT_PATH` / `TLS_KEY_PATH`——**两者均**设置后，可将服务器（REST API + 共享同一监听器的 `/ws` WebSocket）从纯 HTTP/WS 切换为 HTTPS/WSS。详见下文“TLS / HTTPS”。任一未设置则保持当前的纯 HTTP 行为不变。
+- `HYDRA_UMC_CAMERA_AUTH=required` / `HYDRA_UMC_INFO_AUTH=required`——要求已登录的客户端才能获取摄像头画面(实时流、已保存的照片和录像,通过 `POST /api/camera/ticket` 发给已登录客户端的短时效 `?ticket=`)以及只读的主机信息(`/metrics`、`/api/system/metrics`、`/api/system/supervisor`、`/api/ecosystem/status`、`/api/models`)。默认关闭,以便尚未请求票据的客户端继续可用;生产环境启动时在关闭期间会发出警告。在生产环境中,服务器还会拒绝使用部署模板中的示例 `JWT_SECRET`/引导密码、少于 32 个字符的 `JWT_SECRET` 或少于 12 个字符的引导密码启动。
 
 ### TLS / HTTPS
 

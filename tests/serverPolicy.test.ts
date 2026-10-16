@@ -216,3 +216,61 @@ test("slugify", async (t) => {
     assert.equal(slugify(""), "model");
   });
 });
+
+import { isPathInside, loopbackCallerProblem, redactSettingsSecrets } from "../src/serverPolicy.ts";
+
+test("the credentials of the IP cameras are removed from a copy of the settings, at any depth", () => {
+  const settings = { serverName: "cell", controllers: [{ id: "c1", cameras: [{ id: 1, ipHost: "10.0.0.5", ipUsername: "admin", ipPassword: "hunter2" }] }], other: { ipPassword: "x", fine: 1 } };
+  const redacted = redactSettingsSecrets(settings);
+  assert.equal(JSON.stringify(redacted).includes("hunter2"), false);
+  assert.equal(JSON.stringify(redacted).includes("ipUsername"), false);
+  assert.equal((redacted as any).controllers[0].cameras[0].ipHost, "10.0.0.5");
+  assert.equal((redacted as any).other.fine, 1);
+  assert.equal(settings.controllers[0].cameras[0].ipPassword, "hunter2");   // the original is untouched
+});
+
+test("a folder that merely shares the prefix of the data folder is not inside it", () => {
+  assert.equal(isPathInside("/opt/x/data", "/opt/x/data"), true);
+  assert.equal(isPathInside("/opt/x/data", "/opt/x/data/work/a.json"), true);
+  assert.equal(isPathInside("/opt/x/data", "/opt/x/data-old/y"), false);
+  assert.equal(isPathInside("/opt/x/data", "/opt/x/data/../other"), false);
+  assert.equal(isPathInside("/opt/x/data", "/etc/passwd"), false);
+});
+
+test("only a plain request from this device itself may reboot or power off the machine", () => {
+  assert.equal(loopbackCallerProblem("127.0.0.1", {}), null);
+  assert.equal(loopbackCallerProblem("::1", { origin: "http://localhost:3000" }), null);
+  assert.equal(loopbackCallerProblem("::ffff:127.0.0.1", { origin: "http://127.0.0.1:3000", "sec-fetch-site": "same-origin" }), null);
+  assert.match(loopbackCallerProblem("192.168.0.50", {}) ?? "", /this device itself/);
+  assert.match(loopbackCallerProblem("127.0.0.1", { "x-forwarded-for": "203.0.113.9" }) ?? "", /proxied/);
+  assert.match(loopbackCallerProblem("127.0.0.1", { forwarded: "for=203.0.113.9" }) ?? "", /proxied/);
+  assert.match(loopbackCallerProblem("127.0.0.1", { origin: "https://evil.example" }) ?? "", /origin/);
+  assert.match(loopbackCallerProblem("127.0.0.1", { origin: "not a url" }) ?? "", /origin/);
+  assert.match(loopbackCallerProblem("127.0.0.1", { "sec-fetch-site": "cross-site" }) ?? "", /cross-site/);
+});
+
+import { ifMatchAgrees, settingsRevision } from "../src/serverPolicy.ts";
+
+test("the revision of the settings changes with them, and an If-Match that does not agree is a stale save", () => {
+  const a = settingsRevision({ controllers: [{ id: "c1", robots: [{ id: 1, pos: 0 }] }] });
+  const b = settingsRevision({ controllers: [{ id: "c1", robots: [{ id: 1, pos: 1 }] }] });
+  assert.notEqual(a, b);
+  assert.equal(settingsRevision({ x: 1 }), settingsRevision({ x: 1 }));
+  assert.equal(ifMatchAgrees(undefined, a), true);            // a client that sends none is saved as before
+  assert.equal(ifMatchAgrees("*", a), true);
+  assert.equal(ifMatchAgrees(`"${a}"`, a), true);
+  assert.equal(ifMatchAgrees(`W/"${a}"`, a), true);
+  assert.equal(ifMatchAgrees(`"${b}"`, a), false);
+  assert.equal(ifMatchAgrees(`"${b}", "${a}"`, a), true);
+});
+
+import { wsTokenFromSubprotocol } from "../src/serverPolicy.ts";
+
+test("a WebSocket token sent as a subprotocol is found, and nothing else is taken for one", () => {
+  assert.equal(wsTokenFromSubprotocol("hydra.bearer, eyJhbGciOi.payload.sig-_"), "eyJhbGciOi.payload.sig-_");
+  assert.equal(wsTokenFromSubprotocol(["other", "hydra.bearer, abc.def.ghi"]), "abc.def.ghi");
+  assert.equal(wsTokenFromSubprotocol("eyJhbGciOi.payload.sig"), null);        // no marker
+  assert.equal(wsTokenFromSubprotocol("hydra.bearer"), null);                   // marker but no token
+  assert.equal(wsTokenFromSubprotocol("hydra.bearer, bad token!"), null);
+  assert.equal(wsTokenFromSubprotocol(undefined), null);
+});
