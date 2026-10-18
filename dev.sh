@@ -24,10 +24,10 @@ echo "========================================"
 echo " Starting HYDRA-UMC SERVER (Dev Mode) "
 echo "========================================"
 if npm run dev; then
-  read -p "Press Enter to close..."
+  if [ -t 0 ] && [ "${HYDRA_UMC_CI:-}" != "1" ] && [ -z "${CI:-}" ]; then read -r -p "Press Enter to close..." _ || true; fi
 else
   echo ""
   echo "HYDRA-UMC SERVER exited with an error."
-  read -p "Press Enter to close..."
+  if [ -t 0 ] && [ "${HYDRA_UMC_CI:-}" != "1" ] && [ -z "${CI:-}" ]; then read -r -p "Press Enter to close..." _ || true; fi
   exit 1
 fi

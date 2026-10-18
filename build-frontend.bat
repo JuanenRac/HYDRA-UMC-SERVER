@@ -1,4 +1,8 @@
 @echo off
+rem Keep the window open for people, never in automation (CI / HYDRA_UMC_CI).
+set "KEEP_OPEN=pause"
+if defined CI set "KEEP_OPEN=ver >nul"
+if "%HYDRA_UMC_CI%"=="1" set "KEEP_OPEN=ver >nul"
 REM HYDRA_UMC_SCRIPT_STANDARD_HEADER_BEGIN
 REM *****************************************************************************
 REM Project   : HYDRA-UMC-SERVER
@@ -51,7 +55,7 @@ echo [1/3] Incrementing project version and synchronising its manifest...
 REM HYDRA_UMC_SCRIPT_STANDARD_VERSION_CAPTURE_BEFORE
 for /f "usebackq delims=" %%V in (`python -c "import json; print(json.load(open(r'%~dp0hydra-umc.project.json', encoding='utf-8'))['version'])"`) do set "HYDRA_UMC_VERSION_BEFORE=%%V"
 python "%~dp0bump_manifest_version.py"
-if errorlevel 1 ( echo VERSION BUMP FAILED. & pause & exit /b 1 )
+if errorlevel 1 ( echo VERSION BUMP FAILED. & %KEEP_OPEN% & exit /b 1 )
 REM HYDRA_UMC_SCRIPT_STANDARD_VERSION_CAPTURE_AFTER
 for /f "usebackq delims=" %%V in (`python -c "import json; print(json.load(open(r'%~dp0hydra-umc.project.json', encoding='utf-8'))['version'])"`) do set "HYDRA_UMC_VERSION_AFTER=%%V"
 if not defined HYDRA_UMC_VERSION_BEFORE set "HYDRA_UMC_VERSION_BEFORE=unknown"
@@ -71,7 +75,7 @@ if not exist "%STUDIO_DIR%" (
   echo ERROR: HYDRA-UMC-STUDIO not found at %STUDIO_DIR%
   echo This script expects the standard ecosystem checkout layout - clone
   echo HYDRA-UMC-STUDIO as a sibling of this repo ^(same parent directory^).
-  pause
+  %KEEP_OPEN%
   exit /b 1
 )
 
@@ -84,7 +88,7 @@ if errorlevel 1 (
   popd
   echo.
   echo STUDIO build FAILED.
-  pause
+  %KEEP_OPEN%
   exit /b 1
 )
 call npm run build
@@ -92,7 +96,7 @@ if errorlevel 1 (
   popd
   echo.
   echo STUDIO build FAILED.
-  pause
+  %KEEP_OPEN%
   exit /b 1
 )
 popd
@@ -124,7 +128,7 @@ if errorlevel 1 (
   popd
   echo.
   echo admin-ui build FAILED.
-  pause
+  %KEEP_OPEN%
   exit /b 1
 )
 call npm run build
@@ -132,7 +136,7 @@ if errorlevel 1 (
   popd
   echo.
   echo admin-ui build FAILED.
-  pause
+  %KEEP_OPEN%
   exit /b 1
 )
 popd
@@ -151,5 +155,5 @@ REM HYDRA_UMC_SCRIPT_STANDARD_SAFE_PAUSE
 set "HYDRA_UMC_SCRIPT_RESULT=%ERRORLEVEL%"
 echo.
 echo [INFO] Script completed. Exit code: %HYDRA_UMC_SCRIPT_RESULT%.
-pause
+%KEEP_OPEN%
 exit /b %HYDRA_UMC_SCRIPT_RESULT%

@@ -1,4 +1,9 @@
 @echo off
+cd /d "%~dp0"
+rem Keep the window open for people, never in automation (CI / HYDRA_UMC_CI).
+set "KEEP_OPEN=pause"
+if defined CI set "KEEP_OPEN=ver >nul"
+if "%HYDRA_UMC_CI%"=="1" set "KEEP_OPEN=ver >nul"
 REM =============================================================================
 REM HYDRA-UMC SERVER - Development Server Start Script
 REM Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
@@ -19,7 +24,6 @@ echo  Installing dependencies...
 echo ========================================
 call npm install
 call npm install-scripts approve --all
-call npm audit fix
 
 echo ========================================
 echo  Starting HYDRA-UMC SERVER (Dev Mode)
@@ -28,7 +32,7 @@ call npm run dev
 if errorlevel 1 (
   echo.
   echo HYDRA-UMC SERVER exited with an error.
-  pause
+  %KEEP_OPEN%
   exit /b 1
 )
-pause
+%KEEP_OPEN%
