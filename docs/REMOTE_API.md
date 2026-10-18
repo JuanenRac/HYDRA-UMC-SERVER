@@ -222,8 +222,10 @@ POST /api/login
   in place.
 - For the WebSocket upgrade (section 3), pass the token as a subprotocol
   (`Sec-WebSocket-Protocol: hydra.bearer, <JWT>`, which keeps it out of the
-  address that proxies and logs record) or, for the clients that have not moved
-  yet, as a query param: `ws://<host>:3000/ws?token=<JWT>`.
+  address that proxies and logs record). A token in the address
+  (`ws://<host>:3000/ws?token=<JWT>`) is **refused by default** (message, then close
+  `1008`); an installation with clients that have not moved yet opts back in with
+  `HYDRA_UMC_WS_QUERY_TOKEN=allow` (section 2k).
 
 ## 2b. Account management: `/api/users` (admin only)
 
@@ -308,6 +310,28 @@ a separate one.
   only to the requested robot, clears its playback cursor and
   persists/broadcasts both the trajectory and its selected source; it
   deliberately does not replace a combined robot's independent Work.
+
+- `POST /api/stop-all` (no body, no confirmation) is the **global stop**: it stops
+  every robot of every controller and switches every valve and pump off, in one call.
+  **Any signed-in account, `admin` or `operator`, may call it** (the role model has no
+  narrower set that still lets every logged-in operator stop; a read-only role added
+  later would not be allowed). A reservation never blocks it - same rule as the
+  per-robot `"stop"`: the robots reserved by another account are stopped too, and
+  each such entry carries `reservedBy`, while the reservation itself is left untouched.
+  The in-memory state changes and the playback timers stop before anything is
+  written, then the settings are saved and one WebSocket delta per robot is
+  broadcast. Answer `200`:
+  `{ "success": true, "stoppedCount": 3, "failedCount": 0, "persisted": true, "robots": [ { "robotId": 1, "controllerId": "c1", "name": "A1", "stopped": true, "valvesOff": 2, "pumpsOff": 1, "reservedBy"?: "bob", "error"?: "..." } ] }`.
+  `valvesOff`/`pumpsOff` count the outputs that were on. A robot that could not be stopped
+  has `stopped: false` and an `error`, the others are still stopped, and `success` is
+  `false`; `persisted: false` means the stop is applied and broadcast but the settings
+  file could not be written. Calling it again is harmless; an installation with no robots
+  answers `200` with an empty list. `401`/`403` for a missing or invalid token. Every call is written to
+  the server log (who, role, address, counts) and counted in
+  `hydra_robot_commands_total{command="stop-all"}`. It has its own rate limit,
+  separate from the login's and much higher (default 60 per minute per address,
+  `STOP_ALL_RATE_LIMIT_MAX` / `STOP_ALL_RATE_LIMIT_WINDOW_MS`); over it the answer is
+  `429` and the per-robot `"stop"` keeps working. Unsigned calls do not spend the budget.
 
 - `POST /api/robot/:id/claim` (body: `{ "ttlMs"?: number, "force"?: boolean, "reason"?: string }`,
   default `ttlMs` 5 minutes, capped at 30) and `POST /api/robot/:id/release`
@@ -593,8 +617,16 @@ Environment variables, read once at start (see `docs/PRODUCTION_BOOTSTRAP.md`):
 | Variable | Effect |
 |---|---|
 | `JWT_SECRET` | Required in production, at least 32 characters, not an example value. |
-| `HYDRA_UMC_CAMERA_AUTH=required` | The live camera streams and the saved photos and recordings demand a ticket (`POST /api/camera/ticket`, `?ticket=` in the address) or a signed-in client (`401` otherwise). Off by default so that a client that does not ask for tickets yet keeps working; a production start says so. |
-| `HYDRA_UMC_INFO_AUTH=required` | `GET /metrics`, `/api/system/metrics`, `/api/system/supervisor`, `/api/ecosystem/status` and `/api/models` demand a signed-in client. Off by default for the same reason. |
+| `HYDRA_UMC_CAMERA_AUTH` | **Required by default**: the live camera streams and the saved photos and recordings demand a ticket (`POST /api/camera/ticket`, `?ticket=` in the address) or a signed-in client (`Authorization: Bearer`) (`401` otherwise). `HYDRA_UMC_CAMERA_AUTH=open` is the opt-out for clients that do not ask for tickets yet; the server warns at every start while it is set. |
+| `HYDRA_UMC_WS_QUERY_TOKEN` | **Refused by default**: `/ws?token=` gets an error message and a close with `1008`; the token travels as the `hydra.bearer` subprotocol. `HYDRA_UMC_WS_QUERY_TOKEN=allow` is the opt-out for clients that have not moved yet (it keeps the token in proxy and server logs); the server warns at every start while it is set. |
+| `STOP_ALL_RATE_LIMIT_MAX`, `STOP_ALL_RATE_LIMIT_WINDOW_MS` | Budget of `POST /api/stop-all` per address (default 60 per 60 000 ms), separate from the login's. |
+| `HYDRA_UMC_INFO_AUTH=required` | `GET /metrics`, `/api/system/metrics`, `/api/system/supervisor`, `/api/ecosystem/status` and `/api/models` demand a signed-in client. Off by default so that a client that does not send its token on those routes yet keeps working. |
+
+The page address of the embedded 3D view (`/?hideUI=true&robotId=<id>&token=<JWT>`, which the
+Android and iOS apps load in a WebView) is the one place a token still travels in an address: the
+server only serves the static page for it and never reads that `token`, STUDIO reads it once
+and removes it from the address, and its WebSocket then uses the subprotocol. It is not covered by the
+two settings above.
 
 Always on: `POST /api/system/reboot` and `/shutdown` accept only a plain request from this
 device itself; a request that went through a proxy (`X-Forwarded-For`, `Forwarded`, `Via`...), that
@@ -604,9 +636,9 @@ carries an `Origin` of another site, or that the browser marks `Sec-Fetch-Site: 
 ## 3. Live sync: `WebSocket /ws`
 
 Connect with `new WebSocket("ws://<host>:3000/ws", ["hydra.bearer", "<JWT_TOKEN>"])`
-(the token as a subprotocol; the server answers `hydra.bearer`) or, for the
-clients that have not moved yet, with `ws://<host>:3000/ws?token=<JWT_TOKEN>` (see
-section 2a for obtaining one). The token is always mandatory - a missing or invalid one
+(the token as a subprotocol; the server answers `hydra.bearer`). `ws://<host>:3000/ws?token=<JWT_TOKEN>`
+is refused unless the installation sets `HYDRA_UMC_WS_QUERY_TOKEN=allow` (section 2k; see
+section 2a for obtaining a token). The token is always mandatory - a missing or invalid one
 gets an `{"error": "..."}` message followed by a close with code `1008`.
 A client that sees code `1008` should treat it as "log in again," not
 retry the same token in a reconnect loop; see e.g.

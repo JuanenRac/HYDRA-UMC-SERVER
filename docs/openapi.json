@@ -163,6 +163,70 @@
           }
         }
       },
+      "StopAllResult": {
+        "type": "object",
+        "required": [
+          "success",
+          "stoppedCount",
+          "failedCount",
+          "persisted",
+          "robots"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "stoppedCount": {
+            "type": "integer"
+          },
+          "failedCount": {
+            "type": "integer"
+          },
+          "persisted": {
+            "type": "boolean"
+          },
+          "robots": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "robotId",
+                "controllerId",
+                "name",
+                "stopped",
+                "valvesOff",
+                "pumpsOff"
+              ],
+              "properties": {
+                "robotId": {
+                  "type": "integer"
+                },
+                "controllerId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "stopped": {
+                  "type": "boolean"
+                },
+                "valvesOff": {
+                  "type": "integer"
+                },
+                "pumpsOff": {
+                  "type": "integer"
+                },
+                "reservedBy": {
+                  "type": "string"
+                },
+                "error": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
       "CameraCapture": {
         "type": "object",
         "required": [
@@ -2519,6 +2583,34 @@
             "bearerAuth": []
           }
         ]
+      }
+    },
+    "/api/stop-all": {
+      "post": {
+        "tags": [
+          "stop-all"
+        ],
+        "summary": "POST /api/stop-all",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StopAllResult"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/system/bluetooth/pair": {

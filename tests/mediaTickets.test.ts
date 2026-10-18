@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cameraAuthRequired, issueMediaTicket, mediaTicketKey, MEDIA_TICKET_SECONDS, verifyMediaTicket } from "../src/mediaTickets.ts";
+import { cameraAuthRequired, cameraAuthRequiredByDefault, issueMediaTicket, mediaTicketKey, MEDIA_TICKET_SECONDS, verifyMediaTicket } from "../src/mediaTickets.ts";
 
 const key = mediaTicketKey("a-long-random-server-secret-for-the-tests-0123456789");
 const now = 1_700_000_000_000;
@@ -32,4 +32,12 @@ test("the pictures only demand a ticket when the installation says so", () => {
   assert.equal(cameraAuthRequired(undefined), false);
   assert.equal(cameraAuthRequired("off"), false);
   assert.equal(cameraAuthRequired(" Required "), true);
+});
+
+test("the pictures demand a ticket by default and only an explicit opt-out opens them", () => {
+  assert.equal(cameraAuthRequiredByDefault(undefined), true);
+  assert.equal(cameraAuthRequiredByDefault(""), true);
+  assert.equal(cameraAuthRequiredByDefault("required"), true);
+  assert.equal(cameraAuthRequiredByDefault("anything-unknown"), true);
+  for (const optOut of ["open", " OPEN ", "off", "false", "0", "no", "allow"]) assert.equal(cameraAuthRequiredByDefault(optOut), false, optOut);
 });

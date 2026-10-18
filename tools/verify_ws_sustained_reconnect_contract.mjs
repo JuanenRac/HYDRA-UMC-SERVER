@@ -112,7 +112,7 @@ async function main() {
 
     const peakDuringCycles = [];
     for (let cycle = 0; cycle < CYCLES; cycle++) {
-      const ws = new WebSocket(`ws://127.0.0.1:${port}/ws?token=${login.token}`);
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, ["hydra.bearer", login.token]);
       await once(ws, "open");
       peakDuringCycles.push(await readConnectedGauge(port));
       ws.close();

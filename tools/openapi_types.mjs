@@ -50,6 +50,24 @@ export const SCHEMAS = {
     required: ["success", "reservationHistory"],
     properties: { success: bool, reservation: { type: ["object", "null"] }, reservationHistory: list },
   },
+  StopAllResult: {
+    type: "object",
+    required: ["success", "stoppedCount", "failedCount", "persisted", "robots"],
+    properties: {
+      success: bool,
+      stoppedCount: int,
+      failedCount: int,
+      persisted: bool,
+      robots: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["robotId", "controllerId", "name", "stopped", "valvesOff", "pumpsOff"],
+          properties: { robotId: int, controllerId: str, name: str, stopped: bool, valvesOff: int, pumpsOff: int, reservedBy: str, error: str },
+        },
+      },
+    },
+  },
   CameraCapture: {
     type: "object",
     required: ["success", "cameraId", "filename"],
@@ -201,6 +219,7 @@ export const RESPONSES = {
   "GET /api/adapters": ref("Passthrough"),
   "GET /api/adapters/{adapterId}": ref("Passthrough"),
   "GET /api/hardware/canota/version": ref("Passthrough"),
+  "POST /api/stop-all": ref("StopAllResult"),
   "POST /api/robot/{id}/claim": ref("Reservation"),
   "POST /api/robot/{id}/release": ref("Reservation"),
   "POST /api/camera/{id}/snapshot": ref("CameraCapture"),

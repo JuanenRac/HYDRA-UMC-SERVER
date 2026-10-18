@@ -2,7 +2,7 @@
  * Short-lived tickets for the camera pictures: an `<img>` or a video element cannot send an `Authorization` header, so the live stream and the saved photos and recordings used to be
  * open to everybody on the LAN. A signed-in client now asks for a ticket (POST /api/camera/ticket) and puts it in the picture's address (`?ticket=...`): the ticket says who asked
  * and until when (five minutes), it is signed with a key derived from the server's own secret, and it opens nothing else.
- * Whether the pictures demand it is a setting of the installation (HYDRA_UMC_CAMERA_AUTH=required), so that a client that does not ask for tickets yet keeps working until it does.
+ * The pictures demand it by default; an installation opts out with HYDRA_UMC_CAMERA_AUTH=open so that a client that does not ask for tickets yet keeps working until it does.
  * Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
  */
 import crypto from "node:crypto";
@@ -44,4 +44,9 @@ export function verifyMediaTicket(key: Buffer, ticket: unknown, nowMs: number): 
 /** Do the pictures of the cameras demand a signed-in client? Off unless the installation asks for it (see the file header). */
 export function cameraAuthRequired(value: string | undefined): boolean {
   return (value ?? "").trim().toLowerCase() === "required";
+}
+
+/** Do the pictures of the cameras demand a ticket or a signed-in client? Yes, unless the installation opts out with `open` (also `off`, `false`, `0`, `no`, `allow`). */
+export function cameraAuthRequiredByDefault(value: string | undefined): boolean {
+  return !["open", "off", "false", "0", "no", "allow"].includes((value ?? "").trim().toLowerCase());
 }

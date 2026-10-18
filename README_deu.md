@@ -24,7 +24,7 @@
 </p>
 
 
-**Ehrlichkeitscheck - was heute wirklich läuft:** die Express + WebSocket-Engine, ihre REST/WS-API-Oberfläche, die JWT-Authentifizierung mit Refresh-Token-Rotation, das scrypt-Passwort-Hashing, die mDNS-Erkennung, die Roboter-Eigentums-/Beanspruchungs-Arbitrierung, die Wiedergabe (Playback) sowie die Relays zu CAN-OTA/Telemetrie/Sprache/lokaler KI/Connector-Hub (`src/server.ts`, `src/users.ts`, `src/kinematics.ts`, `src/metrics.ts`) sind real und getestet - nicht gegen Mocks, sondern gegen eine echte, von der Testinfrastruktur selbst gestartete Instanz genau dieses Servers: 122 Unit-Tests (`npm run test:unit`, `node:test` über `src/serverPolicy.ts`/`src/kinematics.ts`) plus 22 End-to-End-Vertrags-/Negativ-Auth-Skripte unter `tools/` (Discovery, Negativ-Auth, Produktions-Bootstrap, Roboterbefehle/-eigentum, Refresh-Token, Sprach-Relay + seine eigenen Fehlerpfade, Playback, die persistierte XY-Tabelle, Ecosystem-Status/-Service-Steuerung, Telemetrie-Relay, Integrations-Test-Connection, CAN-OTA-Relay, lokaler-KI-Proxy, Connector-Hub-Relay, System-Supervisor, dauerhafte WS-Wiederverbindung), alle erfolgreich über `npm run test`. Was hier echt hardwarenah, aber nicht vollständig verifiziert ist: die `spi_bridge`-Verbindung zu einem echten HYDRA-UMC-CM5+STM32H745-Board und der optionale Pfad zum Ausliefern des statischen STUDIO/admin-ui-Frontends sind echter Code, der über die obige API-/Vertragsschicht durchgeübt wird - diese Umgebung besitzt aber keine physische CM5/STM32, um diesen letzten Schritt tatsächlich zu schließen. TLS/HTTPS und der Prometheus/Grafana-Stack unter `monitoring/` sind real und optional, standardmäßig deaktiviert. Siehe `CHANGELOG.md` für genau das, was bisher ausgeliefert wurde.
+**Ehrlichkeitscheck - was heute wirklich läuft:** die Express + WebSocket-Engine, ihre REST/WS-API-Oberfläche, die JWT-Authentifizierung mit Refresh-Token-Rotation, das scrypt-Passwort-Hashing, die mDNS-Erkennung, die Roboter-Eigentums-/Beanspruchungs-Arbitrierung, die Wiedergabe (Playback) sowie die Relays zu CAN-OTA/Telemetrie/Sprache/lokaler KI/Connector-Hub (`src/server.ts`, `src/users.ts`, `src/kinematics.ts`, `src/metrics.ts`) sind real und getestet - nicht gegen Mocks, sondern gegen eine echte, von der Testinfrastruktur selbst gestartete Instanz genau dieses Servers: 130 Unit-Tests (`npm run test:unit`, `node:test` über `src/serverPolicy.ts`/`src/kinematics.ts`) plus 24 End-to-End-Vertrags-/Negativ-Auth-Skripte unter `tools/` (Discovery, Negativ-Auth, Produktions-Bootstrap, Roboterbefehle/-eigentum, Refresh-Token, Sprach-Relay + seine eigenen Fehlerpfade, Playback, die persistierte XY-Tabelle, Ecosystem-Status/-Service-Steuerung, Telemetrie-Relay, Integrations-Test-Connection, CAN-OTA-Relay, lokaler-KI-Proxy, Connector-Hub-Relay, System-Supervisor, dauerhafte WS-Wiederverbindung), alle erfolgreich über `npm run test`. Was hier echt hardwarenah, aber nicht vollständig verifiziert ist: die `spi_bridge`-Verbindung zu einem echten HYDRA-UMC-CM5+STM32H745-Board und der optionale Pfad zum Ausliefern des statischen STUDIO/admin-ui-Frontends sind echter Code, der über die obige API-/Vertragsschicht durchgeübt wird - diese Umgebung besitzt aber keine physische CM5/STM32, um diesen letzten Schritt tatsächlich zu schließen. TLS/HTTPS und der Prometheus/Grafana-Stack unter `monitoring/` sind real und optional, standardmäßig deaktiviert. Siehe `CHANGELOG.md` für genau das, was bisher ausgeliefert wurde.
 
 ---
 
@@ -117,9 +117,11 @@ zusammengefasst:
   Roboterbefehle (jog/play/pause/stop/tool/valve/pump/speed/vision),
   Kontoverwaltung, Upload/Download von Arbeitsdateien, Modell-Einreichung,
   Systemmetriken, Erkennung.
-- Ein einziger `/ws` WebSocket-Endpunkt (Bearer-Token als Subprotokoll `hydra.bearer` oder im Query-String für Clients, die noch nicht umgestellt haben),
+- Ein einziger `/ws` WebSocket-Endpunkt (Bearer-Token als Subprotokoll `hydra.bearer` ein Token im Query-String wird abgelehnt, solange die Installation es nicht wieder erlaubt),
   der bei jeder Zustandsänderung vollständige `settings`-Snapshots und
   leichtere `delta`-Updates an jeden verbundenen Client sendet.
+- `POST /api/stop-all` ist der globale Stopp: ein Aufruf, offen für jedes angemeldete Konto, stoppt alle Roboter und schaltet alle Ventile und Pumpen aus,
+  unabhängig von jeder Reservierung, und antwortet mit einem Ergebnis pro Roboter.
 - JWT-Bearer-Token-Authentifizierung bei jedem Schreibvorgang; zwei
   Kontorollen (`admin`, `operator`) trennen Settings-/Benutzerverwaltungs-
   Schreibvorgänge vom täglichen Roboterbetrieb.
@@ -194,7 +196,7 @@ HYDRA-UMC-SERVER/
 │   └── hydra-umc-server.service # Lokale systemd-Unit auf der CM5
 ├── tools/
 │   ├── ci_validate.py                                   # Manifest-/CHANGELOG-/Doku-Validierung, von der CI genutzt
-│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 22 echte Vertrags-/Negativ-Auth-Prüfungen gegen
+│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 24 echte Vertrags-/Negativ-Auth-Prüfungen gegen
 │                                                           einen laufenden Server (Discovery, Negativ-Auth,
 │                                                           Produktions-Bootstrap, Roboterbefehle/-eigentum,
 │                                                           Refresh-Token, Sprach-Relay + seine eigenen
@@ -292,7 +294,10 @@ von "nur vertrauenswürdiges LAN" zu "von jedem erreichbar" ändert (siehe
   einfachem HTTP/WS auf HTTPS/WSS umzuschalten. Siehe "TLS / HTTPS"
   unten. Wird eine der beiden nicht gesetzt, bleibt das heutige
   Klartext-HTTP-Verhalten unverändert.
-- `HYDRA_UMC_CAMERA_AUTH=required` / `HYDRA_UMC_INFO_AUTH=required` - verlangen für die Kamerabilder (Live-Streams, gespeicherte Fotos und Aufnahmen, über ein kurzlebiges `?ticket=`, das `POST /api/camera/ticket` an einen angemeldeten Client ausgibt) und die schreibgeschützten Geräteinformationen (`/metrics`, `/api/system/metrics`, `/api/system/supervisor`, `/api/ecosystem/status`, `/api/models`) einen angemeldeten Client. Standardmäßig aus, damit ein Client, der noch keine Tickets anfordert, weiter funktioniert; ein Produktionsstart warnt, solange sie aus sind. In Produktion verweigert der Server außerdem den Start mit einem Beispiel-`JWT_SECRET` oder -Startpasswort aus einer Deployment-Vorlage, einem `JWT_SECRET` unter 32 Zeichen oder einem Startpasswort unter 12 Zeichen.
+- `HYDRA_UMC_CAMERA_AUTH` - die Kamerabilder (Live-Streams, gespeicherte Fotos und Aufnahmen) verlangen **standardmäßig** ein kurzlebiges `?ticket=` (`POST /api/camera/ticket` gibt es an einen angemeldeten Client aus) oder ein Bearer-Token; `HYDRA_UMC_CAMERA_AUTH=open` ist der vorübergehende Ausweg für Clients, die noch keine Tickets anfordern.
+- `HYDRA_UMC_WS_QUERY_TOKEN` - `/ws?token=` wird **standardmäßig abgelehnt** (das Token reist als Subprotokoll `hydra.bearer`); `HYDRA_UMC_WS_QUERY_TOKEN=allow` ist der vorübergehende Ausweg für Clients, die noch nicht umgestellt haben. Der Server warnt bei jedem Start, solange ein Ausweg gesetzt ist.
+- `HYDRA_UMC_INFO_AUTH=required` - verlangt für die schreibgeschützten Geräteinformationen (`/metrics`, `/api/system/metrics`, `/api/system/supervisor`, `/api/ecosystem/status`, `/api/models`) einen angemeldeten Client. Standardmäßig aus, damit ein Client, der sein Token auf diesen Routen noch nicht sendet, weiter funktioniert; ein Produktionsstart warnt, solange es aus ist.
+- `STOP_ALL_RATE_LIMIT_MAX` / `STOP_ALL_RATE_LIMIT_WINDOW_MS` - Budget des globalen Stopps (`POST /api/stop-all`) pro Adresse, getrennt von dem der Anmeldung (Standard 60 pro Minute). In Produktion verweigert der Server außerdem den Start mit einem Beispiel-`JWT_SECRET` oder -Startpasswort aus einer Deployment-Vorlage, einem `JWT_SECRET` unter 32 Zeichen oder einem Startpasswort unter 12 Zeichen.
 
 ### TLS / HTTPS
 

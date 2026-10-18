@@ -218,7 +218,7 @@ async function main() {
 
     // A real connected WS client must receive the real streamed progress
     // as it happens - not just whatever the final HTTP response says.
-    ws = new WebSocket(`ws://127.0.0.1:${serverPortWithBridge}/ws?token=${adminLogin.token}`);
+    ws = new WebSocket(`ws://127.0.0.1:${serverPortWithBridge}/ws`, ["hydra.bearer", adminLogin.token]);
     await once(ws, "open");
     const canotaMessages = [];
     ws.on("message", (raw) => {

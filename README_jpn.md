@@ -26,7 +26,7 @@
 </p>
 
 
-**正直な現状確認 - 実際に今動くもの:** Express + WebSocket エンジン、その REST/WS API サーフェス、リフレッシュトークンのローテーションを伴う JWT 認証、scrypt によるパスワードハッシュ、mDNS ディスカバリー、ロボットの所有権/占有の裁定、再生（プレイバック）、そして CAN-OTA/テレメトリ/音声/ローカルAI/connector-hub へのリレー（`src/server.ts`、`src/users.ts`、`src/kinematics.ts`、`src/metrics.ts`）は本物であり、テスト済みです - モックに対してではなく、テストツール自身が起動する、まさにこのサーバーの実インスタンスに対してテストされています: 122件のユニットテスト（`npm run test:unit`、`src/serverPolicy.ts`/`src/kinematics.ts` に対する `node:test`）に加え、`tools/` 配下の19個のエンドツーエンドの契約/認証否定スクリプト（discovery、認証否定、本番ブートストラップ、ロボットコマンド/所有権、リフレッシュトークン、音声リレーとその独自のエラーパス、再生、永続化されたXYテーブル、エコシステムのステータス/サービス制御、テレメトリリレー、統合の test-connection、CAN-OTAリレー、ローカルAIプロキシ、connector-hubリレー、システムスーパーバイザー、持続的なWS再接続）があり、すべて `npm run test` で成功しています。ここで本当にハードウェアに近いものの完全には検証されていないもの: 実際の HYDRA-UMC CM5+STM32H745 ボードへの `spi_bridge` リンクと、STUDIO/admin-ui の静的フロントエンドを提供するオプションの経路は本物のコードであり、上記のAPI/契約層を通じて実際に動かされていますが、この環境にはその最後の接続を締めくくる物理的な CM5/STM32 がありません。TLS/HTTPS と `monitoring/` の Prometheus/Grafana スタックは本物でオプションであり、デフォルトでは無効です。これまでに実際に出荷されたものの詳細は `CHANGELOG.md` を参照してください。
+**正直な現状確認 - 実際に今動くもの:** Express + WebSocket エンジン、その REST/WS API サーフェス、リフレッシュトークンのローテーションを伴う JWT 認証、scrypt によるパスワードハッシュ、mDNS ディスカバリー、ロボットの所有権/占有の裁定、再生（プレイバック）、そして CAN-OTA/テレメトリ/音声/ローカルAI/connector-hub へのリレー（`src/server.ts`、`src/users.ts`、`src/kinematics.ts`、`src/metrics.ts`）は本物であり、テスト済みです - モックに対してではなく、テストツール自身が起動する、まさにこのサーバーの実インスタンスに対してテストされています: 130件のユニットテスト（`npm run test:unit`、`src/serverPolicy.ts`/`src/kinematics.ts` に対する `node:test`）に加え、`tools/` 配下の19個のエンドツーエンドの契約/認証否定スクリプト（discovery、認証否定、本番ブートストラップ、ロボットコマンド/所有権、リフレッシュトークン、音声リレーとその独自のエラーパス、再生、永続化されたXYテーブル、エコシステムのステータス/サービス制御、テレメトリリレー、統合の test-connection、CAN-OTAリレー、ローカルAIプロキシ、connector-hubリレー、システムスーパーバイザー、持続的なWS再接続）があり、すべて `npm run test` で成功しています。ここで本当にハードウェアに近いものの完全には検証されていないもの: 実際の HYDRA-UMC CM5+STM32H745 ボードへの `spi_bridge` リンクと、STUDIO/admin-ui の静的フロントエンドを提供するオプションの経路は本物のコードであり、上記のAPI/契約層を通じて実際に動かされていますが、この環境にはその最後の接続を締めくくる物理的な CM5/STM32 がありません。TLS/HTTPS と `monitoring/` の Prometheus/Grafana スタックは本物でオプションであり、デフォルトでは無効です。これまでに実際に出荷されたものの詳細は `CHANGELOG.md` を参照してください。
 
 ---
 
@@ -57,7 +57,8 @@ HYDRA-UMC SERVER は、HYDRA-UMC マルチロボット・マイクロファク�
 すべてのルート、WebSocket メッセージの契約、認証、そしてクライアントごとのリモートアクセスモデルは、**[`docs/REMOTE_API.md`](docs/REMOTE_API.md)** に記載されています——本サーバーと通信するあらゆるもの（HYDRA-UMC STUDIO 自身のクライアントコードを含む）にとっての唯一の信頼できる情報源です。要約すると：
 
 - `/api/*` 配下の REST API —— 設定の読み書き、原子的なロボット指令（ジョグ／再生／一時停止／停止／ツール／バルブ／ポンプ／速度／ビジョン）、アカウント管理、ワークファイルのアップロード／ダウンロード、モデル提出、システムメトリクス、ディスカバリー。
-- 単一の `/ws` WebSocket エンドポイント（ベアラートークンは `hydra.bearer` サブプロトコルで、まだ移行していないクライアントはクエリ文字列内で）で、状態が変化するたびに全接続クライアントへ完全なツリー形式の `settings` スナップショットと、より軽量な `delta` 更新をブロードキャストします。
+- 単一の `/ws` WebSocket エンドポイント（ベアラートークンは `hydra.bearer` サブプロトコルで、クエリ文字列内のトークンは、インストール側が再び許可しない限り拒否されます）で、状態が変化するたびに全接続クライアントへ完全なツリー形式の `settings` スナップショットと、より軽量な `delta` 更新をブロードキャストします。
+- `POST /api/stop-all` はグローバル停止です。ログイン済みのどのアカウントでも呼べる 1 回の呼び出しで、予約に関わらず全ロボットを停止し、全バルブとポンプをオフにし、ロボットごとの結果を返します。
 - すべての書き込みに JWT ベアラートークン認証が必要です。2 つのアカウントロール（`admin`、`operator`）が、設定／ユーザー管理の書き込みと日常のロボット操作の権限をそれぞれ制御します。
 - ローカルネットワーク上でのゼロコンフィグ発見のための `_hydra._tcp` mDNS/Bonjour 広告、加えてサブネットスキャン用の単純な `GET /api/hydra-info`。
 - `GET /metrics` —— Prometheus エクスポジション形式（`prom-client`）。下記「📊 モニタリング」で説明する任意の Grafana ダッシュボード向け。
@@ -106,7 +107,7 @@ HYDRA-UMC-SERVER/
 │   └── hydra-umc-server.service # CM5 上のローカル systemd ユニット
 ├── tools/
 │   ├── ci_validate.py                                   # CI が使用する manifest/CHANGELOG/docs の検証
-│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 実サーバーに対する 22 個の実際の契約/認証否定
+│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 実サーバーに対する 24 個の実際の契約/認証否定
 │                                                           チェック（discovery、認証否定、本番ブートストラップ、
 │                                                           ロボットコマンド/所有権、リフレッシュトークン、
 │                                                           音声リレーとその独自のエラーパス、再生、永続化
@@ -159,7 +160,10 @@ npm install
 - `LOGIN_RATE_LIMIT_MAX` / `LOGIN_RATE_LIMIT_WINDOW_MS` —— `POST /api/login` のみをスロットリングします（他のすべてのルートは影響を受けません）。いずれか未設定の場合、デフォルトは IP ごとに 15 分あたり 5 回の試行です。制限に達した場合は、一般的な `500` ではなく、明確な JSON エラーを伴う `429` を返します。
 - `REFRESH_RATE_LIMIT_MAX` —— `POST /api/refresh` のウィンドウおよび IP ごとのリクエスト上限です（デフォルトは 120）。上記のログイン制限には、失敗したログインのみが数えられます。
 - `TLS_CERT_PATH` / `TLS_KEY_PATH` —— **両方を** 設定すると、サーバー（REST API + 同じリスナーを共有する `/ws` WebSocket）がプレーンな HTTP/WS から HTTPS/WSS へ切り替わります。詳細は下記「TLS / HTTPS」を参照してください。いずれか一方でも未設定の場合、現在のプレーン HTTP の挙動が維持されます。
-- `HYDRA_UMC_CAMERA_AUTH=required` / `HYDRA_UMC_INFO_AUTH=required` —— カメラ映像(ライブストリーム、保存済みの写真と録画。ログイン済みクライアントに `POST /api/camera/ticket` が渡す短寿命の `?ticket=` を使用)と、読み取り専用のホスト情報(`/metrics`、`/api/system/metrics`、`/api/system/supervisor`、`/api/ecosystem/status`、`/api/models`)にログイン済みクライアントを要求します。まだチケットを要求しないクライアントが動き続けるよう既定ではオフで、本番起動時はオフの間警告します。本番では、デプロイ用テンプレートの例の `JWT_SECRET` やブートストラップパスワード、32 文字未満の `JWT_SECRET`、12 文字未満のブートストラップパスワードでは起動を拒否します。
+- `HYDRA_UMC_CAMERA_AUTH` —— カメラ映像(ライブストリーム、保存済みの写真と録画)は**既定で**短寿命の `?ticket=`(ログイン済みクライアントに `POST /api/camera/ticket` が渡します)または Bearer トークンを要求します。`HYDRA_UMC_CAMERA_AUTH=open` は、まだチケットを要求しないクライアント向けの一時的な回避策です。
+- `HYDRA_UMC_WS_QUERY_TOKEN` —— `/ws?token=` は**既定で拒否**されます(トークンは `hydra.bearer` サブプロトコルで送られます)。`HYDRA_UMC_WS_QUERY_TOKEN=allow` は、まだ移行していないクライアント向けの一時的な回避策です。回避策が有効な間、サーバーは起動のたびに警告します。
+- `HYDRA_UMC_INFO_AUTH=required` —— 読み取り専用のホスト情報(`/metrics`、`/api/system/metrics`、`/api/system/supervisor`、`/api/ecosystem/status`、`/api/models`)にログイン済みクライアントを要求します。それらのルートでまだトークンを送らないクライアントが動き続けるよう既定ではオフで、本番起動時はオフの間警告します。
+- `STOP_ALL_RATE_LIMIT_MAX` / `STOP_ALL_RATE_LIMIT_WINDOW_MS` —— グローバル停止(`POST /api/stop-all`)のアドレスごとの上限。ログインとは別枠です(既定は毎分 60 回)。本番では、デプロイ用テンプレートの例の `JWT_SECRET` やブートストラップパスワード、32 文字未満の `JWT_SECRET`、12 文字未満のブートストラップパスワードでは起動を拒否します。
 
 ### TLS / HTTPS
 

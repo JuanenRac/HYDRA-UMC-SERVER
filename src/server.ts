@@ -64,6 +64,7 @@ import {
   isPathInside,
   WS_TOKEN_SUBPROTOCOL,
   wsTokenFromSubprotocol,
+  wsQueryTokenAllowed,
   ifMatchAgrees,
   settingsRevision,
   loopbackCallerProblem,
@@ -74,7 +75,7 @@ import jwt from 'jsonwebtoken';
 import { ensureSeedUser, findUser, verifyPassword, effectiveTokenVersion, effectiveId, ScryptOverloadError, type UserRole } from './users';
 import { issueRefreshToken, consumeRefreshToken, revokeRefreshToken, pruneExpiredRefreshTokens } from './refresh_tokens';
 import { jwtSecretProblem } from './secretsPolicy';
-import { cameraAuthRequired, issueMediaTicket, mediaTicketKey, verifyMediaTicket } from './mediaTickets';
+import { cameraAuthRequired, cameraAuthRequiredByDefault, issueMediaTicket, mediaTicketKey, verifyMediaTicket } from './mediaTickets';
 import {
   registry as metricsRegistry,
   authFailuresTotal,
@@ -522,6 +523,23 @@ const refreshRateLimiter = rateLimit({
     res.status(429).json({
       error: "Too many refresh attempts - please wait before trying again.",
       retryAfterMs: LOGIN_RATE_LIMIT_WINDOW_MS,
+    });
+  },
+});
+
+// The global stop (POST /api/stop-all) is a safety function: it has its own, much higher budget than the login (an emergency stop must not be starved by anything else),
+// but it is still bounded, per address, so a loop of calls cannot saturate the server.
+const STOP_ALL_RATE_LIMIT_MAX = Number(process.env.STOP_ALL_RATE_LIMIT_MAX) || 60;
+const STOP_ALL_RATE_LIMIT_WINDOW_MS = Number(process.env.STOP_ALL_RATE_LIMIT_WINDOW_MS) || 60 * 1000;
+const stopAllRateLimiter = rateLimit({
+  windowMs: STOP_ALL_RATE_LIMIT_WINDOW_MS,
+  limit: STOP_ALL_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    res.status(429).json({
+      error: "Too many global stop requests from this address - the robots were not touched by this call, use the per-robot stop meanwhile.",
+      retryAfterMs: STOP_ALL_RATE_LIMIT_WINDOW_MS,
     });
   },
 });
@@ -1901,6 +1919,7 @@ async function startServer() {
     broadcastRobotDelta,
     startServerPlayback,
     stopServerPlayback,
+    stopAllRateLimiter,
   });
 
   registerRobotRoutes(app, {
@@ -1916,8 +1935,8 @@ async function startServer() {
     MAX_RESERVATION_TTL_MS,
   });
 
-  // The live pictures and the saved photos and recordings: open to the LAN unless the installation sets HYDRA_UMC_CAMERA_AUTH=required, which makes them ask for a ticket
-  // (POST /api/camera/ticket) or a signed-in client. A client that does not ask for tickets yet keeps working until it does.
+  // The live pictures and the saved photos and recordings ask for a ticket (POST /api/camera/ticket) or a signed-in client unless the installation opts out with
+  // HYDRA_UMC_CAMERA_AUTH=open, for the clients that do not ask for tickets yet.
   // The read-only host and project information (metrics, the process supervisor, the ecosystem status, the model catalogue) used to answer anybody on the LAN. HYDRA_UMC_INFO_AUTH=required
   // makes it ask for a signed-in client, once every client sends its token on those requests; until then it stays as it was, and a production start says so.
   const INFO_AUTH_REQUIRED = cameraAuthRequired(process.env.HYDRA_UMC_INFO_AUTH);
@@ -1926,9 +1945,13 @@ async function startServer() {
   }
   const infoAccess = (req: express.Request, res: express.Response, next: express.NextFunction) => (INFO_AUTH_REQUIRED ? authenticate(req, res, next) : next());
   const MEDIA_KEY = mediaTicketKey(JWT_SECRET);
-  const CAMERA_AUTH_REQUIRED = cameraAuthRequired(process.env.HYDRA_UMC_CAMERA_AUTH);
-  if (!CAMERA_AUTH_REQUIRED && NODE_ENV === "production") {
-    console.warn("[SECURITY] The camera pictures are open to the whole LAN. Set HYDRA_UMC_CAMERA_AUTH=required once every client asks for a ticket (POST /api/camera/ticket).");
+  const CAMERA_AUTH_REQUIRED = cameraAuthRequiredByDefault(process.env.HYDRA_UMC_CAMERA_AUTH);
+  if (!CAMERA_AUTH_REQUIRED) {
+    console.warn("[SECURITY] HYDRA_UMC_CAMERA_AUTH=open: the camera pictures are open to the whole LAN. Remove the opt-out once every client asks for a ticket (POST /api/camera/ticket).");
+  }
+  const WS_QUERY_TOKEN_ALLOWED = wsQueryTokenAllowed(process.env.HYDRA_UMC_WS_QUERY_TOKEN);
+  if (WS_QUERY_TOKEN_ALLOWED) {
+    console.warn("[SECURITY] HYDRA_UMC_WS_QUERY_TOKEN=allow: /ws?token= is accepted, so the token is recorded in proxy and server logs. Remove the opt-out once every client sends the hydra.bearer subprotocol.");
   }
   const mediaAccess = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (!CAMERA_AUTH_REQUIRED) return next();
@@ -2394,13 +2417,20 @@ async function startServer() {
     console.log(`[TLS] HTTPS/WSS enabled - cert: ${TLS_CERT_PATH}, key: ${TLS_KEY_PATH}`);
   }
   // A client may send its token as a subprotocol (`Sec-WebSocket-Protocol: hydra.bearer, <token>`), which keeps it out of the address that proxies and logs record; the server
-  // answers with the `hydra.bearer` subprotocol only. `/ws?token=` still works for the clients that have not moved yet.
+  // answers with the `hydra.bearer` subprotocol only. `/ws?token=` is refused unless the installation opts back in with HYDRA_UMC_WS_QUERY_TOKEN=allow.
   const wss = new WebSocketServer({ server: httpServer, path: "/ws", handleProtocols: protocols => (protocols.has(WS_TOKEN_SUBPROTOCOL) ? WS_TOKEN_SUBPROTOCOL : false) });
 
   wss.on("connection", (ws, req) => {
-    // The token: the subprotocol first, then the query string (?token=..., which is kept for the clients that have not moved yet)
+    // The token: the subprotocol; the query string (?token=...) only when the installation opted back in for the clients that have not moved yet
     const url = new URL(req.url || "", "http://localhost");
-    const token = wsTokenFromSubprotocol(req.headers["sec-websocket-protocol"]) ?? url.searchParams.get("token");
+    const subprotocolToken = wsTokenFromSubprotocol(req.headers["sec-websocket-protocol"]);
+    if (!subprotocolToken && url.searchParams.has("token") && !WS_QUERY_TOKEN_ALLOWED) {
+      authFailuresTotal.inc({ reason: "ws_query_token_refused" });
+      ws.send(JSON.stringify({ error: "Access denied: a token in the address is not accepted, send it as the hydra.bearer subprotocol" }));
+      setTimeout(() => ws.close(1008, "Access denied: token in the address"), 100);
+      return;
+    }
+    const token = subprotocolToken ?? (WS_QUERY_TOKEN_ALLOWED ? url.searchParams.get("token") : null);
 
     if (!token) {
       authFailuresTotal.inc({ reason: "ws_no_token" });

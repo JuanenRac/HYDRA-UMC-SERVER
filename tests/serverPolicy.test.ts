@@ -292,3 +292,13 @@ test("redactDeviceCredentials hides user and password in device URLs", () => {
   assert.equal(redactDeviceCredentials("rtsp://10.0.0.5/live"), "rtsp://10.0.0.5/live");
   assert.equal(redactDeviceCredentials("/dev/video0"), "/dev/video0");
 });
+
+import { wsQueryTokenAllowed } from "../src/serverPolicy.ts";
+
+test("a token in the address of the WebSocket is refused unless the installation opts back in", () => {
+  assert.equal(wsQueryTokenAllowed(undefined), false);
+  assert.equal(wsQueryTokenAllowed(""), false);
+  assert.equal(wsQueryTokenAllowed("required"), false);
+  assert.equal(wsQueryTokenAllowed("nonsense"), false);
+  for (const optIn of ["allow", " ALLOW ", "true", "1", "yes", "on"]) assert.equal(wsQueryTokenAllowed(optIn), true, optIn);
+});

@@ -28,9 +28,11 @@ deployment template (anything with `SET_LOCALLY`, `CHANGE_ME`, `example`...), wh
 `JWT_SECRET` has fewer than 32 characters or is too repetitive, or when the
 administrator password has fewer than 12 characters or contains the user name. Generate
 real values (`openssl rand -hex 32` for the secret). Two more settings harden what the
-LAN can read while clients move to tokens: `HYDRA_UMC_CAMERA_AUTH=required` and
-`HYDRA_UMC_INFO_AUTH=required` (see `docs/REMOTE_API.md` section 2k); a production start
-warns while they are off.
+LAN can read: the camera pictures demand a ticket or a token and `/ws?token=` is refused
+by default (the temporary opt-outs are `HYDRA_UMC_CAMERA_AUTH=open` and
+`HYDRA_UMC_WS_QUERY_TOKEN=allow`), and `HYDRA_UMC_INFO_AUTH=required` closes the read-only host
+information (see `docs/REMOTE_API.md` section 2k); the server warns at every start while an
+opt-out is set or `HYDRA_UMC_INFO_AUTH` is off in production.
 
 ## Development and test
 

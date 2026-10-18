@@ -70,7 +70,7 @@ async function main() {
       env: {
         ...process.env, PORT: String(port), NODE_ENV: "test", JWT_SECRET: "local-hardening-contract-verification-only-not-for-deployment",
         HYDRA_UMC_BOOTSTRAP_ADMIN_USERNAME: ADMIN.username, HYDRA_UMC_BOOTSTRAP_ADMIN_PASSWORD: ADMIN.password,
-        HYDRA_UMC_CAMERA_AUTH: "required", HYDRA_UMC_INFO_AUTH: "required", LOGIN_RATE_LIMIT_MAX: "100",
+        HYDRA_UMC_INFO_AUTH: "required", LOGIN_RATE_LIMIT_MAX: "100",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -112,6 +112,19 @@ async function main() {
     assert.equal(received.text.includes("cam-secret-123"), false, "an operator never receives a camera password (WebSocket)");
     assert.equal(received.text.includes('"type":"settings"'), true, "the connection opened with the subprotocol token");
 
+    // --- a token in the address of the WebSocket is refused by default (the opt-out is checked in verify_legacy_opt_out_contract.mjs)
+    const refusedQuery = await new Promise((resolve, reject) => {
+      const socket = new WebSocket(`ws://127.0.0.1:${port}/ws?token=${encodeURIComponent(operator)}`);
+      const messages = [];
+      const timer = setTimeout(() => { socket.terminate(); reject(new Error("the query token connection was neither answered nor closed")); }, 8000);
+      socket.on("message", (data) => messages.push(data.toString()));
+      socket.on("close", (code) => { clearTimeout(timer); resolve({ code, messages }); });
+      socket.on("error", (error) => { clearTimeout(timer); reject(error); });
+    });
+    assert.equal(refusedQuery.code, 1008, "/ws?token= is closed with 1008 by default");
+    assert.equal(refusedQuery.messages.some((text) => text.includes('"type":"settings"')), false, "a query token never receives the settings");
+    assert.match(refusedQuery.messages.join(" "), /hydra\.bearer/, "the refusal says which way to send the token");
+
     // --- a stale save is refused, a fresh one is accepted
     const stale = await request(port, "/api/settings", { method: "POST", headers: { ...adminHeaders, "if-match": '"0000000000000000"' }, body: JSON.stringify(tree) });
     assert.equal(stale.response.status, 409, "a save with a stale If-Match is refused");
@@ -140,7 +153,7 @@ async function main() {
       }
     }
 
-    console.log("SERVER_HARDENING_CONTRACT=PASS camera_secrets_rest=1 camera_secrets_ws=1 ws_subprotocol=1 if_match=2 camera_tickets=5 info_auth=8 power_refusals=6");
+    console.log("SERVER_HARDENING_CONTRACT=PASS camera_secrets_rest=1 camera_secrets_ws=1 ws_subprotocol=1 ws_query_token_refused=1 if_match=2 camera_tickets=5 info_auth=8 power_refusals=6");
   } finally {
     if (child && child.exitCode === null) {
       child.kill();

@@ -25,6 +25,23 @@ export interface CommandRouteDeps {
   ) => void;
   startServerPlayback: (robotId: number) => void;
   stopServerPlayback: (robotId: number) => void;
+  /** Bounded budget of the global stop (its own, generous limiter, never the login one). */
+  stopAllRateLimiter?: Middleware;
+}
+
+/** The playback state a stopped robot ends in; shared by the single-robot "stop" and the global stop so they can never disagree. */
+function stoppedPlaybackState(previous: any): Record<string, unknown> {
+  return { ...previous, isPlaying: false, playing: false, activeStep: -1, isPaused: false, paused: false, requestPause: false, requestStop: true, isFinished: false, finished: false };
+}
+
+/** Sets every entry of a valve/pump array to off; returns how many were on. */
+function switchAllOff(outputs: unknown): number {
+  if (!Array.isArray(outputs)) return 0;
+  let wasOn = 0;
+  for (let i = 0; i < outputs.length; i++) {
+    if (outputs[i]) { wasOn++; outputs[i] = false; }
+  }
+  return wasOn;
 }
 
 const KNOWN_COMMANDS = new Set([
@@ -48,7 +65,71 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     broadcastRobotDelta,
     startServerPlayback,
     stopServerPlayback,
+    stopAllRateLimiter,
   } = deps;
+
+  // GLOBAL STOP: one call stops every robot, whoever reserved it, and switches every valve and pump off. A safety stop is never blocked by a reservation
+  // (same rule as the single-robot "stop"), needs no confirmation and no parameters, and is open to every signed-in account: the role model only has "admin"
+  // and "operator" and both drive robots, so there is no narrower set that would still let any logged-in operator stop (a future read-only role would be refused
+  // by requiring one of the two). The in-memory state is changed and the playback timers are stopped before anything is awaited, so a slow disk never delays the stop.
+  app.post("/api/stop-all", authenticate, stopAllRateLimiter ?? ((_req: any, _res: any, next: any) => next()), async (req, res) => {
+    const user = (req as any).user;
+    const results: {
+      robotId: number;
+      controllerId: string;
+      name: string;
+      stopped: boolean;
+      valvesOff: number;
+      pumpsOff: number;
+      reservedBy?: string;
+      error?: string;
+    }[] = [];
+    const deltas: { controllerId: string; robotId: number; patch: Record<string, unknown> }[] = [];
+    const settings = getSettings();
+    for (const controller of settings?.controllers ?? []) {
+      for (const robot of controller.robots ?? []) {
+        const result: (typeof results)[number] = { robotId: robot.id, controllerId: controller.id, name: String(robot.name ?? ""), stopped: false, valvesOff: 0, pumpsOff: 0 };
+        // Informational only: it never changes what happens to the robot.
+        if (isReservationActive(robot.reservation) && robot.reservation.ownerId !== user.id) result.reservedBy = String(robot.reservation.ownerUsername ?? "");
+        try {
+          robot.playbackState = stoppedPlaybackState(robot.playbackState);
+          const patch: Record<string, unknown> = { playbackState: robot.playbackState };
+          result.valvesOff = switchAllOff(robot.valves);
+          result.pumpsOff = switchAllOff(robot.pumps);
+          if (Array.isArray(robot.valves)) patch.valves = robot.valves;
+          if (Array.isArray(robot.pumps)) patch.pumps = robot.pumps;
+          stopServerPlayback(robot.id);
+          result.stopped = true;
+          deltas.push({ controllerId: controller.id, robotId: robot.id, patch });
+        } catch (error) {
+          result.error = error instanceof Error ? error.message : "stop failed";
+        }
+        results.push(result);
+      }
+    }
+    const stoppedCount = results.filter((r) => r.stopped).length;
+    const failedCount = results.length - stoppedCount;
+    const reservedByOthers = results.filter((r) => r.reservedBy !== undefined).length;
+    industrialLog(
+      `GLOBAL STOP by ${user?.username ?? "unknown"} (${user?.role ?? "unknown"}) from ${req.ip ?? "unknown"}: ${stoppedCount}/${results.length} robot(s) stopped, ` +
+      `${results.reduce((n, r) => n + r.valvesOff, 0)} valve(s) and ${results.reduce((n, r) => n + r.pumpsOff, 0)} pump(s) switched off, ${reservedByOthers} reserved by another account` +
+      (failedCount ? `, ${failedCount} FAILED` : ""),
+    );
+    robotCommandsTotal.inc({ command: "stop-all" });
+    let persisted = true;
+    try {
+      await queueSettingsWrite(getSettings());
+    } catch (error) {
+      persisted = false;
+      industrialLog(`GLOBAL STOP: the settings could not be saved (${error instanceof Error ? error.message : "unknown error"}); the stop is applied in memory and broadcast.`);
+    }
+    try {
+      broadcastRobotDelta(deltas, getSettings());
+    } catch (error) {
+      industrialLog(`GLOBAL STOP: the broadcast failed (${error instanceof Error ? error.message : "unknown error"}).`);
+    }
+    res.json({ success: failedCount === 0, stoppedCount, failedCount, persisted, robots: results });
+  });
 
   // Direct Atomic API for Industrial Control
   app.post("/api/robot/:id/command", authenticate, async (req, res) => {
@@ -218,7 +299,7 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
               // after being replayed, could show a stale "completed
               // successfully" notification/badge again once this patch's
               // own isFinished (silently still true) lands.
-              robot.playbackState = { ...robot.playbackState, isPlaying: false, playing: false, activeStep: -1, isPaused: false, paused: false, requestPause: false, requestStop: true, isFinished: false, finished: false };
+              robot.playbackState = stoppedPlaybackState(robot.playbackState);
               patch = { playbackState: robot.playbackState };
               // Stops this robot's own V0 server-side playback timer (see
               // startServerPlayback's own header comment) immediately

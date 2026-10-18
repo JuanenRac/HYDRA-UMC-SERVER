@@ -336,7 +336,7 @@ export const WS_TOKEN_SUBPROTOCOL = "hydra.bearer";
 
 /**
  * The token a client sent as a WebSocket subprotocol: `Sec-WebSocket-Protocol: hydra.bearer, <token>`. It is the way that keeps the token out of the address, which proxies and the
- * server's own log record (`/ws?token=` still works for the clients that have not moved yet). Null when the header does not carry it.
+ * server's own log record (`/ws?token=` is refused unless the installation opts back in, see wsQueryTokenAllowed). Null when the header does not carry it.
  */
 export function wsTokenFromSubprotocol(header: string | string[] | undefined): string | null {
   const text = Array.isArray(header) ? header.join(",") : header ?? "";
@@ -345,4 +345,9 @@ export function wsTokenFromSubprotocol(header: string | string[] | undefined): s
   if (at === -1) return null;
   const token = parts[at + 1];   // the token is the protocol that follows the marker
   return token && /^[A-Za-z0-9._~+-]+$/.test(token) ? token : null;
+}
+
+/** Is a token in the address of the WebSocket (`/ws?token=`) accepted? No, unless the installation opts back in with HYDRA_UMC_WS_QUERY_TOKEN=allow for clients that have not moved to the subprotocol. */
+export function wsQueryTokenAllowed(value: string | undefined): boolean {
+  return ["allow", "true", "1", "yes", "on"].includes((value ?? "").trim().toLowerCase());
 }

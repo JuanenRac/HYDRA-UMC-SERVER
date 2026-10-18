@@ -109,6 +109,8 @@ async function main() {
         JWT_SECRET: "local-camera-media-contract-verification-only-not-for-deployment",
         HYDRA_UMC_BOOTSTRAP_ADMIN_USERNAME: ADMIN.username,
         HYDRA_UMC_BOOTSTRAP_ADMIN_PASSWORD: ADMIN.password,
+        // This contract exercises the capture and recording lifecycle with plain unauthenticated reads, which only the documented opt-out allows; the default (tickets required) is covered by verify_hardening_contract.mjs.
+        HYDRA_UMC_CAMERA_AUTH: "open",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });

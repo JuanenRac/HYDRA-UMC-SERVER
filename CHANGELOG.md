@@ -34,6 +34,19 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.8.0.9]
+
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
+
+## [0.8.0.9] - Global stop, tickets required by default and no token in the WebSocket address
+
+- New `POST /api/stop-all`: one call, open to every signed-in account (`admin` or `operator`), stops every robot of every controller and switches every valve and pump off, whatever any reservation says (a foreign reservation is reported as `reservedBy` and left untouched). It needs no confirmation, answers one result per robot (`stopped`, `valvesOff`, `pumpsOff`, `error`), keeps going when one robot fails, reports `persisted: false` when the settings could not be written, and broadcasts one delta per robot.
+- The global stop is written to the server log with who asked, their role, the address and the counts, is counted in `hydra_robot_commands_total{command="stop-all"}`, and has its own bounded rate limit (`STOP_ALL_RATE_LIMIT_MAX`, `STOP_ALL_RATE_LIMIT_WINDOW_MS`, default 60 per minute per address) that never touches the login or the per-robot `stop`.
+- The camera pictures (live streams, saved photos and recordings) now demand a short-lived ticket or a Bearer token by default. `HYDRA_UMC_CAMERA_AUTH=open` is the documented opt-out for clients that do not ask for tickets yet, and the server warns at every start while it is set.
+- `/ws?token=` is now refused by default with a message that names the `hydra.bearer` subprotocol, followed by a close with code `1008`. `HYDRA_UMC_WS_QUERY_TOKEN=allow` is the documented opt-out for clients that have not moved yet, and the server warns at every start while it is set.
+- `docs/REMOTE_API.md` (new endpoint, role decision, the 3D view page address as the one remaining token-in-address case), `docs/openapi.json`, `docs/PRODUCTION_BOOTSTRAP.md`, `.env.example` and the 8 READMEs describe the new defaults, the opt-outs and the new route; the unit and contract counts in the READMEs are updated.
+- New tests: unit tests for every path of the global stop and for both opt-out switches, a real-server contract for the global stop (sign-in, reservations, valves and pumps, results, broadcast, audit log, metric, rate limit, empty installation) and one for the defaults and the two opt-outs.
+
 ## [0.8.0.8] - Command validation, claim checks over combined robots and camera/relay limits
 
 - A command sent to a robot is now refused with `409` when ANY robot it will move (the target and everything combined with it) is claimed by another account; `stop` still passes.
