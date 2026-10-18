@@ -112,6 +112,8 @@ function saveRefreshTokens(tokens: StoredRefreshToken[]): void {
 
 /** Mints and persists a new refresh token for `user`, returning the opaque
  * token value the client stores alongside its access token. */
+export const MAX_REFRESH_TOKENS_PER_USER = 10;
+
 export function issueRefreshToken(user: StoredUser): string {
   const tokens = loadRefreshTokens();
   const token = crypto.randomBytes(32).toString("hex");
@@ -123,7 +125,15 @@ export function issueRefreshToken(user: StoredUser): string {
     expiresAt: Date.now() + REFRESH_TOKEN_TTL_MS,
     createdAt: new Date().toISOString(),
   });
-  saveRefreshTokens(tokens);
+  // Abandoned sessions (a reinstalled app, a web login never closed) must not
+  // pile up: keep only the newest MAX_REFRESH_TOKENS_PER_USER per account.
+  const own = tokens.filter(t => t.username === user.username);
+  if (own.length > MAX_REFRESH_TOKENS_PER_USER) {
+    const drop = new Set(own.slice(0, own.length - MAX_REFRESH_TOKENS_PER_USER));
+    saveRefreshTokens(tokens.filter(t => !drop.has(t)));
+  } else {
+    saveRefreshTokens(tokens);
+  }
   return token;
 }
 

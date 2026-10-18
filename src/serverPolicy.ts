@@ -169,6 +169,20 @@ export function cameraFingerprint(camera: CameraSettings): string {
   });
 }
 
+// Camera slots the vision streamer serves (ports 8100..8100+MAX_CAMERAS-1).
+// Anything above would land on other loopback services of the ecosystem.
+export const MAX_CAMERAS = 8;
+
+export function isValidCameraId(id: number): boolean {
+  return Number.isInteger(id) && id >= 1 && id <= MAX_CAMERAS;
+}
+
+// Hides "user:password@" inside a device URL (rtsp://user:pass@host/...) so
+// it can be logged without leaking the camera credentials.
+export function redactDeviceCredentials(device: string): string {
+  return device.replace(/([a-z][a-z0-9+.-]*:\/\/)[^/@\s]*@/gi, "$1***@");
+}
+
 // One real camera's own MJPEG proxy port - deterministic (8100 + id - 1)
 // so camera 1 -> 8100, camera 2 -> 8101, etc., up to the documented
 // 8-camera cap, with no separate port-mapping config file needed for a v0

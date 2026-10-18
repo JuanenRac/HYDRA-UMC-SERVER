@@ -94,6 +94,12 @@ async function writeFixture(directory) {
         name: "Robot A1",
         playbackState: { isPlaying: false, playing: false, isPaused: false, paused: false },
         recordedPoints: [],
+      }, {
+        id: 5, name: "Robot B1", combinedWith: [6], pos: { x: 0, y: 0, z: 0, a: 0, b: 0, c: 0 },
+        playbackState: { isPlaying: false, playing: false, isPaused: false, paused: false },
+      }, {
+        id: 6, name: "Robot B2", pos: { x: 0, y: 0, z: 0, a: 0, b: 0, c: 0 },
+        playbackState: { isPlaying: false, playing: false, isPaused: false, paused: false },
       }],
     }],
   };
@@ -282,6 +288,23 @@ async function main() {
     assert.equal(claimedEntry.action, "claimed");
     assert.equal(claimedEntry.byUsername, ADMIN.username);
 
+    // A claim on a combined sibling must also block a command sent to the
+    // robot it is combined with, and must leave the sibling untouched.
+    const siblingClaim = await request(port, "/api/robot/6/claim", {
+      method: "POST", headers: operatorAuth, body: JSON.stringify({ ttlMs: 60000 }),
+    });
+    assert.equal(siblingClaim.response.status, 200);
+    const groupJog = await request(port, "/api/robot/5/command", {
+      method: "POST", headers: adminAuth, body: JSON.stringify({ command: "jog", params: { axis: "x", amount: 50 } }),
+    });
+    assert.equal(groupJog.response.status, 409, "a combined sibling claimed by someone else must block the group command");
+    const afterGroupJog = await request(port, "/api/settings", { headers: adminAuth });
+    assert.equal(findRobot(afterGroupJog.body, 6).pos.x, 0, "the claimed sibling must not have moved");
+    const groupStop = await request(port, "/api/robot/5/command", {
+      method: "POST", headers: adminAuth, body: JSON.stringify({ command: "stop" }),
+    });
+    assert.equal(groupStop.response.status, 200, "'stop' still bypasses claims on a combined group");
+
     // The bounded history never grows without limit - real production use
     // (a robot claimed/released many times over its life) must not leak
     // memory or bloat settings.json forever.
@@ -293,7 +316,7 @@ async function main() {
     const finalHistory = findRobot(finalSettings.body, 1).reservationHistory;
     assert.equal(finalHistory.length, 20, "reservationHistory must stay bounded to its documented cap, not grow forever");
 
-    console.log("SERVER_ROBOT_OWNERSHIP_CONTRACT=PASS unclaimed=1 claim=1 blocked=1 stop_exception=1 own_command=1 contested_claim=1 non_owner_release=1 forced_override=1 release=1 idempotent_release=1 expiry=1 reservation_history=6");
+    console.log("SERVER_ROBOT_OWNERSHIP_CONTRACT=PASS unclaimed=1 claim=1 blocked=1 stop_exception=1 own_command=1 contested_claim=1 non_owner_release=1 forced_override=1 release=1 idempotent_release=1 expiry=1 reservation_history=6 combined_sibling_claim=1");
   } finally {
     if (child) {
       child.kill();

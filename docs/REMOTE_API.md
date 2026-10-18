@@ -285,6 +285,17 @@ a separate one.
   precisely because it doesn't require the admin role a full settings
   overwrite now does.
 
+  The claim check covers every robot the command will touch: a combined
+  sibling claimed by another account rejects the whole group command with
+  `409` (except `"stop"`). An unknown `command` is rejected with `400`. A
+  recognised command whose parameters were discarded (jog with an unknown axis
+  or an amount outside +-1000, valve/pump with an index that is not an integer
+  from 0 to 7 or a non-boolean state) still answers `success: true` but lists
+  the discarded field in `warnings`. Only `/api/settings`, `/api/upload-work`
+  and `/api/models/submit` accept large JSON bodies; every other JSON route is
+  capped at 1 MB. Camera ids run from 1 to 8; any other id is rejected with
+  `400`.
+
   `command: "trajectory"` atomically loads a Work before playback. Its
   `params` contains `points` (1 to 10,000 points, each with either finite
   `j1`–`j6` native joints or finite `x`/`y`/`z`), plus an optional safe

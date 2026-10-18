@@ -56,6 +56,8 @@ import {
   computeDeviceArg,
   cameraFingerprint,
   cameraStreamPort,
+  redactDeviceCredentials,
+  isValidCameraId,
   hi3510Action,
   safeIdSegment,
   slugify,
@@ -486,9 +488,16 @@ function requireAdmin(req: any, res: any, next: any) {
 // elsewhere in this file.
 const LOGIN_RATE_LIMIT_WINDOW_MS = Number(process.env.LOGIN_RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000;
 const LOGIN_RATE_LIMIT_MAX = Number(process.env.LOGIN_RATE_LIMIT_MAX) || 5;
+// Refresh tokens are unguessable 32-byte values, not passwords, and every
+// signed-in client refreshes on its own schedule (often behind one shared
+// NAT address), so the refresh route gets its own, much higher budget.
+const REFRESH_RATE_LIMIT_MAX = Number(process.env.REFRESH_RATE_LIMIT_MAX) || 120;
 const loginRateLimiter = rateLimit({
   windowMs: LOGIN_RATE_LIMIT_WINDOW_MS,
   limit: LOGIN_RATE_LIMIT_MAX,
+  // Only failed attempts count: a script that logs in once per run (a CLI)
+  // must not lock itself out, while password guessing is still capped.
+  skipSuccessfulRequests: true,
   standardHeaders: true, // sets RateLimit-* response headers a well-behaved client can read
   legacyHeaders: false,
   // Overrides express-rate-limit's own generic default body (a bare
@@ -499,6 +508,19 @@ const loginRateLimiter = rateLimit({
   handler: (req, res) => {
     res.status(429).json({
       error: "Too many login attempts - please wait before trying again.",
+      retryAfterMs: LOGIN_RATE_LIMIT_WINDOW_MS,
+    });
+  },
+});
+
+const refreshRateLimiter = rateLimit({
+  windowMs: LOGIN_RATE_LIMIT_WINDOW_MS,
+  limit: REFRESH_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    res.status(429).json({
+      error: "Too many refresh attempts - please wait before trying again.",
       retryAfterMs: LOGIN_RATE_LIMIT_WINDOW_MS,
     });
   },
@@ -569,7 +591,13 @@ async function startServer() {
   }
   app.use(cors(corsOptions));
 
-  app.use(express.json({ limit: "50mb" }));
+  // Settings, work uploads and model submissions legitimately carry large
+  // documents; every other JSON route (commands, login, relays) gets a small
+  // body cap.
+  const largeJson = express.json({ limit: "50mb" });
+  const smallJson = express.json({ limit: "1mb" });
+  const LARGE_BODY_ROUTES = new Set(["/api/settings", "/api/upload-work", "/api/models/submit"]);
+  app.use((req, res, next) => (LARGE_BODY_ROUTES.has(req.path) ? largeJson : smallJson)(req, res, next));
 
   // Create data directory if it doesn't exist
   const dataPath = path.join(process.cwd(), "data");
@@ -913,7 +941,7 @@ async function startServer() {
       return;
     }
     const proc = spawn(exePath, ["stream", "serve", "--device", deviceArg, "--port", String(port)], { stdio: ["ignore", "pipe", "pipe"] });
-    industrialLog(`[CAMERA] starting ${key} on port ${port} (device=${deviceArg}) pid=${proc.pid}${restartAttempts > 0 ? ` (self-heal retry #${restartAttempts})` : ""}`);
+    industrialLog(`[CAMERA] starting ${key} on port ${port} (device=${redactDeviceCredentials(deviceArg)}) pid=${proc.pid}${restartAttempts > 0 ? ` (self-heal retry #${restartAttempts})` : ""}`);
     const state: CameraProcessState = { proc, port, fingerprint, status: "starting", lastError: null, recentOutput: [], restartAttempts };
     cameraProcesses.set(key, state);
     writeCameraPidFile();
@@ -1012,7 +1040,7 @@ async function startServer() {
     const seenKeys = new Set<string>();
     for (const controller of payload?.controllers ?? []) {
       for (const camera of controller?.cameras ?? []) {
-        if (!Number.isInteger(camera?.id)) continue;
+        if (!isValidCameraId(camera?.id)) continue;
         const key = `${controller.id}:${camera.id}`;
         seenKeys.add(key);
         const fingerprint = cameraFingerprint(camera);
@@ -1660,10 +1688,10 @@ async function startServer() {
   // session, not just an expired access token, must still force a real
   // re-login). Not gated behind authenticate() - the whole point is
   // recovering from an access token that's already expired or otherwise
-  // invalid - but shares loginRateLimiter with POST /api/login as the same
-  // defense-in-depth against abuse, even though a refresh token itself is
-  // an unguessable 32-byte random value, not a brute-forceable password.
-  app.post("/api/refresh", loginRateLimiter, asyncHandler(async (req, res) => {
+  // invalid - but has its own, higher rate limit (refreshRateLimiter) as
+  // defense-in-depth against abuse; a refresh token is an unguessable 32-byte
+  // random value, not a brute-forceable password.
+  app.post("/api/refresh", refreshRateLimiter, asyncHandler(async (req, res) => {
     const { refreshToken } = req.body || {};
     if (typeof refreshToken !== "string" || !refreshToken) {
       return res.status(400).json({ error: "refreshToken required" });
@@ -1931,7 +1959,7 @@ async function startServer() {
   const LOCAL_AI_SERVICE_PORTS: Record<string, number> = {
     "cognitive-node": 8096,
     "detection-hef": 8093,
-    "visual-servoing-api": 8091,
+    "visual-servoing-api": 8116,
     "vla-engine": 8098,
   };
 
@@ -2255,6 +2283,23 @@ async function startServer() {
       // just by naming its URDF file oddly - path.basename() strips any
       // directory component the same way upload-work's fileName already
       // does.
+      const MAX_MESH_FILES = 200;
+      const MAX_MESH_BYTES = 32 * 1024 * 1024;
+      const MESH_EXTENSIONS = new Set([".stl", ".dae", ".obj", ".glb", ".gltf", ".mtl", ".ply", ".png", ".jpg", ".jpeg"]);
+      if (meshFiles !== undefined && meshFiles !== null) {
+        if (!Array.isArray(meshFiles) || meshFiles.length > MAX_MESH_FILES) {
+          return res.status(400).json({ error: `meshFiles must be an array of at most ${MAX_MESH_FILES} files` });
+        }
+        for (const mf of meshFiles) {
+          if (!mf || typeof mf.filename !== "string" || typeof mf.base64 !== "string") continue;
+          if (!MESH_EXTENSIONS.has(path.extname(mf.filename).toLowerCase())) {
+            return res.status(400).json({ error: `mesh file type not allowed: ${path.extname(mf.filename) || "(none)"}` });
+          }
+          if (Math.floor(mf.base64.length * 3 / 4) > MAX_MESH_BYTES) {
+            return res.status(400).json({ error: `mesh file too large (max ${MAX_MESH_BYTES / (1024 * 1024)} MB): ${mf.filename}` });
+          }
+        }
+      }
       const safeUrdfFilename = path.basename(String(urdfFilename || "")) || `${slug}.urdf`;
       fs.mkdirSync(destFolder, { recursive: true });
       fs.writeFileSync(path.join(destFolder, safeUrdfFilename), urdfXml, "utf-8");
@@ -2285,7 +2330,7 @@ async function startServer() {
     res.json({ models: readModelSubmissionsIndex() });
   });
 
-  app.get("/api/models/:category/:slug/download", (req, res) => {
+  app.get("/api/models/:category/:slug/download", infoAccess, (req, res) => {
     const submissions = realSettings(lastKnownSettings)?.modelSubmissions;
     if (!submissions?.enabled) {
       return res.status(403).json({ error: "This server isn't accepting model submissions right now - enable it from Config > Models first." });

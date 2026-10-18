@@ -2,14 +2,14 @@
   "schema_version": "1.0",
   "ecosystem": "HYDRA-UMC",
   "name": "HYDRA-UMC-SERVER",
-  "version": "0.8.0.7",
+  "version": "0.8.0.8",
   "role": "api",
   "stack": "node",
   "technologies": [
     "Node.js 20+",
     "Express",
-    "Socket.io/WebSocket",
-    "gRPC"
+    "WebSocket (ws)",
+    "REST/OpenAPI"
   ],
   "deployment_target": "cm5",
   "maturity": "established",

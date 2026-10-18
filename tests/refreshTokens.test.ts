@@ -18,6 +18,7 @@ import {
   revokeRefreshToken,
   pruneExpiredRefreshTokens,
   RefreshTokensFileError,
+  MAX_REFRESH_TOKENS_PER_USER,
 } from "../src/refresh_tokens";
 import { createUser, findUser, type StoredUser } from "../src/users";
 
@@ -52,6 +53,17 @@ test("issueRefreshToken + consumeRefreshToken - real round trip", async () => {
       assert.equal(result.user.username, "alice");
       assert.notEqual(result.refreshToken, token, "rotated on use");
     }
+  });
+});
+
+test("issueRefreshToken - keeps only the newest tokens per account", async () => {
+  await withTempCwd(async () => {
+    await createUser("dave", "correcthorsebattery", "operator");
+    const dave = findUser("dave") as StoredUser;
+    const issued: string[] = [];
+    for (let i = 0; i < MAX_REFRESH_TOKENS_PER_USER + 3; i++) issued.push(issueRefreshToken(dave));
+    assert.equal(consumeRefreshToken(issued[0]).ok, false, "the oldest token was dropped");
+    assert.equal(consumeRefreshToken(issued[issued.length - 1]).ok, true, "the newest token still works");
   });
 });
 

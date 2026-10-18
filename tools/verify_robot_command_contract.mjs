@@ -279,6 +279,29 @@ async function main() {
     assert.equal(resetA2.pos.tx, 77, "resetting robot 1's table must never touch robot 2's own world-placement pos.tx");
     assert.equal(resetA2.pos.ty, 88);
 
+    // Unknown commands and malformed outputs are reported, never silently
+    // accepted: 400 for an unknown command, a warning for a discarded valve
+    // index (which must also never grow the persisted array).
+    const unknownCommand = await request(port, "/api/robot/1/command", {
+      method: "POST", headers: authorization, body: JSON.stringify({ command: "nope" }),
+    });
+    assert.equal(unknownCommand.response.status, 400, "an unknown command must be rejected");
+    const hugeValve = await request(port, "/api/robot/1/command", {
+      method: "POST", headers: authorization, body: JSON.stringify({ command: "valve", params: { index: 3000000, state: true } }),
+    });
+    assert.equal(hugeValve.response.status, 200);
+    assert.equal(hugeValve.body.warnings?.[0]?.field, "valve", "an out-of-range valve index must be reported as a warning");
+    const badJog = await request(port, "/api/robot/1/command", {
+      method: "POST", headers: authorization, body: JSON.stringify({ command: "jog", params: { axis: "q", amount: 1 } }),
+    });
+    assert.equal(badJog.body.warnings?.[0]?.field, "jog", "a discarded jog must be reported as a warning");
+    settings = await request(port, "/api/settings", { headers: authorization });
+    assert.ok((findRobot(settings.body, 1).valves ?? []).length <= 8, "valves must never grow past the fixed range");
+    const goodValve = await request(port, "/api/robot/1/command", {
+      method: "POST", headers: authorization, body: JSON.stringify({ command: "valve", params: { index: 1, state: true } }),
+    });
+    assert.equal(goodValve.body.warnings, undefined);
+
     // Custom vacuum footprints use ordinary settings, not a physical command.
     settings = await request(port, "/api/settings", { headers: authorization });
     const otherRobot = structuredClone(findRobot(settings.body, 2));
@@ -318,7 +341,7 @@ async function main() {
       assert.deepEqual(findRobot(settings.body,1).rackSystem,rackSystem);
       assert.deepEqual(findRobot(settings.body,2),otherRobot);
     }
-    console.log("SERVER_ROBOT_COMMAND_CONTRACT=PASS combined-pause=2 camera-state=3 speed-setpoint-warnings=4 trajectory-sync=5 xytable-ownership=2 vacuum-custom-size=4 heated-bed=5 rack=3");
+    console.log("SERVER_ROBOT_COMMAND_CONTRACT=PASS combined-pause=2 camera-state=3 speed-setpoint-warnings=4 trajectory-sync=5 xytable-ownership=2 vacuum-custom-size=4 heated-bed=5 rack=3 rejected-input=5");
   } finally {
     if (child && child.exitCode === null) {
       child.kill("SIGTERM");

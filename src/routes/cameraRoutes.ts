@@ -15,7 +15,7 @@ import { promisify } from "util";
 import { Readable } from "stream";
 import { discoverRtspPath, sendPtzCommand } from "../cameraProbe";
 import { visionStreamerExecutablePath } from "../ecosystemStatus";
-import { cameraStreamPort } from "../serverPolicy";
+import { cameraStreamPort, isValidCameraId, MAX_CAMERAS } from "../serverPolicy";
 
 const execFileAsync = promisify(execFile);
 
@@ -62,8 +62,8 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
 
   app.get("/api/camera/:id/stream", mediaAccess, async (req, res) => {
     const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id < 1) {
-      return res.status(400).json({ error: "camera id must be a positive integer" });
+    if (!isValidCameraId(id)) {
+      return res.status(400).json({ error: "camera id must be an integer between 1 and " + MAX_CAMERAS });
     }
     const port = cameraStreamPort(id);
     let upstream: Response;
@@ -219,7 +219,7 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
   // connection open.
   app.post("/api/camera/:id/snapshot", authenticate, async (req, res) => {
     const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "camera id must be a positive integer" });
+    if (!isValidCameraId(id)) return res.status(400).json({ error: "camera id must be an integer between 1 and " + MAX_CAMERAS });
     let upstream: Response;
     try {
       upstream = await connectToLocalCameraStream(id);
@@ -260,7 +260,7 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
 
   app.post("/api/camera/:id/recording/start", authenticate, async (req, res) => {
     const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "camera id must be a positive integer" });
+    if (!isValidCameraId(id)) return res.status(400).json({ error: "camera id must be an integer between 1 and " + MAX_CAMERAS });
     if (activeCameraRecordings.has(id)) return res.status(409).json({ error: `Camera ${id} is already recording.` });
     let upstream: Response;
     try {
@@ -311,7 +311,7 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
 
   app.post("/api/camera/:id/recording/stop", authenticate, async (req, res) => {
     const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: "camera id must be a positive integer" });
+    if (!isValidCameraId(id)) return res.status(400).json({ error: "camera id must be an integer between 1 and " + MAX_CAMERAS });
     const active = activeCameraRecordings.get(id);
     if (!active) return res.status(404).json({ error: `Camera ${id} is not currently recording.` });
     const filename = path.basename(active.filePath);
@@ -471,8 +471,8 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
   // (-100..100); omit all three (or send 0/0/0) to stop.
   app.post("/api/camera/:id/ptz", authenticate, requireAdmin, async (req, res) => {
     const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id < 1) {
-      return res.status(400).json({ error: "camera id must be a positive integer" });
+    if (!isValidCameraId(id)) {
+      return res.status(400).json({ error: "camera id must be an integer between 1 and " + MAX_CAMERAS });
     }
     const { host, port, username, password, pan, tilt, zoom, channel } = req.body || {};
     if (typeof host !== "string" || !host.trim()) {

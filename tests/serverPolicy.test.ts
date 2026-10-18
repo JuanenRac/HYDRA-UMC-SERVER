@@ -20,6 +20,9 @@ import {
   computeDeviceArg,
   cameraFingerprint,
   cameraStreamPort,
+  isValidCameraId,
+  redactDeviceCredentials,
+  MAX_CAMERAS,
   hi3510Action,
   safeIdSegment,
   slugify,
@@ -273,4 +276,19 @@ test("a WebSocket token sent as a subprotocol is found, and nothing else is take
   assert.equal(wsTokenFromSubprotocol("hydra.bearer"), null);                   // marker but no token
   assert.equal(wsTokenFromSubprotocol("hydra.bearer, bad token!"), null);
   assert.equal(wsTokenFromSubprotocol(undefined), null);
+});
+
+test("isValidCameraId stays inside the camera port range", () => {
+  assert.equal(isValidCameraId(1), true);
+  assert.equal(isValidCameraId(MAX_CAMERAS), true);
+  assert.equal(isValidCameraId(MAX_CAMERAS + 1), false);
+  assert.equal(isValidCameraId(0), false);
+  assert.equal(isValidCameraId(1.5), false);
+  assert.equal(isValidCameraId(Number.NaN), false);
+});
+
+test("redactDeviceCredentials hides user and password in device URLs", () => {
+  assert.equal(redactDeviceCredentials("rtsp://admin:s3cret@10.0.0.5:554/live"), "rtsp://***@10.0.0.5:554/live");
+  assert.equal(redactDeviceCredentials("rtsp://10.0.0.5/live"), "rtsp://10.0.0.5/live");
+  assert.equal(redactDeviceCredentials("/dev/video0"), "/dev/video0");
 });

@@ -27,6 +27,17 @@ export interface CommandRouteDeps {
   stopServerPlayback: (robotId: number) => void;
 }
 
+const KNOWN_COMMANDS = new Set([
+  "stop", "play", "pause", "jog", "reset", "jogStep", "reset3D", "tool",
+  "valve", "pump", "speed", "trajectory", "vision",
+]);
+
+// Valves and pumps are fixed small arrays on a robot; an index outside this
+// range would grow a sparse array that gets persisted in full.
+const MAX_OUTPUT_INDEX = 7;
+const validOutputIndex = (v: unknown): v is number =>
+  typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= MAX_OUTPUT_INDEX;
+
 export function registerCommandRoutes(app: express.Express, deps: CommandRouteDeps): void {
   const {
     authenticate,
@@ -43,6 +54,10 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
   app.post("/api/robot/:id/command", authenticate, async (req, res) => {
     const robotId = parseInt(req.params.id);
     const { command, params } = req.body;
+
+    if (typeof command !== "string" || !KNOWN_COMMANDS.has(command)) {
+      return res.status(400).json({ error: "unknown command" });
+    }
 
     if (!getSettings().controllers) {
       return res.status(400).json({ error: "No settings loaded" });
@@ -64,21 +79,32 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     // deliberately exempt: a real emergency stop must never be blockable
     // by someone else's stale/forgotten claim. Every other command is
     // rejected with 409 when a different, still-active claim exists.
-    const activeClaim = isReservationActive(targetRobot.reservation)
-      ? targetRobot.reservation
-      : null;
-    if (activeClaim && activeClaim.ownerId !== (req as any).user.id && command !== "stop") {
-      return res.status(409).json({
-        error: `robot is claimed by ${activeClaim.ownerUsername}`,
-        reservation: activeClaim,
-      });
-    }
-
     // A trajectory belongs to one robot. Unlike play/pause/stop, loading it
     // must not overwrite a combined sibling's independently selected Work.
     const affectedIds = command === "trajectory"
       ? [robotId]
       : [robotId, ...(targetRobot.combinedWith || [])];
+
+    // The claim check covers EVERY robot the command will touch, not only
+    // the target: a combined sibling claimed by someone else must not move
+    // through the group path.
+    if (command !== "stop") {
+      let blockingClaim: any = null;
+      getSettings().controllers.forEach((c: any) => {
+        c.robots?.forEach((r: any) => {
+          if (blockingClaim || !affectedIds.includes(r.id)) return;
+          if (isReservationActive(r.reservation) && r.reservation.ownerId !== (req as any).user.id) {
+            blockingClaim = r.reservation;
+          }
+        });
+      });
+      if (blockingClaim) {
+        return res.status(409).json({
+          error: `robot is claimed by ${blockingClaim.ownerUsername}`,
+          reservation: blockingClaim,
+        });
+      }
+    }
 
     // Work loading used to be a browser-only change followed by the normal
     // 500 ms full-settings debounce. A Play click could therefore arrive at
@@ -319,6 +345,8 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
                     patch = isAbsolute ? { xyTable: robot.xyTable, pos: robot.pos } : { xyTable: robot.xyTable };
                   }
                 }
+              } else {
+                warnings.push({ robotId: robot.id, field: "jog", requested: params?.axis, message: "jog needs a valid axis (x y z a b c) and a finite amount within +-1000 - not applied" });
               }
               break;
             }
@@ -384,17 +412,21 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
               }
               break;
             case "valve":
-              if (typeof params?.index === "number" && typeof params?.state === "boolean") {
+              if (validOutputIndex(params?.index) && typeof params?.state === "boolean") {
                 if (!robot.valves) robot.valves = [false, false];
                 robot.valves[params.index] = params.state;
                 patch = { valves: robot.valves };
+              } else {
+                warnings.push({ robotId: robot.id, field: "valve", requested: params?.index, message: "valve needs an integer index 0-7 and a boolean state - not applied" });
               }
               break;
             case "pump":
-              if (typeof params?.index === "number" && typeof params?.state === "boolean") {
+              if (validOutputIndex(params?.index) && typeof params?.state === "boolean") {
                 if (!robot.pumps) robot.pumps = [false, false];
                 robot.pumps[params.index] = params.state;
                 patch = { pumps: robot.pumps };
+              } else {
+                warnings.push({ robotId: robot.id, field: "pump", requested: params?.index, message: "pump needs an integer index 0-7 and a boolean state - not applied" });
               }
               break;
             case "speed": {

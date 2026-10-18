@@ -34,6 +34,19 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [0.8.0.8] - Command validation, claim checks over combined robots and camera/relay limits
+
+- A command sent to a robot is now refused with `409` when ANY robot it will move (the target and everything combined with it) is claimed by another account; `stop` still passes.
+- An unknown `command` is rejected with `400`. A jog with an invalid axis or amount, and a valve or pump with an index that is not an integer from 0 to 7, no longer succeed silently: they are listed in `warnings`. A huge valve index can no longer inflate `settings.json`.
+- JSON bodies are capped at 1 MB except on `/api/settings`, `/api/upload-work` and `/api/models/submit`; submitted model meshes are limited to 200 files of 32 MB each with a mesh/texture extension allow-list.
+- Camera ids are limited to 1-8 on the stream, snapshot, recording and PTZ routes and in the camera supervisor, so an id can no longer reach another local service port.
+- `/api/ai/visual-servoing-api/*` now reaches port 8116, where that service listens.
+- `GET /api/models/:category/:slug/download` follows the same optional-auth switch as `GET /api/models`.
+- Only failed logins count towards the login rate limit, and `POST /api/refresh` has its own, larger budget (`REFRESH_RATE_LIMIT_MAX`, default 120).
+- An account keeps at most its 10 newest refresh tokens.
+- Camera credentials in a stream URL are masked in the server log.
+- `.env.example`, `CONTRIBUTING.md` (sibling checkouts needed by `npm test`), the manifest technologies and the unit-test count in the 8 READMEs are corrected.
+
 ## [0.8.0.7] - Camera credentials, tickets and power routes hardened
 
 - An operator no longer receives the IP-camera credentials (`ipUsername`/`ipPassword`), over REST or over the WebSocket; only an administrator reads them.
