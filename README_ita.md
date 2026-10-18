@@ -28,6 +28,17 @@
 
 ---
 
+## 📋 In breve
+
+| | |
+|---|---|
+| Versione | `0.8.0.9` |
+| Maturità | Consolidato |
+| Test | 130 (`npm run test:unit`) |
+| Tecnologia | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
+| Destinazione | Il Raspberry Pi CM5 di una cella HYDRA-UMC |
+| Su hardware reale | Non ancora: per questa versione non risulta alcuna esecuzione su hardware reale |
+
 ## 🎯 Panoramica
 
 HYDRA-UMC SERVER è il backend indipendente che governa una cella di

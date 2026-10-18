@@ -30,6 +30,17 @@
 
 ---
 
+## 📋 速览
+
+| | |
+|---|---|
+| 版本 | `0.8.0.9` |
+| 成熟度 | 成熟 |
+| 测试 | 130 (`npm run test:unit`) |
+| 技术栈 | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
+| 目标 | HYDRA-UMC 工作单元的 Raspberry Pi CM5 |
+| 真实硬件 | 尚未：此版本没有在真实硬件上运行的记录 |
+
 ## 🎯 概述
 
 HYDRA-UMC SERVER 是驱动 HYDRA-UMC 多机器人微工厂单元的独立后端：一个基于 Node.js/Express + WebSocket 的引擎，负责管理机器人状态、将其持久化到磁盘、验证每一次写入操作，并向所有已连接客户端广播实时更新。它本身不附带任何用户界面或前端构建步骤——是一个纯粹的 API + WebSocket 服务，设计为在真正紧邻机器人的机器上（通常是 Raspberry Pi CM5）以无头方式运行（无浏览器、无显示器）。
