@@ -33,3 +33,11 @@ test("with the admin limit the relay is refused to anyone else", () => {
   const { chain } = chainFor({ adminOnly: true });
   assert.deepEqual(run(chain[1], { role: "operator" }), { status: 403, passed: false });
 });
+
+test("the limit can be switched at run time", () => {
+  let adminOnly = false;
+  const { chain } = chainFor({ adminOnly: () => adminOnly } as any);
+  assert.deepEqual(run(chain[1], { role: "operator" }), { status: 200, passed: true });
+  adminOnly = true;
+  assert.deepEqual(run(chain[1], { role: "operator" }), { status: 403, passed: false });
+});

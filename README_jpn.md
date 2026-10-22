@@ -178,6 +178,8 @@ npm install
 - `HYDRA_UMC_INFO_AUTH=required` —— 読み取り専用のホスト情報(`/metrics`、`/api/system/metrics`、`/api/system/supervisor`、`/api/ecosystem/status`、`/api/models`)にログイン済みクライアントを要求します。それらのルートでまだトークンを送らないクライアントが動き続けるよう既定ではオフで、本番起動時はオフの間警告します。
 - `HYDRA_UMC_AI_ACCESS=admin` - ローカル AI サービスへのリレー（`/api/ai/*`）を管理者のみに制限します。既定ではオフで、これまでどおりログイン済みのユーザーなら誰でも使えます。
 - `HYDRA_UMC_LOG_MAX_BYTES` と `HYDRA_UMC_LOG_KEEP` - サーバーログをローテーションするサイズ（既定 10 MB）と、保持するローテーション済みファイルの数（既定 1）。
+- `HYDRA_UMC_SETTINGS_STORE`、`HYDRA_UMC_SETTINGS_BACKUPS`、`HYDRA_UMC_SETTINGS_BACKUP_INTERVAL_S` - 既定では設定（`settings.json` とポイントファイル）はジャーナル付きの全か無かの単位として書き込まれます。中断された書き込みは次回起動時に完了または破棄され、`settings.json` のコピーが `data/backups/` に保存され（10 件、最短 600 秒間隔）、壊れた `settings.json` は最新の正常なコピーから復元されます。`HYDRA_UMC_SETTINGS_STORE=plain` でファイルを 1 つずつ書く方式に戻せ、`HYDRA_UMC_SETTINGS_BACKUPS=0` でコピーを無効にできます。
+- AI リレーのアクセス、ホスト情報のサインイン要否、TLS（証明書と鍵のパス、証明書の SHA-256 フィンガープリント付き）は、管理者が制御アプリのサーバー管理画面から変更することもできます。環境変数で設定された値が優先され、ロック表示になります。サインイン要否は無効にする前に確認を求め、TLS は次回起動時に反映されます。
 - `STOP_ALL_RATE_LIMIT_MAX` / `STOP_ALL_RATE_LIMIT_WINDOW_MS` —— グローバル停止(`POST /api/stop-all`)のアドレスごとの上限。ログインとは別枠です(既定は毎分 60 回)。本番では、デプロイ用テンプレートの例の `JWT_SECRET` やブートストラップパスワード、32 文字未満の `JWT_SECRET`、12 文字未満のブートストラップパスワードでは起動を拒否します。
 
 ### TLS / HTTPS
@@ -214,6 +216,8 @@ npm start
 ```
 
 サーバーは `0.0.0.0:3000` でリッスンします —— `http://localhost:3000`、またはローカルネットワーク内の `http://<あなたのローカルIP>:3000` でアクセス可能です。すべての状態は `data/` に永続化されます。
+
+このリポジトリには意図的に Dockerfile がありません。サーバーは [HYDRA-UMC-OS](https://github.com/JuanenRac/HYDRA-UMC-OS)（`provisioning/install_server.sh`）によってパッケージ化され CM5 にインストールされます。
 
 ### バージョン管理
 

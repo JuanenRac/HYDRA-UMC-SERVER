@@ -1,0 +1,139 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { test } from "node:test";
+import { SecurityConfig, SecurityConfigError, resolveAiAccess, resolveInfoAuth, resolveTls, type SecurityFile } from "../src/securityConfig.ts";
+
+function makeConfig(env: any = {}, initial: SecurityFile = {}, tlsActive = false) {
+  let stored: SecurityFile = { ...initial };
+  const logs: string[] = [];
+  const config = new SecurityConfig({ env, load: () => ({ ...stored }), save: (file) => { stored = { ...file }; }, tlsActive, log: (m) => logs.push(m) });
+  return { config, logs, stored: () => stored };
+}
+
+function makeCertificate(dir: string): { cert: string; key: string } | null {
+  const cert = path.join(dir, "cert.pem");
+  const key = path.join(dir, "key.pem");
+  try {
+    execFileSync("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", key, "-out", cert, "-days", "2", "-subj", "/CN=hydra-test"], { stdio: "ignore", env: { ...process.env, OPENSSL_CONF: "" } });
+    return { cert, key };
+  } catch {
+    return null;
+  }
+}
+
+test("the defaults are the behaviour the server always had", () => {
+  assert.deepEqual(resolveAiAccess(undefined, {}), { value: "open", source: "default" });
+  assert.deepEqual(resolveInfoAuth(undefined, {}), { value: false, source: "default" });
+  assert.equal(resolveTls({}, {}).enabled, false);
+});
+
+test("the environment wins over what an administrator saved", () => {
+  assert.deepEqual(resolveAiAccess("admin", { aiAccess: "open" }), { value: "admin", source: "env" });
+  assert.deepEqual(resolveAiAccess(undefined, { aiAccess: "admin" }), { value: "admin", source: "config" });
+  assert.deepEqual(resolveInfoAuth("required", { infoAuth: false }), { value: true, source: "env" });
+  assert.deepEqual(resolveInfoAuth("off", { infoAuth: true }), { value: false, source: "env" });
+  assert.equal(resolveTls({ tlsCertPath: "/a", tlsKeyPath: "/b" }, { tls: { enabled: false } }).source, "env");
+  assert.equal(resolveTls({ tlsCertPath: "/a" }, {}).enabled, false);
+});
+
+test("an administrator can change the AI relay access and the change is live", () => {
+  const { config, logs, stored } = makeConfig();
+  assert.equal(config.aiAdminOnly(), false);
+  config.update({ aiAccess: "admin" }, "root");
+  assert.equal(config.aiAdminOnly(), true);
+  assert.equal(stored().aiAccess, "admin");
+  assert.match(logs[0], /root set the local AI relay access to admin/);
+  config.update({ aiAccess: "open" }, "root");
+  assert.equal(config.aiAdminOnly(), false);
+});
+
+test("turning the host information sign-in off warns and is logged; turning it on does not warn", () => {
+  const { config, logs } = makeConfig({}, { infoAuth: true });
+  assert.equal(config.infoAuthRequired(), true);
+  const off = config.update({ infoAuth: false }, "root");
+  assert.deepEqual(off.warnings, ["info_auth_off"]);
+  assert.equal(config.infoAuthRequired(), false);
+  assert.match(logs.at(-1)!, /OFF: it is readable by the whole network/);
+  const on = config.update({ infoAuth: true }, "root");
+  assert.deepEqual(on.warnings, []);
+  assert.equal(config.infoAuthRequired(), true);
+});
+
+test("a value fixed by the environment cannot be changed from the app", () => {
+  const { config } = makeConfig({ aiAccess: "admin", infoAuth: "required" });
+  assert.throws(() => config.update({ aiAccess: "open" }, "root"), (error: any) => error instanceof SecurityConfigError && error.status === 409);
+  assert.throws(() => config.update({ infoAuth: false }, "root"), (error: any) => error instanceof SecurityConfigError && error.status === 409);
+});
+
+test("bad values are refused and nothing is saved", () => {
+  const { config, stored } = makeConfig();
+  for (const bad of [{ aiAccess: "everyone" }, { infoAuth: "yes" }, { tls: "on" }, { tls: { enabled: "true" } }, { tls: { enabled: true } }]) {
+    assert.throws(() => config.update(bad, "root"), (error: any) => error instanceof SecurityConfigError && error.status === 400, JSON.stringify(bad));
+  }
+  assert.deepEqual(stored(), {});
+});
+
+test("TLS needs a readable certificate and key that work together, and shows the fingerprint", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hydra-tls-"));
+  try {
+    const pair = makeCertificate(dir);
+    if (!pair) return t.skip("openssl is not available");
+    const { config, stored } = makeConfig();
+    assert.throws(() => config.update({ tls: { enabled: true, certPath: path.join(dir, "missing.pem"), keyPath: pair.key } }, "root"), (error: any) => error.status === 400);
+    assert.throws(() => config.update({ tls: { enabled: true, certPath: pair.key, keyPath: pair.cert } }, "root"), (error: any) => error.status === 400);
+    const result = config.update({ tls: { enabled: true, certPath: pair.cert, keyPath: pair.key } }, "root");
+    assert.equal(result.appliesOnRestart, true);
+    assert.equal(result.snapshot.tls.enabled, true);
+    assert.equal(result.snapshot.tls.active, false);
+    assert.equal(result.snapshot.tls.appliesOnRestart, true);
+    assert.match(result.snapshot.tls.fingerprint256 ?? "", /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/);
+    assert.equal(stored().tls?.enabled, true);
+    const off = config.update({ tls: { enabled: false } }, "root");
+    assert.equal(off.snapshot.tls.enabled, false);
+    assert.equal(off.snapshot.tls.fingerprint256, null);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the admin route reads and changes the options and maps errors to statuses", async () => {
+  const { registerAdminRoutes } = await import("../src/routes/adminRoutes.ts");
+  const handlers: Record<string, any> = {};
+  const app: any = {};
+  for (const method of ["get", "put", "post", "delete"]) {
+    app[method] = (route: string, ...chain: any[]) => { handlers[`${method.toUpperCase()} ${route}`] = chain[chain.length - 1]; };
+  }
+  let saved: any = { port: 4000 };
+  const { config } = makeConfig({ infoAuth: "required" });
+  const security = new SecurityConfig({ env: { infoAuth: "required" }, load: () => ({ ...saved }), save: (f) => { saved = { ...saved, ...f }; }, tlsActive: false });
+  void config;
+  registerAdminRoutes(app, {
+    authenticate: () => undefined, requireAdmin: () => undefined, asyncHandler: (h: any) => h, industrialLog: () => undefined,
+    wsClients: new Set(), logFile: "x.log", getCurrentPort: () => 3000, loadServerConfig: () => ({ ...saved }), saveServerConfig: (c: any) => { saved = c; }, security,
+  } as any);
+  const call = (key: string, body: any) => {
+    let status = 200; let payload: any;
+    const res: any = { status(code: number) { status = code; return res; }, json(value: any) { payload = value; return res; } };
+    handlers[key]({ body, user: { username: "root" } }, res);
+    return { status, payload };
+  };
+  const got = call("GET /api/admin/server-config", undefined);
+  assert.equal(got.payload.port, 3000);
+  assert.equal(got.payload.pendingPort, 4000);
+  assert.equal(got.payload.aiAccess.value, "open");
+  assert.equal(got.payload.infoAuth.source, "env");
+  const ok = call("PUT /api/admin/server-config", { aiAccess: "admin" });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.payload.aiAccess.value, "admin");
+  assert.equal(ok.payload.appliesOnRestart, false);
+  assert.equal(saved.port, 4000); // the port kept by a security change
+  assert.equal(call("PUT /api/admin/server-config", { infoAuth: false }).status, 409);
+  assert.equal(call("PUT /api/admin/server-config", { aiAccess: "nobody" }).status, 400);
+  assert.equal(call("PUT /api/admin/server-config", { port: 70000 }).status, 400);
+  const port = call("PUT /api/admin/server-config", { port: 3100 });
+  assert.equal(port.payload.appliesOnRestart, true);
+  assert.equal(saved.aiAccess, "admin"); // the security choice kept by a port change
+});

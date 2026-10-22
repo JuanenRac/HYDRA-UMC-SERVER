@@ -169,6 +169,8 @@ Opcionais - o servidor corre sem qualquer configuração, com valores por defeit
 - `HYDRA_UMC_INFO_AUTH=required` - faz com que a informação só de leitura do equipamento (`/metrics`, `/api/system/metrics`, `/api/system/supervisor`, `/api/ecosystem/status`, `/api/models`) exija um cliente com sessão. Desativado por defeito para que um cliente que ainda não envia o seu token nessas rotas continue a funcionar; um arranque em produção avisa enquanto estiver desativado.
 - `HYDRA_UMC_AI_ACCESS=admin` - limita aos administradores o reencaminhamento para os serviços de IA locais (`/api/ai/*`). Desativado por omissão: qualquer utilizador autenticado o pode usar, como antes.
 - `HYDRA_UMC_LOG_MAX_BYTES` e `HYDRA_UMC_LOG_KEEP` - o tamanho a que o registo do servidor roda (10 MB por omissão) e quantos ficheiros rodados se guardam (1 por omissão).
+- `HYDRA_UMC_SETTINGS_STORE`, `HYDRA_UMC_SETTINGS_BACKUPS` e `HYDRA_UMC_SETTINGS_BACKUP_INTERVAL_S` - por omissão as definições (`settings.json` e os ficheiros de pontos) são escritas como uma unidade de tudo ou nada com um diário: uma escrita interrompida é terminada ou descartada no arranque seguinte, é guardada uma cópia de `settings.json` em `data/backups/` (10 cópias, no máximo uma a cada 600 s) e um `settings.json` danificado é restaurado a partir da última cópia boa. `HYDRA_UMC_SETTINGS_STORE=plain` volta a escrever os ficheiros um a um; `HYDRA_UMC_SETTINGS_BACKUPS=0` desativa as cópias.
+- O acesso ao reencaminhamento de IA, a exigência de sessão da informação do equipamento e o TLS (caminhos do certificado e da chave, com a impressão digital SHA-256 do certificado) também podem ser alterados por um administrador no ecrã Administração do servidor da app de controlo. Um valor definido no ambiente prevalece e aparece bloqueado; a exigência de sessão pede confirmação antes de ser desativada; o TLS aplica-se no arranque seguinte.
 - `STOP_ALL_RATE_LIMIT_MAX` / `STOP_ALL_RATE_LIMIT_WINDOW_MS` - orçamento da paragem global (`POST /api/stop-all`) por endereço, separado do do início de sessão (por defeito 60 por minuto). Em produção o servidor recusa ainda arrancar com um `JWT_SECRET` ou uma palavra-passe de arranque de exemplo de um modelo de implantação, um `JWT_SECRET` com menos de 32 caracteres ou uma palavra-passe de arranque com menos de 12.
 
 ### TLS / HTTPS
@@ -205,6 +207,8 @@ npm start
 ```
 
 O servidor escuta em `0.0.0.0:3000` - acessível em `http://localhost:3000` ou `http://<o-seu-ip-local>:3000` pela rede local. Todo o estado persiste em `data/`.
+
+Este repositório não tem Dockerfile de propósito: o servidor é empacotado e instalado na CM5 pelo [HYDRA-UMC-OS](https://github.com/JuanenRac/HYDRA-UMC-OS) (`provisioning/install_server.sh`).
 
 ### Versionamento
 

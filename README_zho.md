@@ -175,6 +175,8 @@ npm install
 - `HYDRA_UMC_INFO_AUTH=required`——要求已登录的客户端才能获取只读的主机信息(`/metrics`、`/api/system/metrics`、`/api/system/supervisor`、`/api/ecosystem/status`、`/api/models`)。默认关闭,以便尚未在这些路由上发送令牌的客户端继续可用;生产环境启动时在关闭期间会发出警告。
 - `HYDRA_UMC_AI_ACCESS=admin` - 将通往本地 AI 服务的中继（`/api/ai/*`）限制为仅管理员可用。默认关闭，因此与以前一样，任何已登录用户都可使用。
 - `HYDRA_UMC_LOG_MAX_BYTES` 和 `HYDRA_UMC_LOG_KEEP` - 服务器日志轮转的大小（默认 10 MB）以及保留的已轮转文件数量（默认 1）。
+- `HYDRA_UMC_SETTINGS_STORE`、`HYDRA_UMC_SETTINGS_BACKUPS` 和 `HYDRA_UMC_SETTINGS_BACKUP_INTERVAL_S` - 默认情况下，设置（`settings.json` 和点位文件）作为带日志的“要么全部成功、要么全部不生效”的整体写入：被中断的写入会在下次启动时完成或丢弃，`settings.json` 的副本保存在 `data/backups/`（10 份，最多每 600 秒一份），损坏的 `settings.json` 会从最新的完好副本恢复。`HYDRA_UMC_SETTINGS_STORE=plain` 恢复为逐个文件写入；`HYDRA_UMC_SETTINGS_BACKUPS=0` 关闭副本。
+- AI 中继的访问权限、主机信息是否要求登录以及 TLS（证书和密钥路径，并显示证书的 SHA-256 指纹），管理员也可以在控制应用的“服务器管理”界面中修改。环境变量中设置的值优先并显示为锁定；关闭登录要求前会请求确认；TLS 在下次启动时生效。
 - `STOP_ALL_RATE_LIMIT_MAX` / `STOP_ALL_RATE_LIMIT_WINDOW_MS`——全局停止(`POST /api/stop-all`)每个地址的额度,与登录的额度分开(默认每分钟 60 次)。在生产环境中,服务器还会拒绝使用部署模板中的示例 `JWT_SECRET`/引导密码、少于 32 个字符的 `JWT_SECRET` 或少于 12 个字符的引导密码启动。
 
 ### TLS / HTTPS
@@ -211,6 +213,8 @@ npm start
 ```
 
 服务器监听 `0.0.0.0:3000`——可通过 `http://localhost:3000` 或局域网内的 `http://<你的本地IP>:3000` 访问。所有状态均持久化于 `data/` 目录。
+
+本仓库有意不提供 Dockerfile：服务器由 [HYDRA-UMC-OS](https://github.com/JuanenRac/HYDRA-UMC-OS)（`provisioning/install_server.sh`）打包并安装到 CM5 上。
 
 ### 版本管理
 

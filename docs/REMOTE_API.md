@@ -431,11 +431,26 @@ UI's own Clients/Logs/Config screens, not the main Dashboard.
   file yet. A full-file read on every call - fine for a periodically
   polled admin viewer, not meant for tailing a huge file.
 - `GET /api/admin/server-config` -> `{ "port": <int>, "pendingPort":
-  <int|null> }` - `port` is what this process is actually listening on
-  right now; `pendingPort` is a saved-but-not-yet-applied change (see
-  `PUT` below).
-- `PUT /api/admin/server-config` (body: `{ "port"? }`) - saves a new
-  listen port to disk. `400` if `port` isn't an integer in `1-65535`.
+  <int|null>, "aiAccess": { "value": "open"|"admin", "source":
+  "env"|"config"|"default" }, "infoAuth": { "value": <bool>, "source": ... },
+  "tls": { "enabled", "source", "certPath", "keyPath", "fingerprint256",
+  "active", "appliesOnRestart" } }` - `port` is what this process is
+  actually listening on right now; `pendingPort` is a saved-but-not-yet-applied
+  change (see `PUT` below). `source` says where the value comes from: the
+  environment of the deployment (it wins and cannot be changed here), what an
+  administrator saved, or the default. `fingerprint256` is the SHA-256
+  fingerprint of the certificate in use (what a client pins); `active` says
+  whether the running listener is TLS.
+- `PUT /api/admin/server-config` (body: `{ "port"?, "aiAccess"?, "infoAuth"?,
+  "tls"? }`) - `aiAccess` is `"open"` (any signed-in user, the default) or
+  `"admin"` for `/api/ai/*`; `infoAuth` is a boolean for the sign-in
+  requirement of the host information (the response carries `warnings:
+  ["info_auth_off"]` when it is turned off, and the server log records who did
+  it); `tls` is `{ "enabled", "certPath", "keyPath" }` and is checked (both
+  files readable and usable together) before it is saved. `409` when the
+  value is fixed by the environment, `400` for a bad value. `aiAccess` and
+  `infoAuth` apply at once, `tls` on the next start. The `port` part saves
+  a new listen port to disk. `400` if `port` isn't an integer in `1-65535`.
   **Does not take effect until the process restarts** (see
   `POST /api/admin/restart` below) - the response is `{ "success": true,
   "appliesOnRestart": true }`, never a live port change.

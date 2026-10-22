@@ -9,9 +9,10 @@ import path from "path";
 import fs from "fs";
 import { safeIdSegment } from "./serverPolicy";
 import { settingsWriteDuration } from "./metrics";
-import { industrialLog } from "./runtime";
+import { commitFiles, recoverTransactions, type TxnHooks } from "./transactionalFiles";
+import { backupSettings, latestValidBackup, migrateToStore } from "./settingsBackups";
 
-export function sweepOrphanedTmpFiles(dataDir: string): void {
+export function sweepOrphanedTmpFiles(dataDir: string, industrialLog: (message: string) => void = console.log): void {
   let removed = 0;
   const walk = (dir: string) => {
     let entries: fs.Dirent[];
@@ -42,7 +43,48 @@ export interface SettingsStore {
   setSettings: (payload: any) => void;
 }
 
-export function createSettingsStore(dataPath: string): SettingsStore {
+export interface SettingsStoreOptions {
+  /** "journal" (default): all-or-nothing writes with a journal, backups and recovery. "plain": the file-by-file writes this server used before. */
+  mode?: "journal" | "plain";
+  /** How many copies of settings.json to keep (0 turns them off). */
+  backups?: number;
+  /** The least time between two copies. */
+  backupIntervalMs?: number;
+  /** Where the store reports what it recovers or restores (the server passes its industrial log). */
+  log?: (message: string) => void;
+  /** For tests: runs inside a write to simulate a cut. */
+  txnHooks?: TxnHooks;
+}
+
+/** Reads the store options from the environment: HYDRA_UMC_SETTINGS_STORE, HYDRA_UMC_SETTINGS_BACKUPS, HYDRA_UMC_SETTINGS_BACKUP_INTERVAL_S. */
+export function settingsStoreOptionsFromEnv(env: NodeJS.ProcessEnv): SettingsStoreOptions {
+  const count = Number.parseInt(env.HYDRA_UMC_SETTINGS_BACKUPS ?? "", 10);
+  const seconds = Number.parseInt(env.HYDRA_UMC_SETTINGS_BACKUP_INTERVAL_S ?? "", 10);
+  return {
+    mode: (env.HYDRA_UMC_SETTINGS_STORE ?? "").trim().toLowerCase() === "plain" ? "plain" : "journal",
+    backups: Number.isFinite(count) && count >= 0 ? Math.min(count, 200) : 10,
+    backupIntervalMs: (Number.isFinite(seconds) && seconds >= 0 ? seconds : 600) * 1000,
+  };
+}
+
+export function createSettingsStore(dataPath: string, options: SettingsStoreOptions = {}): SettingsStore {
+  const industrialLog = options.log ?? console.log;
+  const journal = (options.mode ?? "journal") === "journal";
+  const backupCount = options.backups ?? 10;
+  const backupIntervalMs = options.backupIntervalMs ?? 600_000;
+  const txnRoot = path.join(dataPath, ".txn");
+  if (journal) {
+    try {
+      const report = recoverTransactions(txnRoot);
+      if (report.rolledForward || report.rolledBack || report.problems.length) {
+        industrialLog(`[STORE] Recovery after an interrupted write: ${report.rolledForward} finished, ${report.rolledBack} discarded${report.problems.length ? `, problems: ${report.problems.join("; ")}` : ""}.`);
+      }
+      const copy = migrateToStore(dataPath);
+      if (copy) industrialLog(`[STORE] The settings now use the transactional store; a full copy of the previous files is in ${copy}.`);
+    } catch (error) {
+      industrialLog(`[STORE] Could not prepare the transactional store (${(error as Error).message}); continuing with the files as they are.`);
+    }
+  }
   const getSettingsPath = () => {
     return path.join(dataPath, "settings.json");
   };
@@ -127,7 +169,17 @@ export function createSettingsStore(dataPath: string): SettingsStore {
     const settingsPath = getSettingsPath();
     let core: any = {};
     if (fs.existsSync(settingsPath)) {
-      core = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+      try {
+        core = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+      } catch (error) {
+        // A damaged settings.json: keep it for inspection and go back to the newest copy that parses.
+        const backup = journal ? latestValidBackup(dataPath) : null;
+        if (!backup) throw error;
+        fs.renameSync(settingsPath, `${settingsPath}.corrupt-${Date.now()}`);
+        fs.writeFileSync(settingsPath, backup.text);
+        industrialLog(`[STORE] settings.json could not be read (${(error as Error).message}); restored from ${backup.path}.`);
+        core = JSON.parse(backup.text);
+      }
     }
     for (const c of core.controllers || []) {
       for (const r of c.robots || []) {
@@ -238,9 +290,22 @@ export function createSettingsStore(dataPath: string): SettingsStore {
       // toward only-successful, artificially-fast samples.
       const stopTimer = settingsWriteDuration.startTimer();
       try {
-        await writeFileAtomic(getSettingsPath(), coreJson);
-        for (const w of pointsWrites) {
-          await writeFileAtomic(w.path, w.json);
+        if (journal) {
+          try {
+            backupSettings(dataPath, getSettingsPath(), backupCount, backupIntervalMs);
+          } catch (error) {
+            industrialLog(`[STORE] Could not copy settings.json before the write: ${(error as Error).message}`);
+          }
+          await commitFiles(
+            txnRoot,
+            [{ path: getSettingsPath(), content: coreJson }, ...pointsWrites.map((w) => ({ path: w.path, content: w.json }))],
+            options.txnHooks,
+          );
+        } else {
+          await writeFileAtomic(getSettingsPath(), coreJson);
+          for (const w of pointsWrites) {
+            await writeFileAtomic(w.path, w.json);
+          }
         }
       } finally {
         stopTimer();

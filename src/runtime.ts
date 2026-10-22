@@ -43,6 +43,9 @@ const SERVER_CONFIG_FILE = path.join(process.cwd(), "data", "server-config.json"
 
 export interface ServerConfig {
   port?: number;
+  aiAccess?: "open" | "admin";
+  infoAuth?: boolean;
+  tls?: { enabled?: boolean; certPath?: string; keyPath?: string };
 }
 
 export function loadServerConfig(): ServerConfig {
@@ -55,7 +58,10 @@ export function loadServerConfig(): ServerConfig {
 
 export function saveServerConfig(config: ServerConfig) {
   fs.mkdirSync(path.dirname(SERVER_CONFIG_FILE), { recursive: true });
-  fs.writeFileSync(SERVER_CONFIG_FILE, JSON.stringify(config, null, 2));
+  // Written next to the real file and renamed over it, so a cut in the middle never leaves a half file.
+  const tmp = `${SERVER_CONFIG_FILE}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(config, null, 2));
+  fs.renameSync(tmp, SERVER_CONFIG_FILE);
 }
 
 // Priority: process.env.PORT (deployment-level override - systemd

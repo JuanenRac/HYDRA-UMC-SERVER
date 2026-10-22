@@ -37,16 +37,17 @@ import { registerUpstreamRoutes } from "./routes/upstreamRoutes";
 import { realSettings, wsQueryTokenAllowed } from "./serverPolicy";
 import { ensureSeedUser, findUser, verifyPassword } from "./users";
 import { pruneExpiredRefreshTokens } from "./refresh_tokens";
-import { cameraAuthRequired, cameraAuthRequiredByDefault, issueMediaTicket, mediaTicketKey, verifyMediaTicket } from "./mediaTickets";
+import { SecurityConfig, certFingerprint, resolveTls, securityEnvFrom } from "./securityConfig";
+import { cameraAuthRequiredByDefault, issueMediaTicket, mediaTicketKey, verifyMediaTicket } from "./mediaTickets";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerSettingsRoutes } from "./routes/settings";
 import { registerStaticRoutes } from "./routes/staticRoutes";
 import { registerAssistantRoutes } from "./routes/assistantRoutes";
-import { aiAccessAdminOnly, registerLocalAiRoutes } from "./routes/localAiRoutes";
+import { registerLocalAiRoutes } from "./routes/localAiRoutes";
 import { registerInfoRoutes } from "./routes/infoRoutes";
 import { registerPowerRoutes } from "./routes/powerRoutes";
 import { registerWorksRoutes } from "./routes/worksRoutes";
-import { createSettingsStore, sweepOrphanedTmpFiles } from "./settingsStore";
+import { createSettingsStore, settingsStoreOptionsFromEnv, sweepOrphanedTmpFiles } from "./settingsStore";
 import { createCameraSupervisor } from "./cameraSupervisor";
 import { createPlayback } from "./playback";
 import { createWsHub, attachWebSocketServer } from "./ws";
@@ -70,7 +71,7 @@ import { LOG_FILE, bonjour, setupDiscovery, loadServerConfig, saveServerConfig, 
 const REMOTE_API_VERSION = 2;
 
 async function startServer() {
-  sweepOrphanedTmpFiles(path.join(process.cwd(), "data"));
+  sweepOrphanedTmpFiles(path.join(process.cwd(), "data"), industrialLog);
 
   const app = express();
   const PORT = resolvePort();
@@ -191,7 +192,7 @@ async function startServer() {
     }
   }
 
-  const store = createSettingsStore(dataPath);
+  const store = createSettingsStore(dataPath, { ...settingsStoreOptionsFromEnv(process.env), log: industrialLog });
   const { loadFullSettingsFromDisk, queueSettingsWrite, getSettings, setSettings } = store;
 
   const supervisor = createCameraSupervisor();
@@ -235,9 +236,23 @@ async function startServer() {
 
   registerAuthRoutes(app);
 
+  // Who may use the local AI relay, whether the host information asks for a sign-in, and TLS: the
+  // environment of the deployment wins, then what an administrator saved from the control app.
+  const startupTls = resolveTls(securityEnvFrom(process.env), loadServerConfig());
+  const security = new SecurityConfig({
+    env: securityEnvFrom(process.env),
+    load: loadServerConfig,
+    save: (file) => {
+      const { aiAccess, infoAuth, tls } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls });
+    },
+    tlsActive: startupTls.enabled,
+    log: industrialLog,
+  });
+
   registerAdminRoutes(app, {
     authenticate, requireAdmin, asyncHandler, industrialLog, wsClients,
-    logFile: LOG_FILE, getCurrentPort, loadServerConfig, saveServerConfig,
+    logFile: LOG_FILE, getCurrentPort, loadServerConfig, saveServerConfig, security,
   });
 
   registerSettingsRoutes(app, { authenticate, requireAdmin, loadFullSettingsFromDisk, applySettingsUpdate });
@@ -273,11 +288,10 @@ async function startServer() {
   // HYDRA_UMC_CAMERA_AUTH=open, for the clients that do not ask for tickets yet.
   // The read-only host and project information (metrics, the process supervisor, the ecosystem status, the model catalogue) used to answer anybody on the LAN. HYDRA_UMC_INFO_AUTH=required
   // makes it ask for a signed-in client, once every client sends its token on those requests; until then it stays as it was, and a production start says so.
-  const INFO_AUTH_REQUIRED = cameraAuthRequired(process.env.HYDRA_UMC_INFO_AUTH);
-  if (!INFO_AUTH_REQUIRED && NODE_ENV === "production") {
+  if (!security.infoAuthRequired() && NODE_ENV === "production") {
     console.warn("[SECURITY] Host metrics, the process supervisor and the ecosystem status are readable by the whole LAN. Set HYDRA_UMC_INFO_AUTH=required once every client sends its token on them.");
   }
-  const infoAccess = (req: express.Request, res: express.Response, next: express.NextFunction) => (INFO_AUTH_REQUIRED ? authenticate(req, res, next) : next());
+  const infoAccess = (req: express.Request, res: express.Response, next: express.NextFunction) => (security.infoAuthRequired() ? authenticate(req, res, next) : next());
   const MEDIA_KEY = mediaTicketKey(JWT_SECRET);
   const CAMERA_AUTH_REQUIRED = cameraAuthRequiredByDefault(process.env.HYDRA_UMC_CAMERA_AUTH);
   if (!CAMERA_AUTH_REQUIRED) {
@@ -297,9 +311,8 @@ async function startServer() {
 
   registerCameraRoutes(app, { authenticate, requireAdmin, mediaAccess, issueMediaTicket: issueMediaTicketFor, dataPath, resolveWithinDataDir, cameraProcesses });
 
-  const AI_ADMIN_ONLY = aiAccessAdminOnly(process.env.HYDRA_UMC_AI_ACCESS);
-  if (AI_ADMIN_ONLY) console.log("[SECURITY] HYDRA_UMC_AI_ACCESS=admin: the local AI relay (/api/ai/*) answers administrators only.");
-  registerLocalAiRoutes(app, { authenticate, requireAdmin, adminOnly: AI_ADMIN_ONLY });
+  if (security.aiAdminOnly()) console.log("[SECURITY] The local AI relay (/api/ai/*) answers administrators only.");
+  registerLocalAiRoutes(app, { authenticate, requireAdmin, adminOnly: () => security.aiAdminOnly() });
 
   registerSystemRoutes(app, { authenticate, requireAdmin, industrialLog, infoAccess });
 
@@ -335,9 +348,11 @@ async function startServer() {
   // that quietly serves robot control over plaintext HTTP while believing
   // it's on TLS. See README.md's own "TLS / HTTPS" section for how to get
   // a cert (Let's Encrypt with a real domain, or self-signed for testing).
-  const TLS_CERT_PATH = process.env.TLS_CERT_PATH;
-  const TLS_KEY_PATH = process.env.TLS_KEY_PATH;
-  const tlsEnabled = !!(TLS_CERT_PATH && TLS_KEY_PATH);
+  // The paths come from the environment or, when an administrator turned TLS on from the control
+  // app, from data/server-config.json (see src/securityConfig.ts).
+  const TLS_CERT_PATH = startupTls.certPath ?? undefined;
+  const TLS_KEY_PATH = startupTls.keyPath ?? undefined;
+  const tlsEnabled = startupTls.enabled;
   const httpServer: http.Server = tlsEnabled
     ? https.createServer(
         { cert: fs.readFileSync(TLS_CERT_PATH!), key: fs.readFileSync(TLS_KEY_PATH!) },
@@ -345,7 +360,7 @@ async function startServer() {
       ) as unknown as http.Server
     : http.createServer(app);
   if (tlsEnabled) {
-    console.log(`[TLS] HTTPS/WSS enabled - cert: ${TLS_CERT_PATH}, key: ${TLS_KEY_PATH}`);
+    console.log(`[TLS] HTTPS/WSS enabled - cert: ${TLS_CERT_PATH}, key: ${TLS_KEY_PATH}, SHA-256 fingerprint: ${certFingerprint(TLS_CERT_PATH ?? null) ?? "unknown"}`);
   }
 
   attachWebSocketServer(httpServer, { wsClients, getSettings, applySettingsUpdate, WS_QUERY_TOKEN_ALLOWED });

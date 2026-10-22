@@ -10,6 +10,7 @@
 import express from "express";
 import fs from "fs";
 import { WebSocket } from "ws";
+import { SecurityConfig, SecurityConfigError } from "../securityConfig";
 import { listUsers, createUser, updateUser, deleteUser, type UserRole } from "../users";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
@@ -24,10 +25,12 @@ export interface AdminRouteDeps {
   getCurrentPort: () => number;
   loadServerConfig: () => { port?: number | null };
   saveServerConfig: (config: any) => void;
+  /** The access options an administrator can change from the control app (AI relay, host information, TLS). */
+  security: SecurityConfig;
 }
 
 export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps): void {
-  const { authenticate, requireAdmin, asyncHandler, industrialLog, wsClients, logFile, getCurrentPort, loadServerConfig, saveServerConfig } = deps;
+  const { authenticate, requireAdmin, asyncHandler, industrialLog, wsClients, logFile, getCurrentPort, loadServerConfig, saveServerConfig, security } = deps;
 
   // Account management - admin-only (requireAdmin, chained after
   // authenticate), backed by the users.ts module - lets an admin
@@ -115,7 +118,7 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
   // a port change here needs a restart to take effect, and why that's the
   // correct behavior rather than a limitation to work around.
   app.get("/api/admin/server-config", authenticate, requireAdmin, (req, res) => {
-    res.json({ port: getCurrentPort(), pendingPort: loadServerConfig().port ?? null });
+    res.json({ port: getCurrentPort(), pendingPort: loadServerConfig().port ?? null, ...security.snapshot() });
   });
 
   app.put("/api/admin/server-config", authenticate, requireAdmin, (req, res) => {
@@ -127,7 +130,22 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
       }
       saveServerConfig({ ...loadServerConfig(), port: portNum });
     }
-    res.json({ success: true, appliesOnRestart: true });
+    let security_result: ReturnType<SecurityConfig["update"]> | undefined;
+    const wantsSecurity = req.body && (req.body.aiAccess !== undefined || req.body.infoAuth !== undefined || req.body.tls !== undefined);
+    if (wantsSecurity) {
+      try {
+        security_result = security.update(req.body, String((req as any).user?.username ?? "admin"));
+      } catch (error) {
+        if (error instanceof SecurityConfigError) return res.status(error.status).json({ error: error.message });
+        throw error;
+      }
+    }
+    res.json({
+      success: true,
+      appliesOnRestart: !wantsSecurity || (port !== undefined && port !== null) || (security_result?.appliesOnRestart ?? false),
+      warnings: security_result?.warnings ?? [],
+      ...(security_result ? security_result.snapshot : {}),
+    });
   });
 
   // Graceful self-restart - only meaningful behind a process supervisor

@@ -280,6 +280,8 @@ threat model from "trusted LAN only" to "reachable by anyone" (see
 - `HYDRA_UMC_INFO_AUTH=required` - makes the read-only host information (`/metrics`, `/api/system/metrics`, `/api/system/supervisor`, `/api/ecosystem/status`, `/api/models`) demand a signed-in client. Off by default so that a client that does not send its token on those routes yet keeps working; a production start warns while it is off.
 - `HYDRA_UMC_AI_ACCESS=admin` - limits the relay to the local AI services (`/api/ai/*`) to administrators. Off by default, so any signed-in user can use it, as before.
 - `HYDRA_UMC_LOG_MAX_BYTES` and `HYDRA_UMC_LOG_KEEP` - the size at which the server log rotates (default 10 MB) and how many rotated files are kept (default 1).
+- `HYDRA_UMC_SETTINGS_STORE`, `HYDRA_UMC_SETTINGS_BACKUPS` and `HYDRA_UMC_SETTINGS_BACKUP_INTERVAL_S` - by default the settings (`settings.json` and the points files) are written as one all-or-nothing unit with a journal: an interrupted write is finished or discarded on the next start, a copy of `settings.json` is kept in `data/backups/` (10 copies, at most one every 600 s) and a damaged `settings.json` is restored from the newest good copy. `HYDRA_UMC_SETTINGS_STORE=plain` goes back to writing the files one by one; `HYDRA_UMC_SETTINGS_BACKUPS=0` turns the copies off.
+- The AI relay access, the sign-in requirement of the host information and TLS (certificate and key paths, with the SHA-256 fingerprint of the certificate) can also be changed by an administrator from the Server Admin screen of the control app. A value set in the environment wins and is shown as locked; the sign-in requirement asks for confirmation before it is turned off; TLS applies on the next start.
 - `STOP_ALL_RATE_LIMIT_MAX` / `STOP_ALL_RATE_LIMIT_WINDOW_MS` - budget of the global stop (`POST /api/stop-all`) per address, separate from the login's (default 60 per minute). In production the server also refuses to start with an example `JWT_SECRET`/bootstrap password from a deployment template, a `JWT_SECRET` under 32 characters or a bootstrap password under 12.
 
 ### TLS / HTTPS
@@ -335,6 +337,8 @@ npm start
 The server listens on `0.0.0.0:3000` - reachable at `http://localhost:3000`
 or `http://<your-local-ip>:3000` across the local network. All state
 persists in `data/`.
+
+This repository has no Dockerfile on purpose: the server is packaged and installed on the CM5 by [HYDRA-UMC-OS](https://github.com/JuanenRac/HYDRA-UMC-OS) (`provisioning/install_server.sh`).
 
 ### Versioning
 

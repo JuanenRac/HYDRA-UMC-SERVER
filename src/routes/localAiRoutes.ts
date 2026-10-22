@@ -13,10 +13,11 @@ export function aiAccessAdminOnly(value: string | undefined): boolean {
   return (value ?? "").trim().toLowerCase() === "admin";
 }
 
-export function registerLocalAiRoutes(app: express.Express, deps: { authenticate: Middleware; requireAdmin?: Middleware; adminOnly?: boolean }): void {
-  const { authenticate, requireAdmin, adminOnly = false } = deps;
+export function registerLocalAiRoutes(app: express.Express, deps: { authenticate: Middleware; requireAdmin?: Middleware; adminOnly?: boolean | (() => boolean) }): void {
+  const { authenticate, requireAdmin } = deps;
+  const isAdminOnly = () => (typeof deps.adminOnly === "function" ? deps.adminOnly() : deps.adminOnly === true);
   // HYDRA_UMC_AI_ACCESS=admin: only administrators may use the relay (it reaches services that can move robots or run models).
-  const aiAccess: Middleware = (req, res, next) => (adminOnly && requireAdmin ? requireAdmin(req, res, next) : next());
+  const aiAccess: Middleware = (req, res, next) => (isAdminOnly() && requireAdmin ? requireAdmin(req, res, next) : next());
   // Real proxy to this cell's own local Hailo-accelerated AI services -
   // each one already runs as its own real systemd unit
   // (hydra-umc-<service>.service), bound to 127.0.0.1 only by design

@@ -302,6 +302,8 @@ il che cambia il modello di minaccia da "solo LAN affidabile" a
 - `HYDRA_UMC_INFO_AUTH=required` - richiede un client autenticato per le informazioni di sola lettura del dispositivo (`/metrics`, `/api/system/metrics`, `/api/system/supervisor`, `/api/ecosystem/status`, `/api/models`). Disattivato di default perché un client che non invia ancora il token su quelle rotte continui a funzionare; un avvio in produzione avvisa finché è disattivato.
 - `HYDRA_UMC_AI_ACCESS=admin` - limita agli amministratori il relay verso i servizi di IA locali (`/api/ai/*`). Disattivato per impostazione predefinita: qualunque utente autenticato può usarlo, come prima.
 - `HYDRA_UMC_LOG_MAX_BYTES` e `HYDRA_UMC_LOG_KEEP` - la dimensione a cui ruota il log del server (10 MB predefiniti) e quanti file ruotati si conservano (1 predefinito).
+- `HYDRA_UMC_SETTINGS_STORE`, `HYDRA_UMC_SETTINGS_BACKUPS` e `HYDRA_UMC_SETTINGS_BACKUP_INTERVAL_S` - per impostazione predefinita le impostazioni (`settings.json` e i file dei punti) si scrivono come un'unica unità tutto o niente con un journal: una scrittura interrotta viene completata o scartata al successivo avvio, una copia di `settings.json` viene conservata in `data/backups/` (10 copie, al massimo una ogni 600 s) e un `settings.json` danneggiato viene ripristinato dall'ultima copia buona. `HYDRA_UMC_SETTINGS_STORE=plain` torna alla scrittura file per file; `HYDRA_UMC_SETTINGS_BACKUPS=0` disattiva le copie.
+- L'accesso al relay dell'IA, l'obbligo di accesso delle informazioni dell'host e TLS (percorsi di certificato e chiave, con l'impronta SHA-256 del certificato) possono essere modificati da un amministratore anche dalla schermata Amministrazione server dell'app di controllo. Un valore impostato nell'ambiente prevale e appare bloccato; l'obbligo di accesso chiede conferma prima di essere disattivato; TLS vale dal successivo avvio.
 - `STOP_ALL_RATE_LIMIT_MAX` / `STOP_ALL_RATE_LIMIT_WINDOW_MS` - budget dello stop globale (`POST /api/stop-all`) per indirizzo, separato da quello del login (di default 60 al minuto). In produzione il server rifiuta inoltre di avviarsi con un `JWT_SECRET` o una password di avvio di esempio da un modello di distribuzione, un `JWT_SECRET` sotto i 32 caratteri o una password di avvio sotto i 12.
 
 ### TLS / HTTPS
@@ -361,6 +363,8 @@ npm start
 Il server ascolta su `0.0.0.0:3000` - raggiungibile su
 `http://localhost:3000` o `http://<tuo-ip-locale>:3000` sulla rete
 locale. Tutto lo stato persiste in `data/`.
+
+Questo repository non ha un Dockerfile di proposito: il server viene impacchettato e installato sulla CM5 da [HYDRA-UMC-OS](https://github.com/JuanenRac/HYDRA-UMC-OS) (`provisioning/install_server.sh`).
 
 ### Versionamento
 
