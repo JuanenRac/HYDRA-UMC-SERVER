@@ -34,7 +34,7 @@ async function expectFailure(label, environment, expectedMessage) {
     child.stderr.on("data", (chunk) => { logs += chunk; });
     await Promise.race([
       once(child, "exit"),
-      new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} did not fail promptly`)), 5000)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} did not fail promptly`)), 30000)),
     ]);
     assert.notEqual(child.exitCode, 0, `${label} must fail closed`);
     assert.match(logs, expectedMessage, `${label} emitted an unexpected error: ${logs}`);

@@ -177,7 +177,7 @@ en el primer arranque:
 ```
 HYDRA-UMC-SERVER/
 ├── src/
-│   ├── server.ts       # App Express + WebSocketServer + todas las rutas /api
+│   ├── server.ts       # Arranque delgado que une los módulos de abajo; las rutas /api están en src/routes/, las conexiones en vivo en ws.ts, los archivos de ajustes en settingsStore.ts
 │   ├── kinematics.ts   # Ayudante de cinemática inversa para el endpoint atómico de jog
 │   ├── metrics.ts      # Respalda GET /metrics - exposición Prometheus en texto (prom-client)
 │   └── users.ts        # Almacén de cuentas (hash de contraseña scrypt)

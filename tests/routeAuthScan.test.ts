@@ -7,7 +7,7 @@
 // to the shapes the server really uses, so a change of style cannot make the scan quietly find fewer routes.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { scanRoutes } from "../tools/verify_route_auth_matrix.mjs";
 
 test("a route with no guard is reported with an empty guard list", () => {
@@ -46,7 +46,8 @@ test("a guard named only in a comment or a longer identifier does not count", ()
 });
 
 test("the scan finds every route the server registers (a style change must not hide routes)", async () => {
-  const files = ["src/server.ts", "src/routes/adminRoutes.ts", "src/routes/cameraRoutes.ts", "src/routes/commandRoutes.ts"];
+  const routeFiles = (await readdir(new URL("../src/routes/", import.meta.url))).filter((name) => name.endsWith(".ts")).sort();
+  const files = ["src/server.ts", ...routeFiles.map((name) => `src/routes/${name}`)];
   let found = 0;
   for (const file of files) {
     const source = await readFile(new URL(`../${file}`, import.meta.url), "utf8");

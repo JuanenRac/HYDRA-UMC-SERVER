@@ -93,7 +93,7 @@ CORS は、設定可能な許可リスト（`CORS_ALLOWED_ORIGINS`、下記「�
 ```
 HYDRA-UMC-SERVER/
 ├── src/
-│   ├── server.ts       # Express アプリ + WebSocketServer + 全 /api ルート
+│   ├── server.ts       # 以下のモジュールをつなぐ薄い起動部。/api ルートは src/routes/、ライブ接続は ws.ts、設定ファイルは settingsStore.ts
 │   ├── kinematics.ts   # 原子的ジョグエンドポイント用の逆運動学ヘルパー
 │   ├── metrics.ts      # GET /metrics を支える —— Prometheus テキスト形式（prom-client）
 │   └── users.ts        # アカウントストア（scrypt パスワードハッシュ化）

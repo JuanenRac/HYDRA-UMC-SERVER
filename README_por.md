@@ -94,7 +94,7 @@ Tudo o que este servidor possui vive em `data/`, criado automaticamente no prime
 ```
 HYDRA-UMC-SERVER/
 ├── src/
-│   ├── server.ts       # Aplicação Express + WebSocketServer + todas as rotas /api
+│   ├── server.ts       # Arranque fino que liga os módulos abaixo; as rotas /api estão em src/routes/, as ligações em direto em ws.ts, os ficheiros de definições em settingsStore.ts
 │   ├── kinematics.ts   # Auxiliar de cinemática inversa para o ponto final atómico de jog
 │   ├── metrics.ts      # Alimenta GET /metrics - exposição de texto Prometheus (prom-client)
 │   └── users.ts        # Armazém de contas (hash de palavras-passe com scrypt)

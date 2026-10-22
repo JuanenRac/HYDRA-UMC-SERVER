@@ -36,6 +36,8 @@ a change is actually worth summarizing for a human.
 
 ## [Unreleased]
 
+- `src/server.ts` is now a thin startup (about 400 lines instead of about 2600): sign-in, settings, assistant, local AI, info, power, work files and static mounts moved to `src/routes/`; the live connection hub and WebSocket endpoint to `src/ws.ts`; the settings files and their write queue to `src/settingsStore.ts`; the camera process supervisor, the playback engine, the token and rate-limit helpers and the process runtime to their own modules. Behaviour is unchanged.
+- The route scan test now reads every file under `src/routes/`, and the production bootstrap check waits longer for a slow machine.
 - Added `tools/hydra_project_tool.py`: the same `validate`, `test`, `version`, `status` and `bump` commands in every repository. The checks run with `HYDRA_UMC_CI=1` and fail if the version changes; only `bump` changes it.
 - The SDK is now fetched at a release tag instead of the main branch, so a change of the SDK cannot break this repository by itself.
 - New `tools/verify_route_auth_matrix.mjs` (run by `npm test`): it reads every route the server registers (56) and, against the real running server, proves that none answers without a credential except the six public ones (login, refresh, logout, discovery and the two kiosk power buttons, which are never probed), that every route behind `requireAdmin` refuses a signed-in operator, and that the camera and information guards deny an anonymous caller when set to required. A route added later without `authenticate` fails the check instead of shipping open. Five unit tests (`tests/routeAuthScan.test.ts`) pin how the scanner reads the registrations.

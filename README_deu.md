@@ -182,7 +182,7 @@ Start automatisch erstellt wird:
 ```
 HYDRA-UMC-SERVER/
 ├── src/
-│   ├── server.ts       # Express-App + WebSocketServer + alle /api-Routen
+│   ├── server.ts       # Schlanker Start, der die folgenden Module verbindet; die /api-Routen liegen in src/routes/, die Live-Verbindungen in ws.ts, die Einstellungsdateien in settingsStore.ts
 │   ├── kinematics.ts   # Inverse-Kinematik-Hilfsfunktion für den atomaren Jog-Endpunkt
 │   ├── metrics.ts      # Bedient GET /metrics - Prometheus-Textexposition (prom-client)
 │   └── users.ts        # Konto-Speicher (scrypt-Passwort-Hashing)

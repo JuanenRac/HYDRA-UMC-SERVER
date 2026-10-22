@@ -93,7 +93,7 @@ CORS 通过一个可配置的白名单（`CORS_ALLOWED_ORIGINS`，见下文“�
 ```
 HYDRA-UMC-SERVER/
 ├── src/
-│   ├── server.ts       # Express 应用 + WebSocketServer + 所有 /api 路由
+│   ├── server.ts       # 精简的启动文件，把下列模块连接起来；/api 路由在 src/routes/，实时连接在 ws.ts，设置文件在 settingsStore.ts
 │   ├── kinematics.ts   # 原子点动端点使用的逆运动学辅助工具
 │   ├── metrics.ts      # 支撑 GET /metrics——Prometheus 文本格式输出（prom-client）
 │   └── users.ts        # 账户存储（scrypt 密码哈希）

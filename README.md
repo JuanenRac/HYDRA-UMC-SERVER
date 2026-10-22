@@ -161,7 +161,7 @@ first run:
 ```
 HYDRA-UMC-SERVER/
 ├── src/
-│   ├── server.ts       # Express app + WebSocketServer + all /api routes
+│   ├── server.ts       # Thin startup that wires the modules below together; the /api routes live in src/routes/, the live connections in ws.ts, the settings files in settingsStore.ts
 │   ├── kinematics.ts   # Inverse-kinematics helper for the atomic jog endpoint
 │   ├── metrics.ts      # Backs GET /metrics - Prometheus text exposition (prom-client)
 │   └── users.ts        # Account store (scrypt password hashing)
