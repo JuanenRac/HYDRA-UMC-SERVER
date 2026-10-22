@@ -132,7 +132,7 @@ HYDRA-UMC-SERVER/
 │                           不启动真实服务器,是对上面端到端检查的补充
 ├── monitoring/           # 可选的 Prometheus + Grafana 技术栈——见 monitoring/README.md
 ├── scripts/
-│   └── bump-version.mjs # 旧版仅原生版本辅助工具；标准构建使用 bump_manifest_version.py
+│   └── bump-version.mjs # 里程表式版本递增（仅由显式 `bump` 命令运行）
 ├── bump_manifest_version.py # 将 hydra-umc.project.json 的版本与原生版本同步（--sync）
 ├── build.bat / build.sh # 安装依赖 + 生产构建
 ├── dev.bat / dev.sh      # 安装依赖 + 启动开发服务器

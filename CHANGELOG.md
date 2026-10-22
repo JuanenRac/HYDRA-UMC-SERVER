@@ -4,6 +4,7 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- Building no longer changes the version; raising it is the explicit `bump` command (`python tools/hydra_project_tool.py bump`). The build scripts only report the version they built, and CI fails if a build script runs a bump.
 - New `HYDRA_UMC_AI_ACCESS=admin` limits the relay to the local AI services (`/api/ai/*`) to administrators. Unset, any signed-in user can use it, as before. Tested.
 - The server log can keep more than one rotated file: `HYDRA_UMC_LOG_KEEP` (`.1` to `.N`, default 1) and `HYDRA_UMC_LOG_MAX_BYTES` (default 10 MB). Tested.
 - Both options are in `.env.example`, the API reference and the eight READMEs.

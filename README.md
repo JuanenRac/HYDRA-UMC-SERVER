@@ -202,7 +202,7 @@ HYDRA-UMC-SERVER/
 │                           in-process, no server spawned, complementing the end-to-end tools/ checks above
 ├── monitoring/           # Optional Prometheus + Grafana stack - see monitoring/README.md
 ├── scripts/
-│   └── bump-version.mjs # Legacy native-only helper; standard builds use bump_manifest_version.py
+│   └── bump-version.mjs # Odometer-style version bump (run only by the explicit `bump` command)
 ├── bump_manifest_version.py # Syncs hydra-umc.project.json's version to the native one (--sync)
 ├── build.bat / build.sh # Install deps + production build
 ├── dev.bat / dev.sh      # Install deps + start the dev server

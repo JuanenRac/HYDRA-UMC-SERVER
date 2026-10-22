@@ -134,7 +134,7 @@ HYDRA-UMC-SERVER/
 │                           サーバーを起動せずインプロセスで実行、上記のエンドツーエンド検証を補完する
 ├── monitoring/           # 任意の Prometheus + Grafana スタック —— monitoring/README.md 参照
 ├── scripts/
-│   └── bump-version.mjs # 旧式のネイティブ版ヘルパー。標準ビルドは bump_manifest_version.py を使用
+│   └── bump-version.mjs # オドメーター式バージョンインクリメント（明示的な `bump` コマンドのみが実行）
 ├── bump_manifest_version.py # hydra-umc.project.json のバージョンをネイティブ側と同期（--sync）
 ├── build.bat / build.sh # 依存関係のインストール + プロダクションビルド
 ├── dev.bat / dev.sh      # 依存関係のインストール + 開発サーバーの起動
