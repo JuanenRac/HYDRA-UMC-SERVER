@@ -34,7 +34,7 @@
 
 | | |
 |---|---|
-| Version | `0.8.1.0` |
+| Version | `0.8.1.1` |
 | Reifegrad | Funktionsfähig |
 | Tests | 178 (`npm run test:unit`) |
 | Technik | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |

@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here.
 
-## [Unreleased]
+## [0.8.1.1] - A thin startup, a route authorization matrix and the SDK at a release tag
 
 - **Pinned to SDK 0.3.6** (dependency and contract checkout in CI).
 - The banner follows the animated style of the ecosystem banners, with the name, the kind and the technologies of the project.

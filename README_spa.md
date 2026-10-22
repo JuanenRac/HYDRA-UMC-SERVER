@@ -35,7 +35,7 @@
 
 | | |
 |---|---|
-| Versión | `0.8.1.0` |
+| Versión | `0.8.1.1` |
 | Madurez | Funcional |
 | Tests | 178 (`npm run test:unit`) |
 | Tecnología | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
