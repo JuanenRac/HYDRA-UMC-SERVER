@@ -36,6 +36,7 @@ a change is actually worth summarizing for a human.
 
 ## [Unreleased]
 
+- **Pinned to SDK 0.3.6** (dependency and contract checkout in CI).
 - The banner follows the animated style of the ecosystem banners, with the name, the kind and the technologies of the project.
 - `src/server.ts` is now a thin startup (about 400 lines instead of about 2600): sign-in, settings, assistant, local AI, info, power, work files and static mounts moved to `src/routes/`; the live connection hub and WebSocket endpoint to `src/ws.ts`; the settings files and their write queue to `src/settingsStore.ts`; the camera process supervisor, the playback engine, the token and rate-limit helpers and the process runtime to their own modules. Behaviour is unchanged.
 - The route scan test now reads every file under `src/routes/`, and the production bootstrap check waits longer for a slow machine.
