@@ -8,6 +8,8 @@
 // so it is passed as a getter that is read at the moment of use, exactly as
 // the inline version read the variable.
 import express from "express";
+import { claimConflict, readControllerId } from "../claimPolicy";
+import type { JogArming, SafetyLimits } from "../safetyLimits";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
@@ -31,6 +33,10 @@ export interface RobotRouteDeps {
   ) => void;
   DEFAULT_RESERVATION_TTL_MS: number;
   MAX_RESERVATION_TTL_MS: number;
+  /** The limits of the installation (claims may be required to name their controller). Optional so the routes work without them. */
+  safety?: SafetyLimits;
+  /** Releasing a robot also disarms its jog. */
+  arming?: JogArming;
 }
 
 export function registerRobotRoutes(app: express.Express, deps: RobotRouteDeps): void {
@@ -45,6 +51,8 @@ export function registerRobotRoutes(app: express.Express, deps: RobotRouteDeps):
     broadcastRobotDelta,
     DEFAULT_RESERVATION_TTL_MS,
     MAX_RESERVATION_TTL_MS,
+    safety,
+    arming,
   } = deps;
 
   // P06: claim exclusive command ownership of a robot. Real rules:
@@ -72,10 +80,20 @@ export function registerRobotRoutes(app: express.Express, deps: RobotRouteDeps):
     // history's stored payload unreasonably.
     const reason = typeof req.body?.reason === "string" && req.body.reason.trim() ? req.body.reason.trim().slice(0, 200) : undefined;
 
+    // The controller (one client of the account) that claims; see src/claimPolicy.ts.
+    const presented = readControllerId(req.headers?.["x-controller-id"], req.body?.controllerId);
+    if (presented === null) {
+      return res.status(400).json({ error: "controllerId must be 1 to 64 characters: letters, digits, . _ : -", code: "invalid-controller-id" });
+    }
+    if (presented === undefined && safety?.get().claims.requireControllerId) {
+      return res.status(400).json({ error: "this server requires a controllerId to claim a robot", code: "controller-id-required" });
+    }
+
     const existing = robot.reservation;
-    const heldByAnother = isReservationActive(existing) && existing.ownerId !== user.id;
-    if (heldByAnother && !(force && user.role === "admin")) {
-      return res.status(409).json({ error: `robot is already claimed by ${existing.ownerUsername}`, reservation: existing });
+    const conflict = claimConflict(existing, user, presented, isReservationActive);
+    const heldByAnother = conflict !== null;
+    if (conflict && !(force && user.role === "admin")) {
+      return res.status(409).json({ error: conflict.message, code: conflict.reason, reservation: existing });
     }
 
     // Which kind of transition this really is depends on the
@@ -104,6 +122,7 @@ export function registerRobotRoutes(app: express.Express, deps: RobotRouteDeps):
       ownerUsername: user.username,
       claimedAt: Date.now(),
       expiresAt: Date.now() + ttlMs,
+      ...(presented !== undefined ? { controllerId: presented } : {}),
     };
     appendReservationHistory(robot, action, user.id, user.username, reason);
     const controllerId = findControllerIdForRobot(robotId);
@@ -129,8 +148,13 @@ export function registerRobotRoutes(app: express.Express, deps: RobotRouteDeps):
       return res.status(404).json({ error: "Robot not found" });
     }
     const user = (req as any).user;
-    if (isReservationActive(robot.reservation) && robot.reservation.ownerId !== user.id && user.role !== "admin") {
-      return res.status(409).json({ error: `robot is claimed by ${robot.reservation.ownerUsername}`, reservation: robot.reservation });
+    const presented = readControllerId(req.headers?.["x-controller-id"], req.body?.controllerId);
+    if (presented === null) {
+      return res.status(400).json({ error: "controllerId must be 1 to 64 characters: letters, digits, . _ : -", code: "invalid-controller-id" });
+    }
+    const conflict = claimConflict(robot.reservation, user, presented, isReservationActive);
+    if (conflict && user.role !== "admin") {
+      return res.status(409).json({ error: conflict.message, code: conflict.reason, reservation: robot.reservation });
     }
     const reason = typeof req.body?.reason === "string" && req.body.reason.trim() ? req.body.reason.trim().slice(0, 200) : undefined;
     if (robot.reservation) {
@@ -139,7 +163,7 @@ export function registerRobotRoutes(app: express.Express, deps: RobotRouteDeps):
         // distinguish the holder releasing their own claim from an admin
         // force-releasing someone else's, same real distinction claim
         // already makes for "claimed" vs "force-claimed".
-        const releasedByOwner = robot.reservation.ownerId === user.id;
+        const releasedByOwner = robot.reservation.ownerId === user.id && !conflict;
         appendReservationHistory(robot, releasedByOwner ? "released" : "force-released", user.id, user.username, reason);
       } else {
         // Idempotent cleanup of an already-lapsed reservation - nobody's
@@ -150,6 +174,7 @@ export function registerRobotRoutes(app: express.Express, deps: RobotRouteDeps):
       }
     }
     robot.reservation = null;
+    arming?.disarm(robotId);
     const controllerId = findControllerIdForRobot(robotId);
     await queueSettingsWrite(getSettings());
     if (controllerId) {

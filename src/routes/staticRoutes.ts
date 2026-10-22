@@ -10,7 +10,7 @@ import path from "path";
 import fs from "fs";
 
 /** Bare filenames of the sensitive files in data/ that no static mount and no upload may touch. */
-export const RESERVED_DATA_FILENAMES = new Set(["settings.json", "users.json", "model_submissions.json", "refresh_tokens.json", "server-config.json", "store-meta.json"]);
+export const RESERVED_DATA_FILENAMES = new Set(["settings.json", "users.json", "model_submissions.json", "refresh_tokens.json", "server-config.json", "store-meta.json", "safety-limits.json"]);
 
 export function registerStaticRoutes(app: express.Express, deps: { dataPath: string }): void {
   const { dataPath } = deps;

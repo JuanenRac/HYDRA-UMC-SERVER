@@ -13,7 +13,7 @@ export interface SettingsRouteDeps {
   authenticate: Middleware;
   requireAdmin: Middleware;
   loadFullSettingsFromDisk: () => any;
-  applySettingsUpdate: (payload: any) => Promise<void>;
+  applySettingsUpdate: (payload: any) => Promise<{ robotId: unknown; requested: number; applied: number }[] | void>;
 }
 
 export function registerSettingsRoutes(app: express.Express, deps: SettingsRouteDeps): void {
@@ -46,8 +46,8 @@ export function registerSettingsRoutes(app: express.Express, deps: SettingsRoute
       if (!ifMatchAgrees(req.headers["if-match"] as string | undefined, currentRevision)) {
         return res.status(409).json({ error: "The settings changed since you read them: reload and apply your change again.", revision: currentRevision });
       }
-      await applySettingsUpdate(payload);
-      res.json({ success: true, revision: settingsRevision(loadFullSettingsFromDisk()) });
+      const clamped = (await applySettingsUpdate(payload)) || [];
+      res.json({ success: true, revision: settingsRevision(loadFullSettingsFromDisk()), ...(clamped.length ? { warnings: clamped.map((c) => ({ robotId: c.robotId, field: "heatedBed.targetTemp", requested: c.requested, applied: c.applied, code: "temperature-limit" })) } : {}) });
     } catch (e) {
       console.error("Error writing settings", e);
       res.status(500).json({ error: "Failed to save settings" });

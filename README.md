@@ -26,7 +26,7 @@
 </p>
 
 
-**Honesty check - what actually runs today:** the Express + WebSocket engine, its REST/WS API surface, JWT auth with refresh-token rotation, scrypt password hashing, mDNS discovery, robot-ownership/claim arbitration, playback, and the relays to CAN-OTA/telemetry/voice/local-AI/connector-hub (`src/server.ts`, `src/users.ts`, `src/kinematics.ts`, `src/metrics.ts`) are real and tested - not against mocks, but against a live instance of this same server spun up by the test tooling itself: 178 unit tests (`npm run test:unit`, `node:test` over `src/serverPolicy.ts`/`src/kinematics.ts`) plus 25 end-to-end contract/negative-auth scripts under `tools/` (discovery, auth-negative, production bootstrap, robot command/ownership, refresh tokens, voice relay + its error paths, playback, the persisted work/XY table, ecosystem status/service control, telemetry relay, integrations test-connection, CAN-OTA relay, local-AI proxy, connector-hub relay, system supervisor, sustained WS reconnect), all passing via `npm run test`. What's genuinely hardware-adjacent rather than fully verified here: the `spi_bridge` link to a real HYDRA-UMC CM5+STM32H745 board and the optional STUDIO/admin-ui static-frontend serving path are real code, exercised through the API/contract layer above, but this environment has no physical CM5/STM32 to close that last hop against. TLS/HTTPS and the Prometheus/Grafana `monitoring/` stack are real and optional, off by default. See `CHANGELOG.md` for exactly what has shipped so far.
+**Honesty check - what actually runs today:** the Express + WebSocket engine, its REST/WS API surface, JWT auth with refresh-token rotation, scrypt password hashing, mDNS discovery, robot-ownership/claim arbitration, playback, and the relays to CAN-OTA/telemetry/voice/local-AI/connector-hub (`src/server.ts`, `src/users.ts`, `src/kinematics.ts`, `src/metrics.ts`) are real and tested - not against mocks, but against a live instance of this same server spun up by the test tooling itself: 211 unit tests (`npm run test:unit`, `node:test` over `src/serverPolicy.ts`/`src/kinematics.ts`) plus 25 end-to-end contract/negative-auth scripts under `tools/` (discovery, auth-negative, production bootstrap, robot command/ownership, refresh tokens, voice relay + its error paths, playback, the persisted work/XY table, ecosystem status/service control, telemetry relay, integrations test-connection, CAN-OTA relay, local-AI proxy, connector-hub relay, system supervisor, sustained WS reconnect), all passing via `npm run test`. What's genuinely hardware-adjacent rather than fully verified here: the `spi_bridge` link to a real HYDRA-UMC CM5+STM32H745 board and the optional STUDIO/admin-ui static-frontend serving path are real code, exercised through the API/contract layer above, but this environment has no physical CM5/STM32 to close that last hop against. TLS/HTTPS and the Prometheus/Grafana `monitoring/` stack are real and optional, off by default. See `CHANGELOG.md` for exactly what has shipped so far.
 
 ---
 
@@ -38,7 +38,7 @@
 |---|---|
 | Version | `0.8.1.1` |
 | Maturity | Functional |
-| Tests | 178 (`npm run test:unit`) |
+| Tests | 211 (`npm run test:unit`) |
 | Stack | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | Target | The Raspberry Pi CM5 of a HYDRA-UMC cell |
 | On real hardware | Not yet: no run on real hardware is recorded for this version |
@@ -181,6 +181,7 @@ HYDRA-UMC-SERVER/
 │   └── WORKS/
 ├── docs/
 │   ├── REMOTE_API.md              # Full contract: every route, the WS protocol, auth
+│   ├── CONTRACT_V2.md             # Design of the second contract, by blocks
 │   ├── PRODUCTION_BOOTSTRAP.md    # Required production JWT and first-admin setup
 │   └── REMOTE_ACCESS_VPN.md       # Real remote-access/VPN deployment guide
 ├── images/               # Media and diagrams

@@ -108,7 +108,7 @@ export function attachWebSocketServer(
   deps: {
     wsClients: Set<WebSocket>;
     getSettings: () => any;
-    applySettingsUpdate: (payload: any, originatorWs?: WebSocket) => Promise<void>;
+    applySettingsUpdate: (payload: any, originatorWs?: WebSocket) => Promise<unknown>;
     WS_QUERY_TOKEN_ALLOWED: boolean;
   },
 ) {

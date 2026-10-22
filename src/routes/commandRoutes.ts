@@ -10,6 +10,8 @@
 import express from "express";
 import { calculateJoints } from "../kinematics";
 import { robotCommandsTotal } from "../metrics";
+import { claimConflict, readControllerId, type ClaimConflict } from "../claimPolicy";
+import type { JogArming, SafetyLimits } from "../safetyLimits";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
@@ -27,6 +29,9 @@ export interface CommandRouteDeps {
   stopServerPlayback: (robotId: number) => void;
   /** Bounded budget of the global stop (its own, generous limiter, never the login one). */
   stopAllRateLimiter?: Middleware;
+  /** The limits every client is held to (size of a jog, arming of the jog). Without it the built-in hard cap of the jog applies. */
+  safety?: SafetyLimits;
+  arming?: JogArming;
 }
 
 /** The playback state a stopped robot ends in; shared by the single-robot "stop" and the global stop so they can never disagree. */
@@ -66,6 +71,8 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     startServerPlayback,
     stopServerPlayback,
     stopAllRateLimiter,
+    safety,
+    arming,
   } = deps;
 
   // GLOBAL STOP: one call stops every robot, whoever reserved it, and switches every valve and pump off. A safety stop is never blocked by a reservation
@@ -88,6 +95,7 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     const settings = getSettings();
     for (const controller of settings?.controllers ?? []) {
       for (const robot of controller.robots ?? []) {
+        arming?.disarm(robot.id);
         const result: (typeof results)[number] = { robotId: robot.id, controllerId: controller.id, name: String(robot.name ?? ""), stopped: false, valvesOff: 0, pumpsOff: 0 };
         // Informational only: it never changes what happens to the robot.
         if (isReservationActive(robot.reservation) && robot.reservation.ownerId !== user.id) result.reservedBy = String(robot.reservation.ownerUsername ?? "");
@@ -169,23 +177,40 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     // The claim check covers EVERY robot the command will touch, not only
     // the target: a combined sibling claimed by someone else must not move
     // through the group path.
+    // The controller of the caller (one client of the account): header or body field.
+    const presentedController = readControllerId(req.headers?.["x-controller-id"], req.body?.controllerId);
+    if (presentedController === null) {
+      return res.status(400).json({ error: "controllerId must be 1 to 64 characters: letters, digits, . _ : -", code: "invalid-controller-id" });
+    }
+    const callerController = presentedController;
+
     if (command !== "stop") {
       let blockingClaim: any = null;
+      let blockingConflict: ClaimConflict | null = null;
       getSettings().controllers.forEach((c: any) => {
         c.robots?.forEach((r: any) => {
           if (blockingClaim || !affectedIds.includes(r.id)) return;
-          if (isReservationActive(r.reservation) && r.reservation.ownerId !== (req as any).user.id) {
+          const conflict = claimConflict(r.reservation, (req as any).user, callerController, isReservationActive);
+          if (conflict) {
             blockingClaim = r.reservation;
+            blockingConflict = conflict;
           }
         });
       });
-      if (blockingClaim) {
+      if (blockingClaim && blockingConflict) {
         return res.status(409).json({
-          error: `robot is claimed by ${blockingClaim.ownerUsername}`,
+          error: (blockingConflict as ClaimConflict).message,
+          code: (blockingConflict as ClaimConflict).reason,
           reservation: blockingClaim,
         });
       }
     }
+
+    // A jog can be made to need an explicit arming first (POST /api/robot/:id/jog-arm); off by default.
+    if (command === "jog" && safety?.get().jog.armRequired && !arming?.isArmed(robotId, (req as any).user.id, callerController)) {
+      return res.status(403).json({ error: "the jog is not armed for this robot: arm it first (POST /api/robot/:id/jog-arm)", code: "jog-not-armed" });
+    }
+    if (command === "stop") arming?.disarm(robotId);
 
     // Work loading used to be a browser-only change followed by the normal
     // 500 ms full-settings debounce. A Play click could therefore arrive at
@@ -347,8 +372,13 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
               // legitimate use while still refusing to yank a real,
               // physical robot toward an extreme position from one
               // malformed/malicious atomic command.
-              const MAX_JOG_AMOUNT = 1000;
-              const validAmount = typeof params?.amount === "number" && Number.isFinite(params.amount) && Math.abs(params.amount) <= MAX_JOG_AMOUNT;
+              // The limits of this robot's model come from the server settings (src/safetyLimits.ts):
+              // the size of a relative jog and the range of an absolute one. Without them, 1000.
+              const jogLimits = safety?.jogFor(robot.model) ?? { maxAmount: 1000, maxAbsolute: 1000 };
+              const MAX_JOG_AMOUNT = jogLimits.maxAmount;
+              const jogIsAbsolute = params?.absolute === true;
+              const validAmount = typeof params?.amount === "number" && Number.isFinite(params.amount)
+                && Math.abs(params.amount) <= (jogIsAbsolute ? jogLimits.maxAbsolute : MAX_JOG_AMOUNT);
               // STUDIO's own XY-table position sliders (RobotDetail.tsx,
               // handleXYAxisChange) drag to an exact target position, not a
               // relative nudge like the joystick/D-pad callers of this same
@@ -427,7 +457,7 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
                   }
                 }
               } else {
-                warnings.push({ robotId: robot.id, field: "jog", requested: params?.axis, message: "jog needs a valid axis (x y z a b c) and a finite amount within +-1000 - not applied" });
+                warnings.push({ robotId: robot.id, field: "jog", requested: params?.axis, message: `jog needs a valid axis (x y z a b c) and a finite amount within +-${jogIsAbsolute ? jogLimits.maxAbsolute : MAX_JOG_AMOUNT} for this model - not applied` });
               }
               break;
             }

@@ -37,6 +37,8 @@ import { registerUpstreamRoutes } from "./routes/upstreamRoutes";
 import { realSettings, wsQueryTokenAllowed } from "./serverPolicy";
 import { ensureSeedUser, findUser, verifyPassword } from "./users";
 import { pruneExpiredRefreshTokens } from "./refresh_tokens";
+import { SafetyLimits, JogArming } from "./safetyLimits";
+import { registerSafetyRoutes } from "./routes/safetyRoutes";
 import { SecurityConfig, certFingerprint, resolveTls, securityEnvFrom } from "./securityConfig";
 import { cameraAuthRequiredByDefault, issueMediaTicket, mediaTicketKey, verifyMediaTicket } from "./mediaTickets";
 import { registerAuthRoutes } from "./routes/auth";
@@ -214,10 +216,17 @@ async function startServer() {
   // function that also reconciles camera processes, so both paths stay
   // in sync by construction instead of by remembering to update two
   // call sites identically.
-  async function applySettingsUpdate(payload: any, originatorWs?: WebSocket): Promise<void> {
+  // The limits every client is held to (data/safety-limits.json) and the arming of the jog (memory only).
+  const safety = new SafetyLimits(dataPath, industrialLog);
+  const arming = new JogArming();
+
+  async function applySettingsUpdate(payload: any, originatorWs?: WebSocket): Promise<{ robotId: unknown; requested: number; applied: number }[]> {
+    // A heated-bed target above the limit of its model is lowered to the limit before it is stored or broadcast.
+    const clamped = safety.clampTemperatures(payload);
     await queueSettingsWrite(payload);
     broadcastSettings(payload, false, originatorWs);
     reconcileCameraProcesses(payload);
+    return clamped;
   }
 
   // Reap anything a PREVIOUS incarnation of this server left running
@@ -269,6 +278,8 @@ async function startServer() {
     startServerPlayback,
     stopServerPlayback,
     stopAllRateLimiter,
+    safety,
+    arming,
   });
 
   registerRobotRoutes(app, {
@@ -282,7 +293,11 @@ async function startServer() {
     broadcastRobotDelta,
     DEFAULT_RESERVATION_TTL_MS,
     MAX_RESERVATION_TTL_MS,
+    safety,
+    arming,
   });
+
+  registerSafetyRoutes(app, { authenticate, requireAdmin, getSettings, findRobotById, isReservationActive, safety, arming });
 
   // The live pictures and the saved photos and recordings ask for a ticket (POST /api/camera/ticket) or a signed-in client unless the installation opts out with
   // HYDRA_UMC_CAMERA_AUTH=open, for the clients that do not ask for tickets yet.

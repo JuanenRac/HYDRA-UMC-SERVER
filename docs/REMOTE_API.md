@@ -367,6 +367,26 @@ a separate one.
   `claim`/`release` (trimmed, capped at 200 characters) is carried
   straight into its own history entry when supplied.
 
+  **Which controller holds it (block 1 of contract v2).** `claim` and
+  `release` also take an optional `controllerId` (body, or the
+  `X-Controller-Id` header): 1 to 64 characters of letters, digits and
+  `. _ : -`, chosen by one control client (a window, a tab, a phone) and kept for
+  its session. The claim then belongs to that account **and** that controller:
+  the same account on another controller is refused like another account,
+  `409` with a `code` of `other-controller`, and a command or a `release`
+  that sends no controller id while the claim has one gets
+  `controller-id-required`. Another account gets `other-account`. The three
+  codes come back in the body next to `error` and `reservation`. A claim made
+  without a controller id behaves exactly as before, and re-claiming with
+  one adds it to your own claim. `stop` and `POST /api/stop-all` stay exempt.
+  A malformed id is `400` (`invalid-controller-id`). The `controllerId` of the
+  robot deltas and of the settings tree names a cell, not a client; the claim
+  listing calls that one `cellId`. An administrator can make the controller id
+  mandatory for `claim` (`claims.requireControllerId`, below).
+  `GET /api/claims` (any signed-in account) lists every active claim:
+  `{ claims: [{ robotId, robotName, cellId, ownerId, ownerUsername,
+  controllerId, claimedAt, expiresAt }] }`.
+
 **Race condition to know about:** two clients (a browser tab and SUITE, or
 two SUITE instances) that both read, then both write moments apart, can
 still clobber each other if their writes race outside the live-sync
@@ -649,6 +669,37 @@ Always on: `POST /api/system/reboot` and `/shutdown` accept only a plain request
 device itself; a request that went through a proxy (`X-Forwarded-For`, `Forwarded`, `Via`...), that
 carries an `Origin` of another site, or that the browser marks `Sec-Fetch-Site: cross-site` gets
 `403`, so a page open in the kiosk's browser cannot power the cell off.
+
+## 2l. Safety limits: `/api/safety-limits`, the jog arming and the claims
+
+The limits live in the server, so every client is held to the same ones. They are
+saved through the transactional store (`data/safety-limits.json`, never served as a
+static file) and every change is written to the server log with the account that made it.
+
+- `GET /api/safety-limits` (any signed-in account, optional `?robotId=`): `{ limits,
+  defaults, hardLimits, robot? }`. With `robotId`, `robot` carries the limits that apply
+  to that robot's model and, when its jog is armed, `jogArmedUntil`.
+- `PUT /api/admin/safety-limits` (admin): a partial change, validated; `400` for an
+  unknown key, a wrong type or a value beyond the hard ceilings. An object under
+  `models` replaces the whole table of that section. Models are keyed by name without the
+  parenthesis and without case (`"Parol6 (6-DOF)"` is `parol6`).
+
+| Setting | Default | Hard ceiling | Effect |
+|---|---|---|---|
+| `jog.default.maxAmount`, `jog.models.<model>.maxAmount` | 100 | 1000 | A relative jog (`"jog"` command) larger than this is not applied and comes back in `warnings` (`field: "jog"`). |
+| `jog.default.maxAbsolute`, `jog.models.<model>.maxAbsolute` | 1000 | 10000 | The same for an absolute jog (`absolute: true`): the target position, in either direction. |
+| `jog.armRequired` | `false` | | When on, a `"jog"` command is refused with `403` (`jog-not-armed`) unless the account and controller that send it armed the robot first. |
+| `jog.armTtlMs` | 60000 | 1000 to 600000 | How long an arming lasts. |
+| `temperature.default.bedMaxC`, `temperature.models.<model>.bedMaxC` | 110 | 300 | A heated-bed `targetTemp` above it is lowered to it when settings are saved (`POST /api/settings` or the WebSocket) and `POST /api/settings` returns it in `warnings` (`code: "temperature-limit"`). |
+| `claims.requireControllerId` | `false` | | When on, `claim` without a controller id is `400` (`controller-id-required`). |
+
+`POST /api/robot/:id/jog-arm` (any signed-in account; body `{ "armed": true|false,
+"ttlMs"?: number, "controllerId"?: string }`) arms or disarms the jog of one robot. It is
+refused with `409` while another account or controller holds the claim. The arming belongs
+to the account and the controller that made it, lasts at most `jog.armTtlMs`, is kept in
+memory only (a restart disarms everything) and is cleared by `"stop"`, by `POST
+/api/stop-all` and by `release`. It can be armed at any time; it is only demanded while
+`jog.armRequired` is on.
 
 ## 3. Live sync: `WebSocket /ws`
 

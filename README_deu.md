@@ -24,7 +24,7 @@
 </p>
 
 
-**Ehrlichkeitscheck - was heute wirklich läuft:** die Express + WebSocket-Engine, ihre REST/WS-API-Oberfläche, die JWT-Authentifizierung mit Refresh-Token-Rotation, das scrypt-Passwort-Hashing, die mDNS-Erkennung, die Roboter-Eigentums-/Beanspruchungs-Arbitrierung, die Wiedergabe (Playback) sowie die Relays zu CAN-OTA/Telemetrie/Sprache/lokaler KI/Connector-Hub (`src/server.ts`, `src/users.ts`, `src/kinematics.ts`, `src/metrics.ts`) sind real und getestet - nicht gegen Mocks, sondern gegen eine echte, von der Testinfrastruktur selbst gestartete Instanz genau dieses Servers: 178 Unit-Tests (`npm run test:unit`, `node:test` über `src/serverPolicy.ts`/`src/kinematics.ts`) plus 25 End-to-End-Vertrags-/Negativ-Auth-Skripte unter `tools/` (Discovery, Negativ-Auth, Produktions-Bootstrap, Roboterbefehle/-eigentum, Refresh-Token, Sprach-Relay + seine eigenen Fehlerpfade, Playback, die persistierte XY-Tabelle, Ecosystem-Status/-Service-Steuerung, Telemetrie-Relay, Integrations-Test-Connection, CAN-OTA-Relay, lokaler-KI-Proxy, Connector-Hub-Relay, System-Supervisor, dauerhafte WS-Wiederverbindung), alle erfolgreich über `npm run test`. Was hier echt hardwarenah, aber nicht vollständig verifiziert ist: die `spi_bridge`-Verbindung zu einem echten HYDRA-UMC-CM5+STM32H745-Board und der optionale Pfad zum Ausliefern des statischen STUDIO/admin-ui-Frontends sind echter Code, der über die obige API-/Vertragsschicht durchgeübt wird - diese Umgebung besitzt aber keine physische CM5/STM32, um diesen letzten Schritt tatsächlich zu schließen. TLS/HTTPS und der Prometheus/Grafana-Stack unter `monitoring/` sind real und optional, standardmäßig deaktiviert. Siehe `CHANGELOG.md` für genau das, was bisher ausgeliefert wurde.
+**Ehrlichkeitscheck - was heute wirklich läuft:** die Express + WebSocket-Engine, ihre REST/WS-API-Oberfläche, die JWT-Authentifizierung mit Refresh-Token-Rotation, das scrypt-Passwort-Hashing, die mDNS-Erkennung, die Roboter-Eigentums-/Beanspruchungs-Arbitrierung, die Wiedergabe (Playback) sowie die Relays zu CAN-OTA/Telemetrie/Sprache/lokaler KI/Connector-Hub (`src/server.ts`, `src/users.ts`, `src/kinematics.ts`, `src/metrics.ts`) sind real und getestet - nicht gegen Mocks, sondern gegen eine echte, von der Testinfrastruktur selbst gestartete Instanz genau dieses Servers: 211 Unit-Tests (`npm run test:unit`, `node:test` über `src/serverPolicy.ts`/`src/kinematics.ts`) plus 25 End-to-End-Vertrags-/Negativ-Auth-Skripte unter `tools/` (Discovery, Negativ-Auth, Produktions-Bootstrap, Roboterbefehle/-eigentum, Refresh-Token, Sprach-Relay + seine eigenen Fehlerpfade, Playback, die persistierte XY-Tabelle, Ecosystem-Status/-Service-Steuerung, Telemetrie-Relay, Integrations-Test-Connection, CAN-OTA-Relay, lokaler-KI-Proxy, Connector-Hub-Relay, System-Supervisor, dauerhafte WS-Wiederverbindung), alle erfolgreich über `npm run test`. Was hier echt hardwarenah, aber nicht vollständig verifiziert ist: die `spi_bridge`-Verbindung zu einem echten HYDRA-UMC-CM5+STM32H745-Board und der optionale Pfad zum Ausliefern des statischen STUDIO/admin-ui-Frontends sind echter Code, der über die obige API-/Vertragsschicht durchgeübt wird - diese Umgebung besitzt aber keine physische CM5/STM32, um diesen letzten Schritt tatsächlich zu schließen. TLS/HTTPS und der Prometheus/Grafana-Stack unter `monitoring/` sind real und optional, standardmäßig deaktiviert. Siehe `CHANGELOG.md` für genau das, was bisher ausgeliefert wurde.
 
 ---
 
@@ -36,7 +36,7 @@
 |---|---|
 | Version | `0.8.1.1` |
 | Reifegrad | Funktionsfähig |
-| Tests | 178 (`npm run test:unit`) |
+| Tests | 211 (`npm run test:unit`) |
 | Technik | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | Ziel | Der Raspberry Pi CM5 einer HYDRA-UMC-Zelle |
 | Auf echter Hardware | Noch nicht: für diese Version ist kein Lauf auf echter Hardware vermerkt |
@@ -202,6 +202,7 @@ HYDRA-UMC-SERVER/
 │   └── WORKS/
 ├── docs/
 │   ├── REMOTE_API.md              # Vollständiger Vertrag: Routen, WS-Protokoll, Auth
+│   ├── CONTRACT_V2.md             # Entwurf des zweiten Vertrags, in Blöcken
 │   ├── PRODUCTION_BOOTSTRAP.md    # Erforderliches JWT und erster Administrator
 │   └── REMOTE_ACCESS_VPN.md       # Echter Leitfaden für Remote-Zugriff/VPN-Deployment
 ├── images/               # Medien und Diagramme
