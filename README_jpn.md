@@ -176,6 +176,8 @@ npm install
 - `HYDRA_UMC_CAMERA_AUTH` —— カメラ映像(ライブストリーム、保存済みの写真と録画)は**既定で**短寿命の `?ticket=`(ログイン済みクライアントに `POST /api/camera/ticket` が渡します)または Bearer トークンを要求します。`HYDRA_UMC_CAMERA_AUTH=open` は、まだチケットを要求しないクライアント向けの一時的な回避策です。
 - `HYDRA_UMC_WS_QUERY_TOKEN` —— `/ws?token=` は**既定で拒否**されます(トークンは `hydra.bearer` サブプロトコルで送られます)。`HYDRA_UMC_WS_QUERY_TOKEN=allow` は、まだ移行していないクライアント向けの一時的な回避策です。回避策が有効な間、サーバーは起動のたびに警告します。
 - `HYDRA_UMC_INFO_AUTH=required` —— 読み取り専用のホスト情報(`/metrics`、`/api/system/metrics`、`/api/system/supervisor`、`/api/ecosystem/status`、`/api/models`)にログイン済みクライアントを要求します。それらのルートでまだトークンを送らないクライアントが動き続けるよう既定ではオフで、本番起動時はオフの間警告します。
+- `HYDRA_UMC_AI_ACCESS=admin` - ローカル AI サービスへのリレー（`/api/ai/*`）を管理者のみに制限します。既定ではオフで、これまでどおりログイン済みのユーザーなら誰でも使えます。
+- `HYDRA_UMC_LOG_MAX_BYTES` と `HYDRA_UMC_LOG_KEEP` - サーバーログをローテーションするサイズ（既定 10 MB）と、保持するローテーション済みファイルの数（既定 1）。
 - `STOP_ALL_RATE_LIMIT_MAX` / `STOP_ALL_RATE_LIMIT_WINDOW_MS` —— グローバル停止(`POST /api/stop-all`)のアドレスごとの上限。ログインとは別枠です(既定は毎分 60 回)。本番では、デプロイ用テンプレートの例の `JWT_SECRET` やブートストラップパスワード、32 文字未満の `JWT_SECRET`、12 文字未満のブートストラップパスワードでは起動を拒否します。
 
 ### TLS / HTTPS

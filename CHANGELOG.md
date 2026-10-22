@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+- New `HYDRA_UMC_AI_ACCESS=admin` limits the relay to the local AI services (`/api/ai/*`) to administrators. Unset, any signed-in user can use it, as before. Tested.
+- The server log can keep more than one rotated file: `HYDRA_UMC_LOG_KEEP` (`.1` to `.N`, default 1) and `HYDRA_UMC_LOG_MAX_BYTES` (default 10 MB). Tested.
+- Both options are in `.env.example`, the API reference and the eight READMEs.
+
 ## [0.8.1.1] - A thin startup, a route authorization matrix and the SDK at a release tag
 
 - **Pinned to SDK 0.3.6** (dependency and contract checkout in CI).

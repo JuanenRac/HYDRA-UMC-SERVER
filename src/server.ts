@@ -42,7 +42,7 @@ import { registerAuthRoutes } from "./routes/auth";
 import { registerSettingsRoutes } from "./routes/settings";
 import { registerStaticRoutes } from "./routes/staticRoutes";
 import { registerAssistantRoutes } from "./routes/assistantRoutes";
-import { registerLocalAiRoutes } from "./routes/localAiRoutes";
+import { aiAccessAdminOnly, registerLocalAiRoutes } from "./routes/localAiRoutes";
 import { registerInfoRoutes } from "./routes/infoRoutes";
 import { registerPowerRoutes } from "./routes/powerRoutes";
 import { registerWorksRoutes } from "./routes/worksRoutes";
@@ -297,7 +297,9 @@ async function startServer() {
 
   registerCameraRoutes(app, { authenticate, requireAdmin, mediaAccess, issueMediaTicket: issueMediaTicketFor, dataPath, resolveWithinDataDir, cameraProcesses });
 
-  registerLocalAiRoutes(app, { authenticate });
+  const AI_ADMIN_ONLY = aiAccessAdminOnly(process.env.HYDRA_UMC_AI_ACCESS);
+  if (AI_ADMIN_ONLY) console.log("[SECURITY] HYDRA_UMC_AI_ACCESS=admin: the local AI relay (/api/ai/*) answers administrators only.");
+  registerLocalAiRoutes(app, { authenticate, requireAdmin, adminOnly: AI_ADMIN_ONLY });
 
   registerSystemRoutes(app, { authenticate, requireAdmin, industrialLog, infoAccess });
 

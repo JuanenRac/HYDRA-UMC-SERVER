@@ -278,6 +278,8 @@ threat model from "trusted LAN only" to "reachable by anyone" (see
 - `HYDRA_UMC_CAMERA_AUTH` - the camera pictures (live streams, saved photos and recordings) demand a short-lived `?ticket=` (`POST /api/camera/ticket` hands one to a signed-in client) or a Bearer token **by default**; `HYDRA_UMC_CAMERA_AUTH=open` is the temporary opt-out for clients that do not ask for tickets yet.
 - `HYDRA_UMC_WS_QUERY_TOKEN` - `/ws?token=` is **refused by default** (the token travels as the `hydra.bearer` subprotocol); `HYDRA_UMC_WS_QUERY_TOKEN=allow` is the temporary opt-out for clients that have not moved yet. The server warns at every start while an opt-out is set.
 - `HYDRA_UMC_INFO_AUTH=required` - makes the read-only host information (`/metrics`, `/api/system/metrics`, `/api/system/supervisor`, `/api/ecosystem/status`, `/api/models`) demand a signed-in client. Off by default so that a client that does not send its token on those routes yet keeps working; a production start warns while it is off.
+- `HYDRA_UMC_AI_ACCESS=admin` - limits the relay to the local AI services (`/api/ai/*`) to administrators. Off by default, so any signed-in user can use it, as before.
+- `HYDRA_UMC_LOG_MAX_BYTES` and `HYDRA_UMC_LOG_KEEP` - the size at which the server log rotates (default 10 MB) and how many rotated files are kept (default 1).
 - `STOP_ALL_RATE_LIMIT_MAX` / `STOP_ALL_RATE_LIMIT_WINDOW_MS` - budget of the global stop (`POST /api/stop-all`) per address, separate from the login's (default 60 per minute). In production the server also refuses to start with an example `JWT_SECRET`/bootstrap password from a deployment template, a `JWT_SECRET` under 32 characters or a bootstrap password under 12.
 
 ### TLS / HTTPS

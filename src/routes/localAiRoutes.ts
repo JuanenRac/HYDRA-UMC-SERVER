@@ -8,8 +8,15 @@ import express from "express";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
-export function registerLocalAiRoutes(app: express.Express, deps: { authenticate: Middleware }): void {
-  const { authenticate } = deps;
+/** Does the installation limit the local AI relay to administrators? Off unless `admin` (the relay then answers any signed-in user, as before). */
+export function aiAccessAdminOnly(value: string | undefined): boolean {
+  return (value ?? "").trim().toLowerCase() === "admin";
+}
+
+export function registerLocalAiRoutes(app: express.Express, deps: { authenticate: Middleware; requireAdmin?: Middleware; adminOnly?: boolean }): void {
+  const { authenticate, requireAdmin, adminOnly = false } = deps;
+  // HYDRA_UMC_AI_ACCESS=admin: only administrators may use the relay (it reaches services that can move robots or run models).
+  const aiAccess: Middleware = (req, res, next) => (adminOnly && requireAdmin ? requireAdmin(req, res, next) : next());
   // Real proxy to this cell's own local Hailo-accelerated AI services -
   // each one already runs as its own real systemd unit
   // (hydra-umc-<service>.service), bound to 127.0.0.1 only by design
@@ -35,7 +42,7 @@ export function registerLocalAiRoutes(app: express.Express, deps: { authenticate
     "vla-engine": 8098,
   };
 
-  app.all("/api/ai/:service/*rest", authenticate, async (req, res) => {
+  app.all("/api/ai/:service/*rest", authenticate, aiAccess, async (req, res) => {
     const port = LOCAL_AI_SERVICE_PORTS[req.params.service];
     if (port === undefined) {
       return res.status(404).json({

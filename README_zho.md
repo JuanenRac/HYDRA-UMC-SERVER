@@ -173,6 +173,8 @@ npm install
 - `HYDRA_UMC_CAMERA_AUTH`——摄像头画面(实时流、已保存的照片和录像)**默认**要求短时效 `?ticket=`(由 `POST /api/camera/ticket` 发给已登录客户端)或 Bearer 令牌;`HYDRA_UMC_CAMERA_AUTH=open` 是供尚未请求票据的客户端使用的临时退路。
 - `HYDRA_UMC_WS_QUERY_TOKEN`——`/ws?token=` **默认被拒绝**(令牌以 `hydra.bearer` 子协议传递);`HYDRA_UMC_WS_QUERY_TOKEN=allow` 是供尚未迁移的客户端使用的临时退路。只要设置了退路,服务器每次启动都会发出警告。
 - `HYDRA_UMC_INFO_AUTH=required`——要求已登录的客户端才能获取只读的主机信息(`/metrics`、`/api/system/metrics`、`/api/system/supervisor`、`/api/ecosystem/status`、`/api/models`)。默认关闭,以便尚未在这些路由上发送令牌的客户端继续可用;生产环境启动时在关闭期间会发出警告。
+- `HYDRA_UMC_AI_ACCESS=admin` - 将通往本地 AI 服务的中继（`/api/ai/*`）限制为仅管理员可用。默认关闭，因此与以前一样，任何已登录用户都可使用。
+- `HYDRA_UMC_LOG_MAX_BYTES` 和 `HYDRA_UMC_LOG_KEEP` - 服务器日志轮转的大小（默认 10 MB）以及保留的已轮转文件数量（默认 1）。
 - `STOP_ALL_RATE_LIMIT_MAX` / `STOP_ALL_RATE_LIMIT_WINDOW_MS`——全局停止(`POST /api/stop-all`)每个地址的额度,与登录的额度分开(默认每分钟 60 次)。在生产环境中,服务器还会拒绝使用部署模板中的示例 `JWT_SECRET`/引导密码、少于 32 个字符的 `JWT_SECRET` 或少于 12 个字符的引导密码启动。
 
 ### TLS / HTTPS

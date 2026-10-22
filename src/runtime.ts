@@ -8,6 +8,7 @@
 import path from "path";
 import fs from "fs";
 import Bonjour from "bonjour-service";
+import { resolveLogKeep, resolveLogMaxBytes, rotateLogFiles } from "./logRotation";
 
 // Bonjour/mDNS service for instant discovery
 export const bonjour = new Bonjour();
@@ -99,8 +100,11 @@ logStream.on("error", (err) => console.error("[industrialLog] log stream error",
 // (which only ever reads the last few hundred lines anyway, see below),
 // not meant to replace `journalctl`/a real log aggregator for long-term
 // industrial audit retention.
-const MAX_LOG_BYTES = 10 * 1024 * 1024; // 10MB
-const ROTATED_LOG_FILE = `${LOG_FILE}.1`;
+// HYDRA_UMC_LOG_KEEP raises the history to that many files (.1 .. .N) and
+// HYDRA_UMC_LOG_MAX_BYTES moves the size at which the live file rotates; unset
+// they keep one rotated file and 10 MB.
+const MAX_LOG_BYTES = resolveLogMaxBytes(process.env.HYDRA_UMC_LOG_MAX_BYTES);
+const LOG_KEEP = resolveLogKeep(process.env.HYDRA_UMC_LOG_KEEP);
 
 function rotateLogIfNeeded() {
   let size = 0;
@@ -113,8 +117,7 @@ function rotateLogIfNeeded() {
 
   logStream.end();
   try {
-    fs.rmSync(ROTATED_LOG_FILE, { force: true });
-    fs.renameSync(LOG_FILE, ROTATED_LOG_FILE);
+    rotateLogFiles(LOG_FILE, LOG_KEEP);
   } catch (err) {
     console.error("[industrialLog] log rotation failed", err);
   }

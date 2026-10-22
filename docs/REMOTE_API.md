@@ -621,6 +621,8 @@ Environment variables, read once at start (see `docs/PRODUCTION_BOOTSTRAP.md`):
 | `HYDRA_UMC_WS_QUERY_TOKEN` | **Refused by default**: `/ws?token=` gets an error message and a close with `1008`; the token travels as the `hydra.bearer` subprotocol. `HYDRA_UMC_WS_QUERY_TOKEN=allow` is the opt-out for clients that have not moved yet (it keeps the token in proxy and server logs); the server warns at every start while it is set. |
 | `STOP_ALL_RATE_LIMIT_MAX`, `STOP_ALL_RATE_LIMIT_WINDOW_MS` | Budget of `POST /api/stop-all` per address (default 60 per 60 000 ms), separate from the login's. |
 | `HYDRA_UMC_INFO_AUTH=required` | `GET /metrics`, `/api/system/metrics`, `/api/system/supervisor`, `/api/ecosystem/status` and `/api/models` demand a signed-in client. Off by default so that a client that does not send its token on those routes yet keeps working. |
+| `HYDRA_UMC_AI_ACCESS=admin` | `/api/ai/*` (the relay to the local AI services) answers administrators only. Off by default: any signed-in user can use it. |
+| `HYDRA_UMC_LOG_MAX_BYTES`, `HYDRA_UMC_LOG_KEEP` | The size at which the server log rotates (default 10 MB) and how many rotated files are kept (`.1` to `.N`, default 1). |
 
 The page address of the embedded 3D view (`/?hideUI=true&robotId=<id>&token=<JWT>`, which the
 Android and iOS apps load in a WebView) is the one place a token still travels in an address: the
