@@ -1301,73 +1301,6 @@ they touch the same account/authentication surface):
 
 ---
 
-## Documentation - Real HTTP API reference gaps closed
-
-- **`docs/REMOTE_API.md`** - documented 8 real endpoints that existed in
-  `src/server.ts` but were missing from this reference: the 4 admin-only
-  `/api/admin/*` routes (clients, logs, server-config read/write, restart
-  - new section 2e) and `GET /api/system/metrics`, `GET /metrics`
-  (Prometheus), `GET /api/camera/:id/stream` (currently a placeholder
-  stream, documented as such), and `POST /api/upload-work` (including its
-  real path-traversal and reserved-filename hardening - new section 2f).
-  Also fixed a stale file-path reference in section 5 (`server.ts (repo
-  root)` -> the real `src/server.ts`). Documentation-only - no code
-  changed, no version bump.
-
-### Added
-
-- **V0 server-authoritative playback engine.** `play`/`pause`/`stop` used
-  to only ever set a `playbackState` flag - the actual recorded-trajectory
-  motion was entirely driven by whichever HYDRA-UMC STUDIO browser tab
-  happened to have that robot's panel open, polling that same flag
-  locally (`RobotDetail.tsx`'s own `playRobotTrajectory`). If no such tab
-  was open - a common real case when only Android/iOS/DSI/SUITE are
-  controlling a robot - pause/play/stop updated state but physically
-  moved nothing. The server now linearly replays a robot's own
-  `recordedPoints` itself (each point's own already-recorded `j1..j6`/
-  `pos`, not a re-derived inverse-kinematics guess, and not yet the full
-  velocity/acceleration interpolation curve STUDIO's own client-side
-  player still renders with - see this session's own investigation notes
-  for the deliberately-scoped V0 boundary), broadcasting a real delta on
-  every step so play/pause/stop work from any client without depending on
-  a STUDIO tab being open anywhere. New
-  `tools/verify_server_playback_contract.mjs` proves this against the
-  real API in an isolated temp data directory: a robot with no recorded
-  points doesn't get stuck "playing", play physically advances pos/joints
-  through real recorded values, pause halts advancement and resume
-  continues it, reaching the end sets `isFinished`, and stop halts it for
-  good.
-
-### Fixed
-
-- Made the real Voice UI relay contract test use the `python` command
-  guaranteed by this workflow's successful Python validation step, while
-  retaining `PYTHON` as an explicit override. The test now also reports a
-  process-start failure cleanly instead of crashing Node on an unhandled
-  child-process error.
-
-- Resolved the Voice UI interpreter in the GitHub Actions Bash step and pass
-  its executable path explicitly to the Node relay-contract test. This avoids
-  runner-specific Python PATH differences without weakening the real
-  cross-service check.
-
-- Check out the real HYDRA-UMC-VOICE-UI source in Server CI and pass its
-  location through `HYDRA_UMC_VOICE_UI_ROOT`. The relay contract now fails
-  clearly if that source is unavailable instead of reporting a misleading
-  child-process `ENOENT`.
-
-- The CM5 systemd unit now runs under the dedicated non-login
-  `hydra-umc-server` account supplied by HYDRA-UMC-OS provisioning, rather
-  than the obsolete shared administrator identity.
-
-- Added isolated, real-server negative authentication coverage: anonymous
-  writes, invalid bearer tokens and operator access to administrative routes
-  are rejected; the explicitly operator-authorized work-file route remains
-  usable. `npm test` now runs this verification together with the SDK
-  ServerDiscovery contract.
-- Made both temporary server-contract verifiers retry their cleanup on Windows
-  so an already-exited `tsx` handle cannot turn a successful test into EBUSY.
-
 ## [0.2.5] - Independent remote-access gate for HYDRA-UMC-WATCH
 
 - **`remoteAccessAllowed()`** now recognizes a 4th client type, `"watch"`,
@@ -1390,8 +1323,6 @@ Verified: full `build-test.bat` suite passes (8 contract scripts
 including the new watch-gate assertions).
 
 ## [0.2.4] - Real Integrations "Test Connection" + fail-closed production bootstrap
-
-### Added
 
 - **`POST /api/integrations/test-connection`** - the real backend for
   STUDIO's Config > Integrations panel (OpenPnP/CNC/Laser/ROS2/
@@ -1426,14 +1357,10 @@ including the new watch-gate assertions).
   all 7 README language files updated to document the two new required
   variables.
 
-### Verified
-
 - `npm run typecheck` clean; full `npm test` - 8/8 contract scripts
   passing, including both new ones above.
 
 ## [0.2.3] - Real per-service liveness probing on GET /api/ecosystem/status
-
-### Added
 
 - **A real live probe per declared sibling service.** A repo whose
   `hydra-umc.project.json` opts in with a new, optional `service` object
@@ -1459,8 +1386,6 @@ including the new watch-gate assertions).
   correctly for each. Full suite: 6/6 contract scripts passing.
 
 ## [0.2.2]
-
-### Added
 
 - Real, honest V0 ecosystem-status endpoint: `GET /api/ecosystem/status`.
   NOT a live health check of every ecosystem project as a running network
@@ -1706,3 +1631,68 @@ further real issues:
 - Adopted the same automatic build-versioning convention already used by
   every other project in the ecosystem (`scripts/bump-version.mjs`, the
   odometer rule described above).
+
+## Earlier history
+
+### Documentation - Real HTTP API reference gaps closed
+
+- **`docs/REMOTE_API.md`** - documented 8 real endpoints that existed in
+  `src/server.ts` but were missing from this reference: the 4 admin-only
+  `/api/admin/*` routes (clients, logs, server-config read/write, restart
+  - new section 2e) and `GET /api/system/metrics`, `GET /metrics`
+  (Prometheus), `GET /api/camera/:id/stream` (currently a placeholder
+  stream, documented as such), and `POST /api/upload-work` (including its
+  real path-traversal and reserved-filename hardening - new section 2f).
+  Also fixed a stale file-path reference in section 5 (`server.ts (repo
+  root)` -> the real `src/server.ts`). Documentation-only - no code
+  changed, no version bump.
+
+- **V0 server-authoritative playback engine.** `play`/`pause`/`stop` used
+  to only ever set a `playbackState` flag - the actual recorded-trajectory
+  motion was entirely driven by whichever HYDRA-UMC STUDIO browser tab
+  happened to have that robot's panel open, polling that same flag
+  locally (`RobotDetail.tsx`'s own `playRobotTrajectory`). If no such tab
+  was open - a common real case when only Android/iOS/DSI/SUITE are
+  controlling a robot - pause/play/stop updated state but physically
+  moved nothing. The server now linearly replays a robot's own
+  `recordedPoints` itself (each point's own already-recorded `j1..j6`/
+  `pos`, not a re-derived inverse-kinematics guess, and not yet the full
+  velocity/acceleration interpolation curve STUDIO's own client-side
+  player still renders with - see this session's own investigation notes
+  for the deliberately-scoped V0 boundary), broadcasting a real delta on
+  every step so play/pause/stop work from any client without depending on
+  a STUDIO tab being open anywhere. New
+  `tools/verify_server_playback_contract.mjs` proves this against the
+  real API in an isolated temp data directory: a robot with no recorded
+  points doesn't get stuck "playing", play physically advances pos/joints
+  through real recorded values, pause halts advancement and resume
+  continues it, reaching the end sets `isFinished`, and stop halts it for
+  good.
+
+- Made the real Voice UI relay contract test use the `python` command
+  guaranteed by this workflow's successful Python validation step, while
+  retaining `PYTHON` as an explicit override. The test now also reports a
+  process-start failure cleanly instead of crashing Node on an unhandled
+  child-process error.
+
+- Resolved the Voice UI interpreter in the GitHub Actions Bash step and pass
+  its executable path explicitly to the Node relay-contract test. This avoids
+  runner-specific Python PATH differences without weakening the real
+  cross-service check.
+
+- Check out the real HYDRA-UMC-VOICE-UI source in Server CI and pass its
+  location through `HYDRA_UMC_VOICE_UI_ROOT`. The relay contract now fails
+  clearly if that source is unavailable instead of reporting a misleading
+  child-process `ENOENT`.
+
+- The CM5 systemd unit now runs under the dedicated non-login
+  `hydra-umc-server` account supplied by HYDRA-UMC-OS provisioning, rather
+  than the obsolete shared administrator identity.
+
+- Added isolated, real-server negative authentication coverage: anonymous
+  writes, invalid bearer tokens and operator access to administrative routes
+  are rejected; the explicitly operator-authorized work-file route remains
+  usable. `npm test` now runs this verification together with the SDK
+  ServerDiscovery contract.
+- Made both temporary server-contract verifiers retry their cleanup on Windows
+  so an already-exited `tsx` handle cannot turn a successful test into EBUSY.
