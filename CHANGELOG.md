@@ -1,38 +1,6 @@
 # Changelog
 
-All notable work on **HYDRA-UMC SERVER** is summarized here, newest first.
-
-## Versioning scheme
-
-`package.json`'s `version` field bumps via `bump_manifest_version.py`
-(bare invocation - this repo is a "single owner" of its own version, no
-separate `--sync` step), run as the first step of `build.bat`/`build.sh`
-before `npm run build` itself. `scripts/bump-version.mjs` is a legacy
-native-only helper kept for historical local workflows - see its own
-header comment for why it is deliberately NOT wired into `npm run build`
-(that would let a second, package-only bump drift the manifest/CHANGELOG
-out of sync with `package.json`). Either way, the same base-10 "odometer"
-rule rather than semantic-versioning judgment calls:
-
-- `patch` +1 on every build
-- when `patch` would exceed 9, it resets to 0 and `minor` +1 instead (e.g. `0.0.9` -> `0.1.0`, never `0.0.10`)
-- the same carry cascades into `major` if `minor` would exceed 9
-
-`admin-ui/package.json` (`private: true`, version `0.0.0`) is a build
-artifact of this repository, not a separately released package: it is
-compiled into `public/admin/` and versioned only through this project's own
-version above.
-
-The running version is readable live from the API itself: `GET /api/hydra-info`
-returns `appVersion`, read straight from this project's own `package.json` at
-startup - the same field every client of this server (HYDRA-UMC STUDIO's
-About dialog included) already checks.
-
-This file itself is *not* auto-generated per build (most builds are routine
-verification runs with nothing changelog-worthy); it's updated by hand when
-a change is actually worth summarizing for a human.
-
----
+All notable changes to this project are documented here.
 
 ## [Unreleased]
 
