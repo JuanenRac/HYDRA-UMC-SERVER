@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: JuanenRac/HYDRA-UMC-SDK
-          ref: main
+          ref: v0.3.4
           path: .hydra-umc-sdk-contract
           persist-credentials: false
       - name: Check out HYDRA-UMC-VOICE-UI relay gateway

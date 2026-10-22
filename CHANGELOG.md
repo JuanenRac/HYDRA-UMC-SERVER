@@ -34,6 +34,11 @@ a change is actually worth summarizing for a human.
 
 ---
 
+## [Unreleased]
+
+- Added `tools/hydra_project_tool.py`: the same `validate`, `test`, `version`, `status` and `bump` commands in every repository. The checks run with `HYDRA_UMC_CI=1` and fail if the version changes; only `bump` changes it.
+- The SDK is now fetched at a release tag instead of the main branch, so a change of the SDK cannot break this repository by itself.
+
 ## [0.8.1.0]
 
 - Maturity is functional: nothing here has been verified on real hardware yet.
