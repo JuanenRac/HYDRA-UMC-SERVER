@@ -12,7 +12,8 @@ import {
   computeDeviceArg, cameraFingerprint, cameraStreamPort, redactDeviceCredentials, cameraSpawnSpec,
   isValidCameraId,
 } from "./serverPolicy";
-import { visionStreamerExecutablePath, probeTcp } from "./ecosystemStatus";
+import { visionStreamerExecutablePath } from "./ecosystemStatus";
+import { probeCameraStream, streamHealthy, describeUnhealthy } from "./cameraHealth";
 import { industrialLog } from "./runtime";
 
 export function createCameraSupervisor() {
@@ -205,7 +206,9 @@ export function createCameraSupervisor() {
         clearInterval(healthTimer); // superseded by a respawn or a stop already
         return;
       }
-      const up = await probeTcp(port);
+      // frames arriving, not just the port open: a frozen stream keeps its port (see cameraHealth.ts)
+      const health = await probeCameraStream(port);
+      const up = streamHealthy(health);
       if (cameraProcesses.get(key)?.proc !== proc) {
         clearInterval(healthTimer);
         return;
@@ -218,6 +221,7 @@ export function createCameraSupervisor() {
         return;
       }
       consecutiveFailures++;
+      if (health.up) state.lastError = `stream ${describeUnhealthy(health)}`; // visible while it is still being given time
       if (consecutiveFailures >= HEALTH_CHECK_FAILURE_THRESHOLD) {
         clearInterval(healthTimer);
         const nextAttempt = state.restartAttempts + 1;
@@ -225,7 +229,7 @@ export function createCameraSupervisor() {
         state.status = "error";
         state.lastError =
           (state.recentOutput.slice(-3).join(" | ") ||
-            `stream serve has not answered on its own port for ${(HEALTH_CHECK_FAILURE_THRESHOLD * HEALTH_CHECK_INTERVAL_MS) / 1000}s`) +
+            `stream serve has not been healthy for ${(HEALTH_CHECK_FAILURE_THRESHOLD * HEALTH_CHECK_INTERVAL_MS) / 1000}s: ${describeUnhealthy(health)}`) +
           ` - killing and retrying in ${retryInSec}s (attempt #${nextAttempt})`;
         industrialLog(`[CAMERA] ${key}: unresponsive, killing pid=${proc.pid} and scheduling a real respawn in ${retryInSec}s`);
         proc.kill("SIGTERM");
