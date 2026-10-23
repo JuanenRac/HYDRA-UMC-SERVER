@@ -92,7 +92,7 @@ export function registerSafetyRoutes(app: express.Express, deps: SafetyRouteDeps
   });
 
   // Who controls which robot, for every robot that has an active claim.
-  app.get("/api/claims", authenticate, (_req, res) => {
+  app.get("/api/claims", authenticate, (req, res) => {
     res.json({ claims: listClaims(getSettings(), isReservationActive, (id) => arming.expiresAt(id)) });
   });
 
