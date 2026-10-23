@@ -4,6 +4,7 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **The ecosystem status completes what a manifest does not say from the service registry**: 13 manifests declare no port, so those services had no live signal. When the SDK is checked out next to the other repositories (or `HYDRA_UMC_PORTS_REGISTRY` names the file), the port, health path and systemd unit come from `contracts/ports.yaml`; what the manifest declares always wins, and `HYDRA_UMC_PORTS_REGISTRY=off` turns the lookup off. 4 new tests.
 - **Camera passwords stay out of the process list**: a camera whose address carries credentials is started with `--device-env` and the address travels in the environment of the child, not in its arguments. `HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV=off` keeps the old form for a streamer that predates it. Tested.
 - **One secret redaction for the log**: `src/redaction.ts` is a port of the shared module of the SDK and passes the same 35 shared vectors (`tests/fixtures/redaction_vectors.json`). Every server log line and the captured output of the camera processes pass through it; `HYDRA_UMC_LOG_REDACTION=off` is for bench debugging only.
 - **Contract v2, block 2**: `GET /api/robot/:id` (one robot, its `revision` and `ETag`), and `If-Match` on `command`, `claim` and `release` answered with `412` and the current revision when the robot changed; the answers carry the new revision. A stop is never conditional.

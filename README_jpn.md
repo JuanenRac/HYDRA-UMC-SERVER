@@ -38,7 +38,7 @@
 |---|---|
 | バージョン | `0.8.1.1` |
 | 成熟度 | 機能する |
-| テスト | 269 (`npm run test:unit`) |
+| テスト | 273 (`npm run test:unit`) |
 | 技術 | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | 対象 | HYDRA-UMC セルの Raspberry Pi CM5 |
 | 実機での確認 | まだです：このバージョンについて実機での動作記録はありません |

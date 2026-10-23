@@ -38,7 +38,7 @@
 |---|---|
 | 版本 | `0.8.1.1` |
 | 成熟度 | 可用 |
-| 测试 | 269 (`npm run test:unit`) |
+| 测试 | 273 (`npm run test:unit`) |
 | 技术栈 | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | 目标 | HYDRA-UMC 工作单元的 Raspberry Pi CM5 |
 | 真实硬件 | 尚未：此版本没有在真实硬件上运行的记录 |

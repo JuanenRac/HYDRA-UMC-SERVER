@@ -13,6 +13,7 @@ import net from "net";
 import path from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
+import { completeFromRegistry, loadPortsRegistry } from "./portsRegistry";
 
 const execFileAsync = promisify(execFile);
 
@@ -241,6 +242,8 @@ export async function getEcosystemStatus(): Promise<{
     const parentDir = ecosystemRoot();
     const entries = fs.readdirSync(parentDir, { withFileTypes: true });
     const projects: EcosystemProjectStatus[] = [];
+    // what the manifests do not say (13 declare no port) comes from the registry of the SDK, when it is there
+    const registry = loadPortsRegistry(parentDir);
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const manifestPath = path.join(parentDir, entry.name, "hydra-umc.project.json");
@@ -260,18 +263,20 @@ export async function getEcosystemStatus(): Promise<{
           service && typeof service === "object" && typeof service.systemd_unit === "string" && service.systemd_unit.trim()
             ? service.systemd_unit.trim()
             : null;
+        const projectName = typeof manifest.name === "string" ? manifest.name : entry.name;
+        const completed = completeFromRegistry(projectName, { servicePort, serviceHealthPath, systemdUnit }, registry);
         projects.push({
-          name: typeof manifest.name === "string" ? manifest.name : entry.name,
+          name: projectName,
           role: typeof manifest.role === "string" ? manifest.role : null,
           stack: typeof manifest.stack === "string" ? manifest.stack : null,
           maturity: typeof manifest.maturity === "string" ? manifest.maturity : null,
           family: typeof manifest.family === "string" ? manifest.family : null,
           version: typeof manifest.version === "string" ? manifest.version : null,
           deploymentTarget: typeof manifest.deployment_target === "string" ? manifest.deployment_target : null,
-          servicePort,
-          serviceHealthPath,
-          serviceHost: servicePort !== null ? SERVICE_PROBE_HOST : null,
-          systemdUnit,
+          servicePort: completed.servicePort,
+          serviceHealthPath: completed.serviceHealthPath,
+          serviceHost: completed.servicePort !== null ? SERVICE_PROBE_HOST : null,
+          systemdUnit: completed.systemdUnit,
           pid: null, // filled in below, after every manifest is read - a probe is real I/O, keep it out of this synchronous scan
           activeState: null,
           subState: null,

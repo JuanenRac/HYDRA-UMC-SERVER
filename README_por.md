@@ -38,7 +38,7 @@
 |---|---|
 | Versão | `0.8.1.1` |
 | Maturidade | Funcional |
-| Testes | 269 (`npm run test:unit`) |
+| Testes | 273 (`npm run test:unit`) |
 | Tecnologia | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | Destino | O Raspberry Pi CM5 de uma célula HYDRA-UMC |
 | Em hardware real | Ainda não: não há registo de execução em hardware real para esta versão |
