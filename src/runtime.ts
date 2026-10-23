@@ -5,6 +5,7 @@
 // =============================================================================
 // The process-level runtime: mDNS advertisement, the saved server config, the port and the
 // rotating log file, moved out of server.ts unchanged.
+import { redactSecrets } from "./redaction";
 import path from "path";
 import fs from "fs";
 import Bonjour from "bonjour-service";
@@ -131,7 +132,12 @@ function rotateLogIfNeeded() {
   logStream.on("error", (err) => console.error("[industrialLog] log stream error", err));
 }
 
-export function industrialLog(msg: string) {
+// Every log line goes through the shared secret redaction; the option exists
+// for debugging on a bench only (HYDRA_UMC_LOG_REDACTION=off).
+const LOG_REDACTION_ON = (process.env.HYDRA_UMC_LOG_REDACTION ?? "").trim().toLowerCase() !== "off";
+
+export function industrialLog(rawMsg: string) {
+  const msg = LOG_REDACTION_ON ? redactSecrets(rawMsg) : rawMsg;
   const entry = `[${new Date().toISOString()}] ${msg}\n`;
   console.log(msg);
   rotateLogIfNeeded();

@@ -183,6 +183,35 @@ export function redactDeviceCredentials(device: string): string {
   return device.replace(/([a-z][a-z0-9+.-]*:\/\/)[^/@\s]*@/gi, "$1***@");
 }
 
+// True when the device string carries credentials in its address
+// (scheme://user:pass@host/...).
+export function deviceCarriesCredentials(device: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:\/\/[^/@\s]*@/i.test(device);
+}
+
+export const CAMERA_DEVICE_ENV_VAR = "HYDRA_CAMERA_DEVICE";
+
+// How the camera process is started. A device that carries credentials is
+// handed over through the environment of the child (--device-env), so the
+// password never shows in the process table; a USB index or a path without
+// credentials stays a plain --device argument. Setting
+// HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV=off keeps the older argument form
+// for a streamer that predates --device-env.
+export function cameraSpawnSpec(
+  device: string,
+  port: number,
+  option: string | undefined = process.env.HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV,
+): { args: string[]; extraEnv: Record<string, string> } {
+  const viaEnv = (option ?? "").trim().toLowerCase() !== "off" && deviceCarriesCredentials(device);
+  if (viaEnv) {
+    return {
+      args: ["stream", "serve", "--device-env", CAMERA_DEVICE_ENV_VAR, "--port", String(port)],
+      extraEnv: { [CAMERA_DEVICE_ENV_VAR]: device },
+    };
+  }
+  return { args: ["stream", "serve", "--device", device, "--port", String(port)], extraEnv: {} };
+}
+
 // One real camera's own MJPEG proxy port - deterministic (8100 + id - 1)
 // so camera 1 -> 8100, camera 2 -> 8101, etc., up to the documented
 // 8-camera cap, with no separate port-mapping config file needed for a v0
@@ -328,6 +357,26 @@ export function settingsRevision(settings: unknown): string {
 export function ifMatchAgrees(header: string | undefined, currentRevision: string): boolean {
   if (header === undefined || header.trim() === "" || header.trim() === "*") return true;
   return header.split(",").map(part => part.trim().replace(/^W\//, "").replace(/^"|"$/g, "")).includes(currentRevision);
+}
+
+// ---- the revision of one robot ----------------------------------------------------------------------------------------------------------------
+
+/**
+ * A short fingerprint of one robot (GET /api/robot/:id, the `ETag` it answers with, `revision` in the answers of the command and claim routes). A client that sends it back as
+ * `If-Match` on a command or a claim is refused with 412 when the robot changed in between. The record of past claims, the times of a claim and the step counter of a running
+ * playback are left out: renewing a claim or advancing a playback is not a change the caller has to know about before it acts.
+ */
+export function robotRevision(robot: unknown): string {
+  if (robot === null || typeof robot !== "object") return settingsRevision(null);
+  const { reservationHistory: _history, reservation, playbackState, ...rest } = robot as Record<string, any>;
+  const stable: Record<string, unknown> = { ...rest };
+  if (reservation && typeof reservation === "object") stable.reservation = { ownerId: reservation.ownerId, controllerId: reservation.controllerId ?? null };
+  else if (reservation !== undefined) stable.reservation = reservation;
+  if (playbackState && typeof playbackState === "object") {
+    const { activeStep: _step, ...playback } = playbackState;
+    stable.playbackState = playback;
+  }
+  return settingsRevision(stable);
 }
 
 // ---- the token of a WebSocket connection ------------------------------------------------------------------------------------------------------------

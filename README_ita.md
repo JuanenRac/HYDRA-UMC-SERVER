@@ -36,7 +36,7 @@
 |---|---|
 | Versione | `0.8.1.1` |
 | Maturità | Funzionale |
-| Test | 211 (`npm run test:unit`) |
+| Test | 269 (`npm run test:unit`) |
 | Tecnologia | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | Destinazione | Il Raspberry Pi CM5 di una cella HYDRA-UMC |
 | Su hardware reale | Non ancora: per questa versione non risulta alcuna esecuzione su hardware reale |
@@ -51,6 +51,8 @@ connesso. Viene distribuito senza interfaccia utente né passo di build del
 frontend propri - è un servizio puro di API + WebSocket, pensato per
 funzionare headless (senza browser, senza schermo) sulla macchina
 fisicamente accanto ai robot (tipicamente un Raspberry Pi CM5).
+
+Il secondo contratto è completo: scritture condizionali (`If-Match` su comandi e prenotazioni, `GET /api/robot/:id`), il comando atomico `table`, un registro di audit in sola aggiunta (`GET /api/audit`, concatenato con hash, disattivabile) e un messaggio WebSocket `claims`. Le password delle telecamere non compaiono più nell'elenco dei processi né nel registro. Vedi `docs/CONTRACT_V2.md`.
 
 Può anche, opzionalmente, servire il frontend già compilato di
 **[HYDRA-UMC STUDIO](https://github.com/JuanenRac/HYDRA-UMC-STUDIO)** come

@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **Camera passwords stay out of the process list**: a camera whose address carries credentials is started with `--device-env` and the address travels in the environment of the child, not in its arguments. `HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV=off` keeps the old form for a streamer that predates it. Tested.
+- **One secret redaction for the log**: `src/redaction.ts` is a port of the shared module of the SDK and passes the same 35 shared vectors (`tests/fixtures/redaction_vectors.json`). Every server log line and the captured output of the camera processes pass through it; `HYDRA_UMC_LOG_REDACTION=off` is for bench debugging only.
+- **Contract v2, block 2**: `GET /api/robot/:id` (one robot, its `revision` and `ETag`), and `If-Match` on `command`, `claim` and `release` answered with `412` and the current revision when the robot changed; the answers carry the new revision. A stop is never conditional.
+- **Contract v2, block 3**: the `table` command moves the XY table in one request (`x`, `y`, `rz?`, `mode`), checked as a whole against the jog limits, claim and arming, and answered with the applied position.
+- **Contract v2, block 4**: an append-only, hash-chained audit record (`data/audit.jsonl`, `GET /api/audit` for administrators, with filters, `verify` and a `jsonl` export) of claims, forced releases, safety limits, jog arming and global stops; rotated by size, copied with the settings backups, redacted, switchable from the safety limits (`audit.enabled`) and lockable with `HYDRA_UMC_AUDIT=off`.
+- **Contract v2, block 5**: a `claims` WebSocket message for the clients that opened `/ws` with `?remoteApiVersion=2`, sent when a claim, a release, an arming or a stop changes; `GET /api/claims` also reports `jogArmedUntil`.
+- The API reference has the new section 2m, `docs/CONTRACT_V2.md` marks the five blocks as implemented, and the route list was regenerated. 56 new tests (269 in all).
+- The statements about the optional TLS in the README now carry their status marker.
 - The `command` label of `hydra_robot_commands_total` comes from a closed list of the commands the server knows (anything else is counted as `unknown`), so a signed-in client can no longer create unlimited metric series with made-up command names. Tested with fifty made-up names.
 - Building no longer changes the version; raising it is the explicit `bump` command (`python tools/hydra_project_tool.py bump`). The build scripts only report the version they built, and CI fails if a build script runs a bump.
 - New `HYDRA_UMC_AI_ACCESS=admin` limits the relay to the local AI services (`/api/ai/*`) to administrators. Unset, any signed-in user can use it, as before. Tested.

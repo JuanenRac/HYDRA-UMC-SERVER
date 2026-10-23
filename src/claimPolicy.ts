@@ -46,3 +46,41 @@ export function claimConflict(
   }
   return null;
 }
+
+export interface ClaimView {
+  robotId: unknown;
+  robotName: string | null;
+  cellId: unknown;
+  ownerId: unknown;
+  ownerUsername: unknown;
+  controllerId: string | null;
+  claimedAt: unknown;
+  expiresAt: unknown;
+  jogArmedUntil: number | null;
+}
+
+/** Who controls which robot, for every robot that has an active claim (GET /api/claims and the `claims` message of the WebSocket). */
+export function listClaims(
+  settings: any,
+  isActive: (reservation: any) => boolean,
+  jogArmedUntil: (robotId: number) => number | null = () => null,
+): ClaimView[] {
+  const claims: ClaimView[] = [];
+  for (const cell of settings?.controllers ?? []) {
+    for (const robot of cell.robots ?? []) {
+      if (!isActive(robot.reservation)) continue;
+      claims.push({
+        robotId: robot.id,
+        robotName: robot.name ?? null,
+        cellId: cell.id,
+        ownerId: robot.reservation.ownerId,
+        ownerUsername: robot.reservation.ownerUsername,
+        controllerId: robot.reservation.controllerId ?? null,
+        claimedAt: robot.reservation.claimedAt,
+        expiresAt: robot.reservation.expiresAt,
+        jogArmedUntil: jogArmedUntil(robot.id),
+      });
+    }
+  }
+  return claims;
+}

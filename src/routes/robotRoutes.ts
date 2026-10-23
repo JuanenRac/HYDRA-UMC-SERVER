@@ -10,6 +10,8 @@
 import express from "express";
 import { claimConflict, readControllerId } from "../claimPolicy";
 import type { JogArming, SafetyLimits } from "../safetyLimits";
+import type { AuditLog } from "../auditLog";
+import { ifMatchAgrees, robotRevision, redactSettingsSecrets } from "../serverPolicy";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
@@ -37,6 +39,10 @@ export interface RobotRouteDeps {
   safety?: SafetyLimits;
   /** Releasing a robot also disarms its jog. */
   arming?: JogArming;
+  /** The audit record of claims, releases and forced takeovers. */
+  audit?: AuditLog;
+  /** Called after a claim or a release changed who controls which robot (pushes the `claims` message of the WebSocket). */
+  onClaimsChanged?: () => void;
 }
 
 export function registerRobotRoutes(app: express.Express, deps: RobotRouteDeps): void {
@@ -53,7 +59,28 @@ export function registerRobotRoutes(app: express.Express, deps: RobotRouteDeps):
     MAX_RESERVATION_TTL_MS,
     safety,
     arming,
+    audit,
+    onClaimsChanged,
   } = deps;
+
+  /** 412 when the caller's If-Match does not agree with the robot as it is now; null when it may go on. */
+  const staleRevision = (req: any, robot: any): { error: string; code: string; revision: string } | null => {
+    const revision = robotRevision(robot);
+    const header = typeof req.headers?.["if-match"] === "string" ? req.headers["if-match"] : undefined;
+    return ifMatchAgrees(header, revision)
+      ? null
+      : { error: "the robot changed since you read it; read it again (GET /api/robot/:id) and retry", code: "revision-mismatch", revision };
+  };
+
+  // One robot with its revision (the ETag), so a client does not have to read the whole tree. The credentials of the cameras are an administrator's.
+  app.get("/api/robot/:id", authenticate, (req, res) => {
+    const robotId = parseInt(req.params.id, 10);
+    const robot = findRobotById(robotId);
+    if (!robot) return res.status(404).json({ error: "Robot not found" });
+    const revision = robotRevision(robot);
+    res.setHeader("ETag", `"${revision}"`);
+    res.json({ robot: (req as any).user?.role === "admin" ? robot : redactSettingsSecrets(robot), revision, cellId: findControllerIdForRobot(robotId) });
+  });
 
   // P06: claim exclusive command ownership of a robot. Real rules:
   // - No existing active claim, or the caller already holds it -> grant/
@@ -89,10 +116,15 @@ export function registerRobotRoutes(app: express.Express, deps: RobotRouteDeps):
       return res.status(400).json({ error: "this server requires a controllerId to claim a robot", code: "controller-id-required" });
     }
 
+    const stale = staleRevision(req, robot);
+    if (stale) return res.status(412).json(stale);
+
     const existing = robot.reservation;
     const conflict = claimConflict(existing, user, presented, isReservationActive);
     const heldByAnother = conflict !== null;
+    const who = { userId: user.id, username: user.username, controllerId: presented, ip: req.ip, robotId };
     if (conflict && !(force && user.role === "admin")) {
+      audit?.record({ type: "claim", outcome: "refused", ...who, detail: { reason: conflict.reason, force } });
       return res.status(409).json({ error: conflict.message, code: conflict.reason, reservation: existing });
     }
 
@@ -125,6 +157,7 @@ export function registerRobotRoutes(app: express.Express, deps: RobotRouteDeps):
       ...(presented !== undefined ? { controllerId: presented } : {}),
     };
     appendReservationHistory(robot, action, user.id, user.username, reason);
+    audit?.record({ type: action === "force-claimed" ? "force-claim" : "claim", outcome: "ok", ...who, detail: { action, ttlMs, ...(reason ? { reason } : {}), ...(heldByAnother ? { tookFrom: existing?.ownerUsername } : {}) } });
     const controllerId = findControllerIdForRobot(robotId);
     await queueSettingsWrite(getSettings());
     if (controllerId) {
@@ -133,7 +166,10 @@ export function registerRobotRoutes(app: express.Express, deps: RobotRouteDeps):
         getSettings(),
       );
     }
-    res.json({ success: true, reservation: robot.reservation, reservationHistory: robot.reservationHistory });
+    onClaimsChanged?.();
+    const revision = robotRevision(robot);
+    res.setHeader("ETag", `"${revision}"`);
+    res.json({ success: true, reservation: robot.reservation, reservationHistory: robot.reservationHistory, revision });
   });
 
   // P06: release a claim - only the current holder or an admin may do
@@ -152,8 +188,12 @@ export function registerRobotRoutes(app: express.Express, deps: RobotRouteDeps):
     if (presented === null) {
       return res.status(400).json({ error: "controllerId must be 1 to 64 characters: letters, digits, . _ : -", code: "invalid-controller-id" });
     }
+    const stale = staleRevision(req, robot);
+    if (stale) return res.status(412).json(stale);
     const conflict = claimConflict(robot.reservation, user, presented, isReservationActive);
+    const who = { userId: user.id, username: user.username, controllerId: presented, ip: req.ip, robotId };
     if (conflict && user.role !== "admin") {
+      audit?.record({ type: "release", outcome: "refused", ...who, detail: { reason: conflict.reason } });
       return res.status(409).json({ error: conflict.message, code: conflict.reason, reservation: robot.reservation });
     }
     const reason = typeof req.body?.reason === "string" && req.body.reason.trim() ? req.body.reason.trim().slice(0, 200) : undefined;
@@ -165,6 +205,10 @@ export function registerRobotRoutes(app: express.Express, deps: RobotRouteDeps):
         // already makes for "claimed" vs "force-claimed".
         const releasedByOwner = robot.reservation.ownerId === user.id && !conflict;
         appendReservationHistory(robot, releasedByOwner ? "released" : "force-released", user.id, user.username, reason);
+        audit?.record({
+          type: releasedByOwner ? "release" : "force-release", outcome: "ok", ...who,
+          detail: { ...(reason ? { reason } : {}), ...(releasedByOwner ? {} : { releasedFrom: robot.reservation.ownerUsername }) },
+        });
       } else {
         // Idempotent cleanup of an already-lapsed reservation - nobody's
         // active claim was actually released, so this is really the same
@@ -183,6 +227,9 @@ export function registerRobotRoutes(app: express.Express, deps: RobotRouteDeps):
         getSettings(),
       );
     }
-    res.json({ success: true, reservationHistory: robot.reservationHistory });
+    onClaimsChanged?.();
+    const revision = robotRevision(robot);
+    res.setHeader("ETag", `"${revision}"`);
+    res.json({ success: true, reservationHistory: robot.reservationHistory, revision });
   });
 }

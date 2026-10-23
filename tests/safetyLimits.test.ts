@@ -127,7 +127,7 @@ function world(armRequired = false) {
   const call = async (handler: any, req: any) => {
     let status = 200;
     let json: any;
-    const res: any = { status(c: number) { status = c; return res; }, json(v: any) { json = v; return res; } };
+    const res: any = { headers: {} as Record<string, string>, setHeader(k: string, v: string) { res.headers[k] = v; }, status(c: number) { status = c; return res; }, json(v: any) { json = v; return res; } };
     await handler({ headers: {}, body: {}, query: {}, ...req }, res);
     return { status, json };
   };

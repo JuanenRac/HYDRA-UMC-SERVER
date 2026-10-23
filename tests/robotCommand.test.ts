@@ -40,7 +40,7 @@ function setup(settings: any = makeSettings()) {
   const call = async (id: string, body: any, user: any = { id: "alice-id", username: "alice", role: "operator" }) => {
     let status = 200;
     let json: any;
-    const res: any = { status(code: number) { status = code; return res; }, json(value: any) { json = value; return res; } };
+    const res: any = { headers: {} as Record<string, string>, setHeader(k: string, v: string) { res.headers[k] = v; }, status(code: number) { status = code; return res; }, json(value: any) { json = value; return res; } };
     await handler!({ params: { id }, body, user }, res);
     return { status, json };
   };

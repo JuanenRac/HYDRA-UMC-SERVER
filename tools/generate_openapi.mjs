@@ -48,6 +48,7 @@ const STATUS_TEXT = {
   403: "Signed in but not allowed",
   404: "Not found",
   409: "Conflict with the current state",
+  412: "The robot changed since it was read (If-Match)",
   413: "Payload too large",
   429: "Rate limited",
   500: "Server error",

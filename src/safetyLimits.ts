@@ -27,6 +27,8 @@ export interface SafetyConfig {
   jog: { armRequired: boolean; armTtlMs: number; default: JogLimits; models: Record<string, Partial<JogLimits>> };
   temperature: { default: TemperatureLimits; models: Record<string, Partial<TemperatureLimits>> };
   claims: { requireControllerId: boolean };
+  /** The audit record of the changes that matter (GET /api/audit). On by default; the environment may lock it off. */
+  audit: { enabled: boolean };
 }
 
 export const HARD_LIMITS = {
@@ -41,6 +43,7 @@ export function defaultSafetyConfig(): SafetyConfig {
     jog: { armRequired: false, armTtlMs: 60_000, default: { maxAmount: 100, maxAbsolute: 1000 }, models: {} },
     temperature: { default: { bedMaxC: 110 }, models: {} },
     claims: { requireControllerId: false },
+    audit: { enabled: true },
   };
 }
 
@@ -91,7 +94,7 @@ const tempEntry = (entry: unknown, label: string): Partial<TemperatureLimits> =>
 
 /** Merges a partial change into `current`; throws SafetyLimitsError for anything invalid. A `models` table in the patch replaces the whole table. */
 export function mergeSafetyConfig(current: SafetyConfig, patch: any): SafetyConfig {
-  const body = section("body", patch, ["jog", "temperature", "claims"]);
+  const body = section("body", patch, ["jog", "temperature", "claims", "audit"]);
   const next: SafetyConfig = JSON.parse(JSON.stringify(current));
   if (body.jog !== undefined) {
     const jog = section("jog", body.jog, ["armRequired", "armTtlMs", "default", "models"]);
@@ -118,6 +121,13 @@ export function mergeSafetyConfig(current: SafetyConfig, patch: any): SafetyConf
     if (c.requireControllerId !== undefined) {
       if (typeof c.requireControllerId !== "boolean") throw new SafetyLimitsError("claims.requireControllerId must be true or false");
       next.claims.requireControllerId = c.requireControllerId;
+    }
+  }
+  if (body.audit !== undefined) {
+    const a = section("audit", body.audit, ["enabled"]);
+    if (a.enabled !== undefined) {
+      if (typeof a.enabled !== "boolean") throw new SafetyLimitsError("audit.enabled must be true or false");
+      next.audit = { enabled: a.enabled };
     }
   }
   return next;

@@ -38,7 +38,7 @@
 |---|---|
 | 版本 | `0.8.1.1` |
 | 成熟度 | 可用 |
-| 测试 | 211 (`npm run test:unit`) |
+| 测试 | 269 (`npm run test:unit`) |
 | 技术栈 | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | 目标 | HYDRA-UMC 工作单元的 Raspberry Pi CM5 |
 | 真实硬件 | 尚未：此版本没有在真实硬件上运行的记录 |
@@ -46,6 +46,8 @@
 ## 🎯 概述
 
 HYDRA-UMC SERVER 是驱动 HYDRA-UMC 多机器人微工厂单元的独立后端：一个基于 Node.js/Express + WebSocket 的引擎，负责管理机器人状态、将其持久化到磁盘、验证每一次写入操作，并向所有已连接客户端广播实时更新。它本身不附带任何用户界面或前端构建步骤——是一个纯粹的 API + WebSocket 服务，设计为在真正紧邻机器人的机器上（通常是 Raspberry Pi CM5）以无头方式运行（无浏览器、无显示器）。
+
+第二版契约已完整：条件写入（命令与占用上的 `If-Match`、`GET /api/robot/:id`）、原子的 `table` 命令、只追加的审计记录（`GET /api/audit`，哈希链，可关闭）以及 WebSocket 的 `claims` 消息。摄像头密码不再出现在进程列表或日志中。参见 `docs/CONTRACT_V2.md`。
 
 它**可以**选择性地将 **[HYDRA-UMC STUDIO](https://github.com/JuanenRac/HYDRA-UMC-STUDIO)** 自身构建好的前端作为静态文件提供服务，以满足常见的“一台机器、一个来源”部署方式——只需运行一次 **`build-frontend.sh`/`.bat`**（从同级检出的 STUDIO 构建并将输出复制到本仓库自身的 `public/` 目录，已加入 gitignore），本服务器在下次启动时便会在 `/` 路径提供该前端。这正是 HYDRA-UMC-ANDROID-CONTROL、HYDRA-UMC-IOS-CONTROL 和 HYDRA-UMC-DSI 能够在各自的应用内 WebView 中嵌入真实 STUDIO 3D 视口的原因，它们都指向同一台服务器自身的 `ip:port`。这完全是可选的：跳过该脚本，本服务器将保持上文所述的完全无头状态——`public/` 目录根本不会存在，且所有路由在两种情况下均能同样正常工作。
 

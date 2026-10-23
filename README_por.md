@@ -38,7 +38,7 @@
 |---|---|
 | Versão | `0.8.1.1` |
 | Maturidade | Funcional |
-| Testes | 211 (`npm run test:unit`) |
+| Testes | 269 (`npm run test:unit`) |
 | Tecnologia | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | Destino | O Raspberry Pi CM5 de uma célula HYDRA-UMC |
 | Em hardware real | Ainda não: não há registo de execução em hardware real para esta versão |
@@ -46,6 +46,8 @@
 ## 🎯 Visão geral
 
 O HYDRA-UMC SERVER é o back-end autónomo que comanda uma célula de microfábrica multirrobô HYDRA-UMC: um motor Node.js/Express + WebSocket que guarda o estado dos robôs, o persiste em disco, autentica cada escrita e difunde atualizações em direto a todos os clientes ligados. Não traz interface de utilizador nem passo de compilação de frontend próprios - é um serviço puramente de API + WebSocket, pensado para correr headless (sem navegador, sem ecrã) na máquina que está fisicamente junto dos robôs (tipicamente um Raspberry Pi CM5).
+
+O segundo contrato está completo: escritas condicionais (`If-Match` em comandos e reservas, `GET /api/robot/:id`), o comando atómico `table`, um registo de auditoria só de acréscimo (`GET /api/audit`, encadeado por hash, desativável) e uma mensagem `claims` por WebSocket. As palavras-passe das câmaras já não aparecem na lista de processos nem no registo. Ver `docs/CONTRACT_V2.md`.
 
 PODE opcionalmente servir também o frontend compilado do **[HYDRA-UMC STUDIO](https://github.com/JuanenRac/HYDRA-UMC-STUDIO)** como ficheiros estáticos, para o caso comum de "tudo numa só máquina, uma só origem" - execute uma vez **`build-frontend.sh`/`.bat`** (compila o STUDIO a partir de um clone irmão e copia o resultado para o `public/` deste repositório, ignorado pelo git) e este servidor passa a servi-lo em `/` no arranque seguinte. É isto que permite ao HYDRA-UMC-ANDROID-CONTROL, ao HYDRA-UMC-IOS-CONTROL e ao HYDRA-UMC-DSI incorporar a vista 3D real do STUDIO na sua própria WebView, apontada ao `ip:porta` deste mesmo servidor. É totalmente opcional: se saltar esse script, o servidor continua tão headless como descrito acima - o `public/` simplesmente não existirá, e todas as rotas funcionam de forma idêntica nos dois casos.
 

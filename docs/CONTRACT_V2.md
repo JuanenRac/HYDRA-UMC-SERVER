@@ -1,8 +1,7 @@
 # Contract v2 of the server: design by blocks
 
-This is the whole design of the second version of the server contract. Only block 1 and the
-safety limits are implemented today; the other blocks are the plan, so the clients can be
-adapted one block at a time. Nothing here changes the first version: every v2 field is optional
+This is the whole design of the second version of the server contract. All five blocks and the
+safety limits are implemented; the clients can be adapted one block at a time. Nothing here changes the first version: every v2 field is optional
 and a client that ignores it keeps working.
 
 ## Principles
@@ -30,30 +29,32 @@ and a client that ignores it keeps working.
   explicit arming of the jog (`POST /api/robot/:id/jog-arm`, off by default). See
   `REMOTE_API.md`, section 2l.
 
-## Block 2 - conditional writes (planned)
+## Block 2 - conditional writes (implemented)
 
 - `If-Match` on `POST /api/robot/:id/command` and on the claim routes, with the revision of the
   robot (`ETag` of `GET /api/robot/:id`), answering `412` with the current revision when the
   robot changed. The full settings tree already has this.
 - `GET /api/robot/:id`: one robot with its revision, so a client does not have to read the whole tree.
 
-## Block 3 - atomic table command (planned)
+## Block 3 - atomic table command (implemented)
 
 - `"table"` command: a move of the XY table of a robot in one request (`{ x, y, rz?, mode:
   "absolute"|"relative" }`), bounded by the limits of block 1 and returned with the applied
   position, instead of one `jog` per axis.
 
-## Block 4 - audit record (planned)
+## Block 4 - audit record (implemented)
 
 - `GET /api/audit` (admin): a bounded, append-only log of the changes that matter (claims,
   limits, global stops, jog arming, forced releases), each with the account, the controller id,
   the address and the outcome; exportable, and covered by the settings backups.
 - The same record is the source of the history that `reservationHistory` keeps today.
 
-## Block 5 - events (planned)
+## Block 5 - events (implemented)
 
-- A `claims` message on the WebSocket when a claim or an arming changes, so a client need not
-  poll `GET /api/claims`.
+- A `claims` message on the WebSocket (for the clients that opened it with `?remoteApiVersion=2`) when a claim,
+  a release, an arming or a stop changes, so a client need not poll `GET /api/claims`.
+
+The bodies of blocks 2 to 5 are in `REMOTE_API.md`, section 2m.
 
 ## Versioning
 

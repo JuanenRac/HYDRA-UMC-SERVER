@@ -97,7 +97,18 @@ export function createWsHub(deps: { setSettings: (payload: any) => void }) {
     }
   }
 
-  return { wsClients, broadcastSettings, broadcastRobotDelta };
+  /**
+   * Tells every client that declared schema 2 who controls which robot (the same list as GET /api/claims) after a claim, a release or
+   * an arming changed, so a client need not poll. A schema 1 client never gets it: it never asked for new message types.
+   */
+  function broadcastClaims(claims: unknown[]) {
+    const msg = JSON.stringify({ type: "claims", schema: 2, claims });
+    for (const client of wsClients) {
+      if (client.readyState === WebSocket.OPEN && (client as any).schema >= 2) client.send(msg);
+    }
+  }
+
+  return { wsClients, broadcastSettings, broadcastRobotDelta, broadcastClaims };
 }
 
 export type WsHub = ReturnType<typeof createWsHub>;

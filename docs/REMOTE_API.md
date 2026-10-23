@@ -701,6 +701,16 @@ memory only (a restart disarms everything) and is cleared by `"stop"`, by `POST
 /api/stop-all` and by `release`. It can be armed at any time; it is only demanded while
 `jog.armRequired` is on.
 
+### 2m. Conditional writes, the table command, the audit record and the claim events
+
+These four pieces complete the second version of the contract (`CONTRACT_V2.md`). Every one of them is optional for a client.
+
+- `GET /api/robot/:id` (any signed-in account): `{ robot, revision, cellId }` and the header `ETag: "<revision>"`. The credentials of the cameras are left out unless the caller is an administrator.
+- `If-Match` on `POST /api/robot/:id/command`, `.../claim` and `.../release`: the revision from `GET /api/robot/:id` (or from the last answer, which carries `revision` and `ETag`). When the robot changed in between the answer is `412` with `{ error, code: "revision-mismatch", revision }`; send it again after reading the robot. `*` or no header always goes through, and `"stop"` is never conditional. The record of past claims, the times of a claim and the step counter of a running playback do not change the revision.
+- The `"table"` command (`params`: `{ x, y, rz?, mode: "absolute" | "relative" }`, mode defaults to `"absolute"`): moves the XY table of the robot in one request. It is checked as a whole before anything changes (finite numbers; a relative move within `jog.maxAmount`, an absolute one within `jog.maxAbsolute`, and the position it ends in within `jog.maxAbsolute`), needs the claim like every command but `stop`, and needs the arming while `jog.armRequired` is on. It answers `{ success, revision, applied: { robotId, x, y, rz? } }`; a refusal is `400` with `code` `table-invalid`, `table-out-of-limit` or `table-missing`, and nothing changed. It touches the robot it is sent to, never its combined siblings.
+- `GET /api/audit` (admin): `{ enabled, lockedOff, entries, verification? }`. The newest entries, oldest first: `?limit=` (1 to 1000, 100 by default), `?afterSeq=`, `?type=`, `?robotId=`; `?verify=1` checks the hash chain; `?format=jsonl` downloads the lines as stored. Each entry has `seq`, `ts`, `type` (`claim`, `force-claim`, `release`, `force-release`, `jog-arm`, `safety-limits`, `stop-all`), `outcome` (`ok`, `refused`, `failed`), the account, the controller id, the address, the robot and a `detail` object, plus the SHA-256 of the previous line (`prev`) and of its own (`hash`). The record is `data/audit.jsonl`, rotated by size (`HYDRA_UMC_AUDIT_MAX_BYTES`, 5 MB; `HYDRA_UMC_AUDIT_KEEP`, 5 files), copied next to every new settings backup, and everything in it passes through the secret redaction. An administrator switches it with `PUT /api/admin/safety-limits` (`{ "audit": { "enabled": false } }`, on by default); `HYDRA_UMC_AUDIT=off` in the environment locks it off.
+- A `claims` message on the WebSocket, for the clients that opened `/ws` with `?remoteApiVersion=2`: `{ "type": "claims", "schema": 2, "claims": [...] }` with the same list as `GET /api/claims`, after a claim, a release, an arming or a stop changed it. `GET /api/claims` also carries `jogArmedUntil` for every claim now. A claim that merely expires is not announced; it disappears from the next list.
+
 ## 3. Live sync: `WebSocket /ws`
 
 Connect with `new WebSocket("ws://<host>:3000/ws", ["hydra.bearer", "<JWT_TOKEN>"])`
@@ -743,6 +753,7 @@ values today:
   clients that opened `/ws` with `?remoteApiVersion=2` get `schema: 2`
   instead - one message per affected robot, `{ "type": "delta", "schema":
   2, "controllerId", "robotId", "patch", "cameraId"?, "cameraPatch"? }`.
+- `"claims"` - who controls which robot, for the clients that opened `/ws` with `?remoteApiVersion=2` (section 2m).
 - `"canota_progress"` - real, live per-page flash progress from `POST
   /api/hardware/canota/flash` (section 2h), broadcast to every connected
   client while a real STM32H745 flash cycle is in progress: `{ "type":

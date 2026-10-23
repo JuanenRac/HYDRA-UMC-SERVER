@@ -4,11 +4,12 @@
 // GPL-3.0 - see LICENSE
 // =============================================================================
 // The per-camera stream process supervisor, moved out of server.ts unchanged.
+import { redactLines } from "./redaction";
 import path from "path";
 import fs from "fs";
 import { spawn, type ChildProcess } from "child_process";
 import {
-  computeDeviceArg, cameraFingerprint, cameraStreamPort, redactDeviceCredentials,
+  computeDeviceArg, cameraFingerprint, cameraStreamPort, redactDeviceCredentials, cameraSpawnSpec,
   isValidCameraId,
 } from "./serverPolicy";
 import { visionStreamerExecutablePath, probeTcp } from "./ecosystemStatus";
@@ -160,13 +161,14 @@ export function createCameraSupervisor() {
       });
       return;
     }
-    const proc = spawn(exePath, ["stream", "serve", "--device", deviceArg, "--port", String(port)], { stdio: ["ignore", "pipe", "pipe"] });
+    const spec = cameraSpawnSpec(deviceArg, port);
+    const proc = spawn(exePath, spec.args, { stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, ...spec.extraEnv } });
     industrialLog(`[CAMERA] starting ${key} on port ${port} (device=${redactDeviceCredentials(deviceArg)}) pid=${proc.pid}${restartAttempts > 0 ? ` (self-heal retry #${restartAttempts})` : ""}`);
     const state: CameraProcessState = { proc, port, fingerprint, status: "starting", lastError: null, recentOutput: [], restartAttempts };
     cameraProcesses.set(key, state);
     writeCameraPidFile();
     const captureOutput = (data: Buffer) => {
-      const lines = data.toString("utf-8").split(/\r?\n/).filter(Boolean);
+      const lines = redactLines(data.toString("utf-8").split(/\r?\n/)).filter(Boolean);
       state.recentOutput.push(...lines);
       if (state.recentOutput.length > 20) state.recentOutput.splice(0, state.recentOutput.length - 20);
     };

@@ -22,6 +22,8 @@ import {
   cameraStreamPort,
   isValidCameraId,
   redactDeviceCredentials,
+  cameraSpawnSpec,
+  deviceCarriesCredentials,
   MAX_CAMERAS,
   hi3510Action,
   safeIdSegment,
@@ -301,4 +303,20 @@ test("a token in the address of the WebSocket is refused unless the installation
   assert.equal(wsQueryTokenAllowed("required"), false);
   assert.equal(wsQueryTokenAllowed("nonsense"), false);
   for (const optIn of ["allow", " ALLOW ", "true", "1", "yes", "on"]) assert.equal(wsQueryTokenAllowed(optIn), true, optIn);
+});
+
+test("camera credentials travel in the environment of the child, not in its arguments", () => {
+  const url = "rtsp://admin:s3cret@10.0.0.5:554/live";
+  assert.equal(deviceCarriesCredentials(url), true);
+  assert.equal(deviceCarriesCredentials("rtsp://10.0.0.5/live"), false);
+  assert.equal(deviceCarriesCredentials("/dev/video0"), false);
+  const spec = cameraSpawnSpec(url, 8100, undefined);
+  assert.equal(spec.args.join(" ").includes("s3cret"), false);
+  assert.deepEqual(spec.args, ["stream", "serve", "--device-env", "HYDRA_CAMERA_DEVICE", "--port", "8100"]);
+  assert.equal(spec.extraEnv.HYDRA_CAMERA_DEVICE, url);
+  const plain = cameraSpawnSpec("/dev/video0", 8101, undefined);
+  assert.deepEqual(plain.args, ["stream", "serve", "--device", "/dev/video0", "--port", "8101"]);
+  assert.deepEqual(plain.extraEnv, {});
+  const legacy = cameraSpawnSpec(url, 8100, "off");
+  assert.equal(legacy.args.includes(url), true);
 });

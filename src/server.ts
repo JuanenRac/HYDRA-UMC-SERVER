@@ -39,6 +39,8 @@ import { ensureSeedUser, findUser, verifyPassword } from "./users";
 import { pruneExpiredRefreshTokens } from "./refresh_tokens";
 import { SafetyLimits, JogArming } from "./safetyLimits";
 import { registerSafetyRoutes } from "./routes/safetyRoutes";
+import { listClaims } from "./claimPolicy";
+import { AuditLog, auditOptionsFromEnv } from "./auditLog";
 import { SecurityConfig, certFingerprint, resolveTls, securityEnvFrom } from "./securityConfig";
 import { cameraAuthRequiredByDefault, issueMediaTicket, mediaTicketKey, verifyMediaTicket } from "./mediaTickets";
 import { registerAuthRoutes } from "./routes/auth";
@@ -194,7 +196,14 @@ async function startServer() {
     }
   }
 
-  const store = createSettingsStore(dataPath, { ...settingsStoreOptionsFromEnv(process.env), log: industrialLog });
+  // The audit record (data/audit.jsonl); its copies travel with the settings backups.
+  const audit = new AuditLog(dataPath, { ...auditOptionsFromEnv(process.env), log: industrialLog });
+  const storeOptions = settingsStoreOptionsFromEnv(process.env);
+  const store = createSettingsStore(dataPath, {
+    ...storeOptions,
+    log: industrialLog,
+    onBackup: (copy) => audit.backupTo(path.dirname(copy), path.basename(copy).replace(/^settings-/, "").replace(/\.json$/, ""), storeOptions.backups ?? 10),
+  });
   const { loadFullSettingsFromDisk, queueSettingsWrite, getSettings, setSettings } = store;
 
   const supervisor = createCameraSupervisor();
@@ -219,6 +228,9 @@ async function startServer() {
   // The limits every client is held to (data/safety-limits.json) and the arming of the jog (memory only).
   const safety = new SafetyLimits(dataPath, industrialLog);
   const arming = new JogArming();
+  audit.setEnabled(safety.get().audit.enabled);
+  // Tells the clients that opted in (schema 2) who controls which robot, after a claim, a release or an arming changed.
+  const onClaimsChanged = () => hub.broadcastClaims(listClaims(getSettings(), isReservationActive, (id) => arming.expiresAt(id)));
 
   async function applySettingsUpdate(payload: any, originatorWs?: WebSocket): Promise<{ robotId: unknown; requested: number; applied: number }[]> {
     // A heated-bed target above the limit of its model is lowered to the limit before it is stored or broadcast.
@@ -280,6 +292,8 @@ async function startServer() {
     stopAllRateLimiter,
     safety,
     arming,
+    audit,
+    onClaimsChanged,
   });
 
   registerRobotRoutes(app, {
@@ -295,9 +309,11 @@ async function startServer() {
     MAX_RESERVATION_TTL_MS,
     safety,
     arming,
+    audit,
+    onClaimsChanged,
   });
 
-  registerSafetyRoutes(app, { authenticate, requireAdmin, getSettings, findRobotById, isReservationActive, safety, arming });
+  registerSafetyRoutes(app, { authenticate, requireAdmin, getSettings, findRobotById, isReservationActive, safety, arming, audit, onClaimsChanged });
 
   // The live pictures and the saved photos and recordings ask for a ticket (POST /api/camera/ticket) or a signed-in client unless the installation opts out with
   // HYDRA_UMC_CAMERA_AUTH=open, for the clients that do not ask for tickets yet.

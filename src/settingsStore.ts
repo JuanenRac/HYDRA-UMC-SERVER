@@ -52,6 +52,8 @@ export interface SettingsStoreOptions {
   backupIntervalMs?: number;
   /** Where the store reports what it recovers or restores (the server passes its industrial log). */
   log?: (message: string) => void;
+  /** Called with the path of every new copy of settings.json (the audit record is copied next to it). */
+  onBackup?: (backupPath: string) => void;
   /** For tests: runs inside a write to simulate a cut. */
   txnHooks?: TxnHooks;
 }
@@ -292,7 +294,8 @@ export function createSettingsStore(dataPath: string, options: SettingsStoreOpti
       try {
         if (journal) {
           try {
-            backupSettings(dataPath, getSettingsPath(), backupCount, backupIntervalMs);
+            const copy = backupSettings(dataPath, getSettingsPath(), backupCount, backupIntervalMs);
+            if (copy) options.onBackup?.(copy);
           } catch (error) {
             industrialLog(`[STORE] Could not copy settings.json before the write: ${(error as Error).message}`);
           }

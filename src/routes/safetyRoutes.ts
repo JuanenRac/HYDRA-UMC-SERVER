@@ -6,7 +6,8 @@
 // The safety limits every client is held to (read by any signed-in client, changed by an
 // administrator), the explicit arming of the jog, and the list of who controls which robot.
 import express from "express";
-import { readControllerId, claimConflict } from "../claimPolicy";
+import { readControllerId, claimConflict, listClaims } from "../claimPolicy";
+import type { AuditLog } from "../auditLog";
 import { HARD_LIMITS, SafetyLimitsError, defaultSafetyConfig, type JogArming, type SafetyLimits } from "../safetyLimits";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
@@ -19,10 +20,14 @@ export interface SafetyRouteDeps {
   isReservationActive: (reservation: any) => boolean;
   safety: SafetyLimits;
   arming: JogArming;
+  /** The audit record; without it nothing is recorded. */
+  audit?: AuditLog;
+  /** Called after a claim or an arming changed (pushes the `claims` message of the WebSocket). */
+  onClaimsChanged?: () => void;
 }
 
 export function registerSafetyRoutes(app: express.Express, deps: SafetyRouteDeps): void {
-  const { authenticate, requireAdmin, getSettings, findRobotById, isReservationActive, safety, arming } = deps;
+  const { authenticate, requireAdmin, getSettings, findRobotById, isReservationActive, safety, arming, audit, onClaimsChanged } = deps;
 
   const view = (robotId?: number) => {
     const robot = robotId !== undefined ? findRobotById(robotId) : null;
@@ -47,9 +52,14 @@ export function registerSafetyRoutes(app: express.Express, deps: SafetyRouteDeps
     try {
       await safety.update(req.body, String((req as any).user?.username ?? "admin"));
     } catch (error) {
-      if (error instanceof SafetyLimitsError) return res.status(400).json({ error: error.message });
+      if (error instanceof SafetyLimitsError) {
+        audit?.record({ type: "safety-limits", outcome: "refused", userId: (req as any).user?.id, username: (req as any).user?.username, ip: req.ip, detail: { reason: error.message } });
+        return res.status(400).json({ error: error.message });
+      }
       throw error;
     }
+    audit?.setEnabled(safety.get().audit.enabled);
+    audit?.record({ type: "safety-limits", outcome: "ok", userId: (req as any).user?.id, username: (req as any).user?.username, ip: req.ip, detail: { patch: req.body } });
     res.json({ success: true, ...view() });
   });
 
@@ -62,37 +72,55 @@ export function registerSafetyRoutes(app: express.Express, deps: SafetyRouteDeps
     const controllerId = readControllerId(req.headers?.["x-controller-id"], req.body?.controllerId);
     if (controllerId === null) return res.status(400).json({ error: "controllerId must be 1 to 64 characters: letters, digits, . _ : -", code: "invalid-controller-id" });
     if (typeof req.body?.armed !== "boolean") return res.status(400).json({ error: "armed must be true or false" });
+    const who = { userId: user?.id, username: user?.username, controllerId, ip: req.ip, robotId };
     if (!req.body.armed) {
       arming.disarm(robotId);
+      audit?.record({ type: "jog-arm", outcome: "ok", ...who, detail: { armed: false } });
+      onClaimsChanged?.();
       return res.json({ success: true, armed: false });
     }
     const conflict = claimConflict(robot.reservation, user, controllerId, isReservationActive);
+    if (conflict) audit?.record({ type: "jog-arm", outcome: "refused", ...who, detail: { reason: conflict.reason } });
     if (conflict) return res.status(409).json({ error: conflict.message, code: conflict.reason, reservation: robot.reservation });
     const limits = safety.get().jog;
     const requested = typeof req.body.ttlMs === "number" && Number.isFinite(req.body.ttlMs) ? req.body.ttlMs : limits.armTtlMs;
     const ttlMs = Math.min(Math.max(requested, HARD_LIMITS.armTtlMs.min), limits.armTtlMs);
     const expiresAt = arming.arm(robotId, user.id, controllerId, ttlMs);
+    audit?.record({ type: "jog-arm", outcome: "ok", ...who, detail: { armed: true, ttlMs } });
+    onClaimsChanged?.();
     res.json({ success: true, armed: true, expiresAt, ttlMs });
   });
 
   // Who controls which robot, for every robot that has an active claim.
-  app.get("/api/claims", authenticate, (req, res) => {
-    const claims: unknown[] = [];
-    for (const cell of getSettings().controllers ?? []) {
-      for (const robot of cell.robots ?? []) {
-        if (!isReservationActive(robot.reservation)) continue;
-        claims.push({
-          robotId: robot.id,
-          robotName: robot.name ?? null,
-          cellId: cell.id,
-          ownerId: robot.reservation.ownerId,
-          ownerUsername: robot.reservation.ownerUsername,
-          controllerId: robot.reservation.controllerId ?? null,
-          claimedAt: robot.reservation.claimedAt,
-          expiresAt: robot.reservation.expiresAt,
-        });
-      }
+  app.get("/api/claims", authenticate, (_req, res) => {
+    res.json({ claims: listClaims(getSettings(), isReservationActive, (id) => arming.expiresAt(id)) });
+  });
+
+  // The audit record (administrators only): the newest entries, oldest first. ?limit= (1-1000, default 100), ?afterSeq=, ?type=, ?robotId=,
+  // ?verify=1 checks the hash chain, ?format=jsonl downloads the lines as they are stored.
+  app.get("/api/audit", authenticate, requireAdmin, (req, res) => {
+    if (!audit) return res.status(404).json({ error: "the audit record is not available", code: "audit-unavailable" });
+    const num = (value: unknown): number | undefined => {
+      if (value === undefined) return undefined;
+      const n = Number(value);
+      return Number.isFinite(n) ? n : undefined;
+    };
+    const entries = audit.read({
+      limit: num(req.query.limit),
+      afterSeq: num(req.query.afterSeq),
+      type: typeof req.query.type === "string" ? req.query.type : undefined,
+      robotId: num(req.query.robotId),
+    });
+    if (req.query.format === "jsonl") {
+      res.setHeader("Content-Type", "application/x-ndjson");
+      res.setHeader("Content-Disposition", "attachment; filename=\"audit.jsonl\"");
+      return res.send(entries.map((e) => JSON.stringify(e)).join("\n") + (entries.length ? "\n" : ""));
     }
-    res.json({ claims });
+    res.json({
+      enabled: audit.enabled,
+      lockedOff: audit.lockedOff,
+      entries,
+      ...(req.query.verify === "1" || req.query.verify === "true" ? { verification: audit.verify() } : {}),
+    });
   });
 }

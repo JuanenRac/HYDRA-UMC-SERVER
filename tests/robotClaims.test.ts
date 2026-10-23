@@ -13,7 +13,7 @@ const root = { id: "root-id", username: "root", role: "admin" };
 function setup(initial: any = { id: 1 }) {
   const robot: any = { ...initial };
   const handlers: Record<string, Handler> = {};
-  const app: any = { post(route: string, ...chain: unknown[]) { handlers[route] = chain[chain.length - 1] as Handler; } };
+  const app: any = { get() { return undefined; }, post(route: string, ...chain: unknown[]) { handlers[route] = chain[chain.length - 1] as Handler; } };
   const history: Array<{ action: string; by: unknown; reason?: string }> = [];
   const deltas: any[] = [];
   let writes = 0;
@@ -32,7 +32,7 @@ function setup(initial: any = { id: 1 }) {
   const call = async (route: "claim" | "release", id: string, user: any, body: any = {}) => {
     let status = 200;
     let json: any;
-    const res: any = { status(code: number) { status = code; return res; }, json(value: any) { json = value; return res; } };
+    const res: any = { headers: {} as Record<string, string>, setHeader(k: string, v: string) { res.headers[k] = v; }, status(code: number) { status = code; return res; }, json(value: any) { json = value; return res; } };
     await handlers[`/api/robot/:id/${route}`]({ params: { id }, body, user }, res);
     return { status, json };
   };

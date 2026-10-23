@@ -38,7 +38,7 @@
 |---|---|
 | Version | `0.8.1.1` |
 | Maturity | Functional |
-| Tests | 211 (`npm run test:unit`) |
+| Tests | 269 (`npm run test:unit`) |
 | Stack | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | Target | The Raspberry Pi CM5 of a HYDRA-UMC cell |
 | On real hardware | Not yet: no run on real hardware is recorded for this version |
@@ -52,6 +52,8 @@ broadcasts live updates to every connected client. It ships with no user
 interface or frontend build step of its own - it is a pure API + WebSocket
 service, meant to run headless (no browser, no display) on the machine
 that actually sits next to the robots (typically a Raspberry Pi CM5).
+
+The second contract is complete: conditional writes (`If-Match` on commands and claims, `GET /api/robot/:id`), the atomic `table` command, an append-only audit record (`GET /api/audit`, hash-chained, switchable) and a `claims` WebSocket message. Camera passwords no longer appear in the process list or in the log. See `docs/CONTRACT_V2.md`.
 
 It CAN optionally also serve **[HYDRA-UMC STUDIO](https://github.com/JuanenRac/HYDRA-UMC-STUDIO)'s**
 own built frontend as static files, for the common "everything on one
@@ -282,7 +284,7 @@ threat model from "trusted LAN only" to "reachable by anyone" (see
 - `HYDRA_UMC_AI_ACCESS=admin` - limits the relay to the local AI services (`/api/ai/*`) to administrators. Off by default, so any signed-in user can use it, as before.
 - `HYDRA_UMC_LOG_MAX_BYTES` and `HYDRA_UMC_LOG_KEEP` - the size at which the server log rotates (default 10 MB) and how many rotated files are kept (default 1).
 - `HYDRA_UMC_SETTINGS_STORE`, `HYDRA_UMC_SETTINGS_BACKUPS` and `HYDRA_UMC_SETTINGS_BACKUP_INTERVAL_S` - by default the settings (`settings.json` and the points files) are written as one all-or-nothing unit with a journal: an interrupted write is finished or discarded on the next start, a copy of `settings.json` is kept in `data/backups/` (10 copies, at most one every 600 s) and a damaged `settings.json` is restored from the newest good copy. `HYDRA_UMC_SETTINGS_STORE=plain` goes back to writing the files one by one; `HYDRA_UMC_SETTINGS_BACKUPS=0` turns the copies off.
-- The AI relay access, the sign-in requirement of the host information and TLS (certificate and key paths, with the SHA-256 fingerprint of the certificate) can also be changed by an administrator from the Server Admin screen of the control app. A value set in the environment wins and is shown as locked; the sign-in requirement asks for confirmation before it is turned off; TLS applies on the next start.
+- The AI relay access, the sign-in requirement of the host information and the optional, off by default TLS (certificate and key paths, with the SHA-256 fingerprint of the certificate) can also be changed by an administrator from the Server Admin screen of the control app. A value set in the environment wins and is shown as locked; the sign-in requirement asks for confirmation before it is turned off; the optional TLS applies on the next start.
 - `STOP_ALL_RATE_LIMIT_MAX` / `STOP_ALL_RATE_LIMIT_WINDOW_MS` - budget of the global stop (`POST /api/stop-all`) per address, separate from the login's (default 60 per minute). In production the server also refuses to start with an example `JWT_SECRET`/bootstrap password from a deployment template, a `JWT_SECRET` under 32 characters or a bootstrap password under 12.
 
 ### TLS / HTTPS

@@ -12,6 +12,9 @@ import { calculateJoints } from "../kinematics";
 import { robotCommandsTotal } from "../metrics";
 import { claimConflict, readControllerId, type ClaimConflict } from "../claimPolicy";
 import type { JogArming, SafetyLimits } from "../safetyLimits";
+import type { AuditLog } from "../auditLog";
+import { ifMatchAgrees, robotRevision } from "../serverPolicy";
+import { applyTableMove, planTableMove, type TablePlan } from "../tableCommand";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
@@ -32,6 +35,10 @@ export interface CommandRouteDeps {
   /** The limits every client is held to (size of a jog, arming of the jog). Without it the built-in hard cap of the jog applies. */
   safety?: SafetyLimits;
   arming?: JogArming;
+  /** The audit record (global stops are recorded). */
+  audit?: AuditLog;
+  /** Called after the arming of a jog was dropped (pushes the `claims` message of the WebSocket). */
+  onClaimsChanged?: () => void;
 }
 
 /** The playback state a stopped robot ends in; shared by the single-robot "stop" and the global stop so they can never disagree. */
@@ -51,7 +58,7 @@ function switchAllOff(outputs: unknown): number {
 
 const KNOWN_COMMANDS = new Set([
   "stop", "play", "pause", "jog", "reset", "jogStep", "reset3D", "tool",
-  "valve", "pump", "speed", "trajectory", "vision",
+  "valve", "pump", "speed", "trajectory", "vision", "table",
 ]);
 
 /**
@@ -82,6 +89,8 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     stopAllRateLimiter,
     safety,
     arming,
+    audit,
+    onClaimsChanged,
   } = deps;
 
   // GLOBAL STOP: one call stops every robot, whoever reserved it, and switches every valve and pump off. A safety stop is never blocked by a reservation
@@ -133,6 +142,11 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
       (failedCount ? `, ${failedCount} FAILED` : ""),
     );
     robotCommandsTotal.inc({ command: "stop-all" });
+    audit?.record({
+      type: "stop-all", outcome: failedCount === 0 ? "ok" : "failed", userId: user?.id, username: user?.username, ip: req.ip,
+      detail: { stoppedCount, failedCount, reservedByOthers },
+    });
+    onClaimsChanged?.();
     let persisted = true;
     try {
       await queueSettingsWrite(getSettings());
@@ -179,7 +193,7 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     // rejected with 409 when a different, still-active claim exists.
     // A trajectory belongs to one robot. Unlike play/pause/stop, loading it
     // must not overwrite a combined sibling's independently selected Work.
-    const affectedIds = command === "trajectory"
+    const affectedIds = command === "trajectory" || command === "table"
       ? [robotId]
       : [robotId, ...(targetRobot.combinedWith || [])];
 
@@ -215,11 +229,35 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
       }
     }
 
-    // A jog can be made to need an explicit arming first (POST /api/robot/:id/jog-arm); off by default.
-    if (command === "jog" && safety?.get().jog.armRequired && !arming?.isArmed(robotId, (req as any).user.id, callerController)) {
+    // A conditional command: the robot must still be as the caller read it (If-Match with the revision of GET /api/robot/:id). A stop is never conditional.
+    if (command !== "stop") {
+      const revision = robotRevision(targetRobot);
+      const header = typeof req.headers?.["if-match"] === "string" ? req.headers["if-match"] : undefined;
+      if (!ifMatchAgrees(header, revision)) {
+        return res.status(412).json({
+          error: "the robot changed since you read it; read it again (GET /api/robot/:id) and retry",
+          code: "revision-mismatch",
+          revision,
+        });
+      }
+    }
+
+    // A table move is one jog of the table: it needs the same arming.
+    if ((command === "jog" || command === "table") && safety?.get().jog.armRequired && !arming?.isArmed(robotId, (req as any).user.id, callerController)) {
       return res.status(403).json({ error: "the jog is not armed for this robot: arm it first (POST /api/robot/:id/jog-arm)", code: "jog-not-armed" });
     }
-    if (command === "stop") arming?.disarm(robotId);
+    if (command === "stop") {
+      arming?.disarm(robotId);
+      onClaimsChanged?.();
+    }
+
+    // The table move is checked as a whole before anything is changed.
+    let tablePlan: Extract<TablePlan, { ok: true }> | undefined;
+    if (command === "table") {
+      const plan = planTableMove(targetRobot, params, safety?.jogFor(targetRobot.model) ?? { maxAmount: 1000, maxAbsolute: 1000 });
+      if (!plan.ok) return res.status(400).json({ error: plan.error, code: plan.code });
+      tablePlan = plan;
+    }
 
     // Work loading used to be a browser-only change followed by the normal
     // 500 ms full-settings debounce. A Play click could therefore arrive at
@@ -598,6 +636,9 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
               if (touched) patch = { playbackState: robot.playbackState };
               break;
             }
+            case "table":
+              if (tablePlan) patch = applyTableMove(robot, tablePlan);
+              break;
             case "trajectory":
               // validatedTrajectory exists because the endpoint validates it
               // before iterating controllers. Reset the playback cursor so a
@@ -664,9 +705,13 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
 
     await queueSettingsWrite(getSettings());
     broadcastRobotDelta(deltas, getSettings());
+    const newRevision = robotRevision(targetRobot);
+    res.setHeader("ETag", `"${newRevision}"`);
     res.json({
       success: true,
       affectedCount: affectedIds.length,
+      revision: newRevision,
+      ...(tablePlan ? { applied: { robotId, x: tablePlan.x, y: tablePlan.y, ...(tablePlan.rz !== undefined ? { rz: tablePlan.rz } : {}) } } : {}),
       ...(warnings.length ? { warnings } : {}),
     });
   });
