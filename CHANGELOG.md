@@ -4,6 +4,7 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- The `command` label of `hydra_robot_commands_total` comes from a closed list of the commands the server knows (anything else is counted as `unknown`), so a signed-in client can no longer create unlimited metric series with made-up command names. Tested with fifty made-up names.
 - Building no longer changes the version; raising it is the explicit `bump` command (`python tools/hydra_project_tool.py bump`). The build scripts only report the version they built, and CI fails if a build script runs a bump.
 - New `HYDRA_UMC_AI_ACCESS=admin` limits the relay to the local AI services (`/api/ai/*`) to administrators. Unset, any signed-in user can use it, as before. Tested.
 - The server log can keep more than one rotated file: `HYDRA_UMC_LOG_KEEP` (`.1` to `.N`, default 1) and `HYDRA_UMC_LOG_MAX_BYTES` (default 10 MB). Tested.

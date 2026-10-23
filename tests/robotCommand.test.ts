@@ -232,3 +232,25 @@ test("vision toggles the robot and its assigned camera together; play starts the
   await t.call("3", { command: "play" });
   assert.deepEqual(t.started, [3]);
 });
+
+test("the Prometheus command label comes from a closed list and never from client text", async () => {
+  const { commandMetricLabel } = await import("../src/routes/commandRoutes.ts");
+  const { registry } = await import("../src/metrics.ts");
+  for (const known of ["stop", "play", "jog", "speed", "trajectory", "vision"]) {
+    assert.equal(commandMetricLabel(known), known);
+  }
+  for (const hostile of ["rm -rf", "__proto__", "x".repeat(500), "stop ", "STOP", "", 7, null, undefined, ["stop"], { command: "stop" }]) {
+    assert.equal(commandMetricLabel(hostile), "unknown", JSON.stringify(hostile));
+  }
+  // Valid requests add series only for the closed list, however many distinct hostile names were tried before.
+  const t = setup();
+  for (let i = 0; i < 50; i++) await t.call("1", { command: `made-up-${i}` });
+  await t.call("3", { command: "reset3D" });
+  const text = await registry.getSingleMetricAsString("hydra_robot_commands_total");
+  assert.ok(!text.includes("made-up"), text);
+  const labels = [...text.matchAll(/command="([^"]*)"/g)].map((m) => m[1]);
+  for (const label of labels) {
+    assert.ok(["stop-all", "unknown", "stop", "play", "pause", "jog", "reset", "jogStep", "reset3D", "tool", "valve", "pump", "speed", "trajectory", "vision"].includes(label), label);
+  }
+  assert.ok(labels.includes("reset3D"));
+});

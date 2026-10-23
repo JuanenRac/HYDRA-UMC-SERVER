@@ -54,6 +54,15 @@ const KNOWN_COMMANDS = new Set([
   "valve", "pump", "speed", "trajectory", "vision",
 ]);
 
+/**
+ * The value of the `command` label of hydra_robot_commands_total: the command itself when it is one of the
+ * closed list above, "unknown" for anything else. The label never carries text chosen by a client, so a
+ * client cannot create new Prometheus series (unbounded cardinality) by sending arbitrary command names.
+ */
+export function commandMetricLabel(command: unknown): string {
+  return typeof command === "string" && KNOWN_COMMANDS.has(command) ? command : "unknown";
+}
+
 // Valves and pumps are fixed small arrays on a robot; an index outside this
 // range would grow a sparse array that gets persisted in full.
 const MAX_OUTPUT_INDEX = 7;
@@ -651,7 +660,7 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     // doesn't recognize, same as an unhandled case there falls through
     // with no effect. src/metrics.ts's own hydra_robot_commands_total,
     // exposed on GET /metrics.
-    robotCommandsTotal.inc({ command: typeof command === "string" ? command : "unknown" });
+    robotCommandsTotal.inc({ command: commandMetricLabel(command) });
 
     await queueSettingsWrite(getSettings());
     broadcastRobotDelta(deltas, getSettings());
