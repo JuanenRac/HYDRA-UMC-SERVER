@@ -492,6 +492,20 @@ turn into an actuator call on this route.
   Voice UI token, so Android and Watch clients never receive it. It returns a
   validated `assistant_reply`, or `503` when Voice UI is not configured or
   unavailable. A motion-related reply has `requiresConfirmation: true`.
+- `POST /api/voice/confirm` takes `{ "confirmationToken" }` (the token of an
+  `assistant_reply` with `requiresConfirmation: true`) and relays it to the
+  Voice UI **for the signed-in user**: the `subject` is the session's username,
+  never something the client sends (a `subject` in the body of `/api/voice/turn`
+  is replaced the same way), and the Voice UI confirms a token only for the
+  subject it was issued to. The answer is the `confirmation_result` of the Voice
+  UI plus `verified`. A `confirmed` result is believed only when it names that
+  same user and, with `HYDRA_UMC_VOICE_UI_RESULT_KEY` set (the key the Voice UI
+  signs with), its HMAC-SHA256 `signature` verifies (`verified: true`); a
+  wrong subject or a bad signature is `502`. Without the key the result is
+  passed on with `verified: false`, and `HYDRA_UMC_VOICE_CONFIRM_REQUIRE_SIGNATURE=1`
+  answers `503` instead. `expired` and `invalid` results are relayed as they are.
+  The route executes nothing; who confirmed what is written to the industrial
+  log by request id and user, never the token or the transcript.
 - `GET /api/watch/system-status` returns a small authenticated
   `system_status` health card with CPU, memory and uptime. It intentionally
   excludes full settings, credentials and filesystem paths.

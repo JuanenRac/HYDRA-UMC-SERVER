@@ -25,6 +25,7 @@ const TSX_CLI = path.join(ROOT, "node_modules", "tsx", "dist", "cli.mjs");
 const SERVER_SOURCE = path.join(ROOT, "src", "server.ts");
 const ADMIN = { username: "voice-contract-admin", password: "voice-contract-admin-password" };
 const VOICE_TOKEN = "voice-relay-contract-token";
+const RESULT_KEY = "voice-result-key-for-the-contract";
 
 async function reservePort() {
   const listener = createServer();
@@ -108,6 +109,7 @@ async function main() {
         ...process.env,
         PYTHONPATH: `${path.join(VOICE_ROOT, "src")}${pathSeparator}${process.env.PYTHONPATH || ""}`,
         HYDRA_UMC_VOICE_UI_TOKEN: VOICE_TOKEN,
+        HYDRA_UMC_VOICE_UI_RESULT_KEY: RESULT_KEY,
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -127,6 +129,7 @@ async function main() {
         HYDRA_UMC_BOOTSTRAP_ADMIN_PASSWORD: ADMIN.password,
         HYDRA_UMC_VOICE_UI_URL: `http://127.0.0.1:${voicePort}`,
         HYDRA_UMC_VOICE_UI_TOKEN: VOICE_TOKEN,
+        HYDRA_UMC_VOICE_UI_RESULT_KEY: RESULT_KEY,
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -187,6 +190,48 @@ async function main() {
     assert.equal(motion.response.status, 200);
     assert.equal(motion.body.requiresConfirmation, true);
 
+    // The confirmation round trip: the token is bound to the signed-in user (the subject is the session's, not the client's), the
+    // Voice UI signs the confirmed result and this server checks that signature before it passes the result on.
+    const anonymousConfirm = await request(serverPort, "/api/voice/confirm", {
+      method: "POST",
+      body: JSON.stringify({ confirmationToken: motion.body.confirmationToken }),
+    });
+    assert.equal(anonymousConfirm.response.status, 401);
+    const badConfirm = await request(serverPort, "/api/voice/confirm", { method: "POST", headers: authorization, body: JSON.stringify({}) });
+    assert.equal(badConfirm.response.status, 400);
+    const confirmed = await request(serverPort, "/api/voice/confirm", {
+      method: "POST",
+      headers: authorization,
+      body: JSON.stringify({ confirmationToken: motion.body.confirmationToken, subject: "someone-else" }),
+    });
+    assert.equal(confirmed.response.status, 200);
+    assert.equal(confirmed.body.status, "confirmed");
+    assert.equal(confirmed.body.subject, ADMIN.username, "the subject is the session's, a subject sent by the client is ignored");
+    assert.equal(confirmed.body.requestId, "voice-motion-001");
+    assert.equal(confirmed.body.verified, true);
+    assert.match(confirmed.body.signature, /^[0-9a-f]{64}$/);
+    const replay = await request(serverPort, "/api/voice/confirm", {
+      method: "POST",
+      headers: authorization,
+      body: JSON.stringify({ confirmationToken: motion.body.confirmationToken }),
+    });
+    assert.equal(replay.response.status, 200);
+    assert.equal(replay.body.status, "invalid", "a token is accepted once");
+    // a token the Voice UI issued for someone else is not confirmed for this user
+    const foreign = await fetch(`http://127.0.0.1:${voicePort}/v1/voice/turn`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${VOICE_TOKEN}` },
+      body: JSON.stringify({ type: "voice_turn", requestId: "voice-foreign-001", transcript: "start mission demo", locale: "en-US", subject: "someone-else" }),
+    }).then((r) => r.json());
+    const foreignConfirm = await request(serverPort, "/api/voice/confirm", {
+      method: "POST",
+      headers: authorization,
+      body: JSON.stringify({ confirmationToken: foreign.confirmationToken }),
+    });
+    assert.equal(foreignConfirm.response.status, 200);
+    assert.equal(foreignConfirm.body.status, "invalid");
+    assert.match(foreignConfirm.body.reason, /someone else/);
+
     // Real per-client gate: disabling Config > Remote Access "Watch" must
     // 404 both Watch-relay routes for a request carrying that header,
     // without touching this same admin session's own unrelated access -
@@ -222,7 +267,7 @@ async function main() {
     const statusStillDirect = await request(serverPort, "/api/watch/system-status", { headers: authorization });
     assert.equal(statusStillDirect.response.status, 200);
 
-    console.log("SERVER_VOICE_RELAY_CONTRACT=PASS auth=1 status=1 non_actuating_motion=1 watch_gate=1");
+    console.log("SERVER_VOICE_RELAY_CONTRACT=PASS auth=1 status=1 non_actuating_motion=1 confirm_signed=1 confirm_subject=1 watch_gate=1");
   } finally {
     await stop(server);
     await stop(voice);

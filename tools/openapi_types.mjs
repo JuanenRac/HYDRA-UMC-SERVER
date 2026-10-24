@@ -213,6 +213,7 @@ export const RESPONSES = {
   "GET /api/system/supervisor": ref("SupervisorSnapshot"),
   "GET /api/watch/system-status": ref("WatchStatus"),
   "POST /api/voice/turn": ref("VoiceReply"),
+  "POST /api/voice/confirm": ref("Passthrough"),
   "GET /api/ecosystem/status": ref("EcosystemStatus"),
   "GET /api/telemetry/query": ref("Passthrough"),
   "GET /api/telemetry/aggregate": ref("Passthrough"),

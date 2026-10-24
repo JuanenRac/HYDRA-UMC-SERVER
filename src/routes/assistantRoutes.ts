@@ -9,6 +9,7 @@ import { realSettings, remoteAccessAllowed } from "../serverPolicy";
 import { getSystemMetrics } from "../systemMetrics";
 import { industrialLog } from "../runtime";
 import { VOICE_UI_URL, VOICE_UI_TOKEN, VOICE_UI_TIMEOUT_MS, validateVoiceTurnPayload, isAssistantReplyForRequest } from "../upstreamConfig";
+import { judgeConfirmationResult, subjectOf, validateConfirmRequest } from "../voiceConfirm";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
@@ -73,6 +74,10 @@ export function registerAssistantRoutes(app: express.Express, deps: { authentica
     }
 
     const requestId = req.body.requestId as string;
+    // The confirmation that comes out of this turn is for the signed-in user who asked: the subject is the session's, never the
+    // client's (a `subject` in the body of the request is replaced).
+    const subject = subjectOf((req as any).user);
+    const forwarded = subject ? { ...req.body, subject } : (() => { const { subject: _ignored, ...rest } = req.body; return rest; })();
     try {
       const upstream = await fetch(`${VOICE_UI_URL}/v1/voice/turn`, {
         method: "POST",
@@ -80,7 +85,7 @@ export function registerAssistantRoutes(app: express.Express, deps: { authentica
           "content-type": "application/json",
           ...(VOICE_UI_TOKEN ? { authorization: `Bearer ${VOICE_UI_TOKEN}` } : {}),
         },
-        body: JSON.stringify(req.body),
+        body: JSON.stringify(forwarded),
         signal: AbortSignal.timeout(VOICE_UI_TIMEOUT_MS),
       });
       const reply = await upstream.json().catch(() => null);
@@ -115,6 +120,53 @@ export function registerAssistantRoutes(app: express.Express, deps: { authentica
     } catch (error) {
       const timedOut = error instanceof DOMException && error.name === "TimeoutError";
       console.error(`[VOICE] gateway unavailable requestId=${requestId} reason=${timedOut ? "timeout" : "connection"}`);
+      res.status(503).json({ error: timedOut ? "HYDRA-UMC-VOICE-UI timed out" : "HYDRA-UMC-VOICE-UI is unavailable" });
+    }
+  });
+
+  // The confirmation of a spoken request that needed one. Same session, same per-client gate as the turn. The Voice UI is asked to
+  // confirm the token for the signed-in user, and a confirmed answer is believed only when it names that user and, with the shared
+  // key configured, its signature verifies (see voiceConfirm.ts). Non-actuating like the turn: it reports whether the request is
+  // confirmed, it executes nothing, and the answer says whether it was verified.
+  app.post("/api/voice/confirm", authenticate, async (req, res) => {
+    if (!remoteAccessAllowed(realSettings(getSettings()), req.headers["x-hydra-client"] as string | undefined)) {
+      return res.status(404).end();
+    }
+    const invalid = validateConfirmRequest(req.body);
+    if (invalid) return res.status(400).json({ error: invalid });
+    if (!VOICE_UI_URL) {
+      return res.status(503).json({ error: "HYDRA-UMC-VOICE-UI is not configured on this Server" });
+    }
+    const subject = subjectOf((req as any).user);
+    if (!subject) {
+      return res.status(403).json({ error: "this session has no subject a voice confirmation can be bound to" });
+    }
+    try {
+      const upstream = await fetch(`${VOICE_UI_URL}/v1/voice/confirm`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(VOICE_UI_TOKEN ? { authorization: `Bearer ${VOICE_UI_TOKEN}` } : {}),
+        },
+        body: JSON.stringify({ confirmationToken: req.body.confirmationToken, subject }),
+        signal: AbortSignal.timeout(VOICE_UI_TIMEOUT_MS),
+      });
+      const result = await upstream.json().catch(() => null);
+      if (!upstream.ok) {
+        console.warn(`[VOICE] gateway rejected a confirmation status=${upstream.status}`);
+        return res.status(502).json({ error: "HYDRA-UMC-VOICE-UI rejected the confirmation" });
+      }
+      const verdict = judgeConfirmationResult(result, subject);
+      if (!verdict.ok) {
+        console.error(`[VOICE] confirmation refused: ${verdict.error}`);
+        return res.status(verdict.status).json({ error: verdict.error });
+      }
+      // who confirmed what, by request id: neither the token nor the transcript is logged
+      industrialLog(`[VOICE] confirmation user=${subject} requestId=${String(verdict.result.requestId ?? "-")} status=${String(verdict.result.status)} verified=${verdict.verified}`);
+      res.set("Cache-Control", "no-store").json({ ...verdict.result, verified: verdict.verified });
+    } catch (error) {
+      const timedOut = error instanceof DOMException && error.name === "TimeoutError";
+      console.error(`[VOICE] gateway unavailable for a confirmation reason=${timedOut ? "timeout" : "connection"}`);
       res.status(503).json({ error: timedOut ? "HYDRA-UMC-VOICE-UI timed out" : "HYDRA-UMC-VOICE-UI is unavailable" });
     }
   });
