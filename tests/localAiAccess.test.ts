@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { aiAccessAdminOnly, registerLocalAiRoutes } from "../src/routes/localAiRoutes.ts";
+import { aiAccessAdminOnly, isForwardable, READ_ONLY_SERVICE_PATHS, registerLocalAiRoutes } from "../src/routes/localAiRoutes.ts";
 
 function chainFor(deps: { adminOnly?: boolean }) {
   let chain: any[] = [];
@@ -40,4 +40,23 @@ test("the limit can be switched at run time", () => {
   assert.deepEqual(run(chain[1], { role: "operator" }), { status: 200, passed: true });
   adminOnly = true;
   assert.deepEqual(run(chain[1], { role: "operator" }), { status: 403, passed: false });
+});
+
+test("the data lake is reached read-only: a read of a listed path, nothing else", () => {
+  for (const path of READ_ONLY_SERVICE_PATHS.datalake) {
+    assert.equal(isForwardable("datalake", "GET", path), true, path);
+    assert.equal(isForwardable("datalake", "HEAD", path), true, path);
+  }
+  for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+    assert.equal(isForwardable("datalake", method, "/query"), false, method);
+    assert.equal(isForwardable("datalake", method, "/ingest"), false, method);
+  }
+  for (const path of ["/ingest", "/ingest/batch", "/retention", "/retention/apply", "/", "/query/", "/Query", "/query/../retention"]) {
+    assert.equal(isForwardable("datalake", "GET", path), false, path);
+  }
+});
+
+test("the other services are forwarded as they always were", () => {
+  assert.equal(isForwardable("anomaly-detector", "POST", "/detect"), true);
+  assert.equal(isForwardable("vla-engine", "DELETE", "/anything"), true);
 });

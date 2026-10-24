@@ -34,6 +34,7 @@ const ADMIN = { username: "local-ai-proxy-contract-admin", password: "local-ai-p
 // deliberately left unbound to prove the "not running" path.
 const COGNITIVE_NODE_PORT = 8096;
 const VLA_ENGINE_PORT = 8098;
+const DATALAKE_PORT = 8095;
 
 async function reservePort() {
   const listener = createServer();
@@ -88,14 +89,17 @@ async function main() {
   const workspace = await mkdtemp(path.join(tmpdir(), "hydra-umc-server-local-ai-proxy-"));
   const cognitiveNodeStub = startLocalAiStub({ status: 200, body: { model: "cognitive-node-stub", ready: true } });
   const vlaEngineStub = startLocalAiStub({ status: 200, body: { tokens: [1, 2, 3] } });
+  const datalakeStub = startLocalAiStub({ status: 200, body: [{ sourceId: "s", kind: "k", field: "f", timestamp: 1, value: 2 }] });
   cognitiveNodeStub.server.listen(COGNITIVE_NODE_PORT, "127.0.0.1");
   vlaEngineStub.server.listen(VLA_ENGINE_PORT, "127.0.0.1");
-  await Promise.all([once(cognitiveNodeStub.server, "listening"), once(vlaEngineStub.server, "listening")]);
+  datalakeStub.server.listen(DATALAKE_PORT, "127.0.0.1");
+  await Promise.all([once(cognitiveNodeStub.server, "listening"), once(vlaEngineStub.server, "listening"), once(datalakeStub.server, "listening")]);
 
   const serverPort = await reservePort();
   // the tokens this server presents to the services: one in the environment, one in a file (the way the deployment keeps secrets)
   const COGNITIVE_TOKEN = "cognitive-node-token-for-the-contract";
   const VLA_TOKEN = "vla-engine-token-in-a-file-for-contract";
+  const DATALAKE_READ_TOKEN = "datalake-read-token-for-the-contract";
   const vlaTokenFile = path.join(workspace, "vla-engine.token");
   await writeFile(vlaTokenFile, `${VLA_TOKEN}\n`);
   let child;
@@ -114,6 +118,7 @@ async function main() {
         HYDRA_UMC_BOOTSTRAP_ADMIN_PASSWORD: ADMIN.password,
         HYDRA_UMC_COGNITIVE_NODE_TOKEN: COGNITIVE_TOKEN,
         HYDRA_UMC_VLA_ENGINE_TOKEN_FILE: vlaTokenFile,
+        HYDRA_UMC_DATALAKE_READ_TOKEN: DATALAKE_READ_TOKEN,
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -169,6 +174,21 @@ async function main() {
     // ...and the one kept in a file
     assert.equal(vlaEngineStub.seenRequests[0].authorization, `Bearer ${VLA_TOKEN}`);
 
+    // The data lake is reached read-only (the dashboard of the AI summaries reads it through here): a query goes through with the
+    // read token of this server, and anything that would write, delete or reconfigure is refused before it is forwarded.
+    const lakeRead = await fetch(`http://127.0.0.1:${serverPort}/api/ai/datalake/query?sourceId=s&limit=10`, { headers: auth });
+    assert.equal(lakeRead.status, 200);
+    assert.equal((await lakeRead.json())[0].sourceId, "s");
+    assert.equal(datalakeStub.seenRequests.length, 1);
+    assert.equal(datalakeStub.seenRequests[0].pathname, "/query");
+    assert.equal(datalakeStub.seenRequests[0].search, "?sourceId=s&limit=10");
+    assert.equal(datalakeStub.seenRequests[0].authorization, `Bearer ${DATALAKE_READ_TOKEN}`);
+    for (const [method, route] of [["POST", "/ingest"], ["POST", "/retention/apply"], ["DELETE", "/query"], ["GET", "/retention"], ["GET", "/query/../retention"]]) {
+      const refused = await fetch(`http://127.0.0.1:${serverPort}/api/ai/datalake${route}`, { method, headers: { "content-type": "application/json", ...auth }, body: method === "GET" ? undefined : "{}" });
+      assert.equal(refused.status, 403, `${method} ${route}`);
+    }
+    assert.equal(datalakeStub.seenRequests.length, 1, "nothing but the read reached the data lake");
+
     // A real, known service whose own systemd unit simply isn't running
     // right now (nothing bound on its port) - a clean 503, not a hang or
     // an unhandled rejection.
@@ -180,12 +200,13 @@ async function main() {
     const notRunningBody = await notRunning.json();
     assert.equal(notRunningBody.available, false);
 
-    console.log("SERVER_LOCAL_AI_PROXY_CONTRACT=PASS auth=1 unknown_service=1 get_forward=1 post_forward=1 not_running=1 service_tokens=2");
+    console.log("SERVER_LOCAL_AI_PROXY_CONTRACT=PASS auth=1 unknown_service=1 get_forward=1 post_forward=1 not_running=1 service_tokens=2 datalake_read_only=1");
   } catch (error) {
     throw new Error(`${error instanceof Error ? error.message : error}\nServer startup output:\n${logs || "<no output>"}`);
   } finally {
     cognitiveNodeStub.server.close();
     vlaEngineStub.server.close();
+    datalakeStub.server.close();
     if (child && child.exitCode === null) {
       child.kill("SIGTERM");
       await Promise.race([once(child, "exit"), new Promise((resolve) => setTimeout(resolve, 3000))]);

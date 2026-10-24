@@ -23,6 +23,22 @@ export function isWriteToModel(service: string, method: string, upstreamPath: st
   return upstreamPath !== "/detect";
 }
 
+/**
+ * The services that are reached read-only, and the paths a client may ask of them. The data lake also takes writes and deletions
+ * (ingest, retention) from the services that feed it; a signed-in user of the dashboard has no business sending those through
+ * this relay, so everything but a read of the listed paths is refused before it is forwarded.
+ */
+export const READ_ONLY_SERVICE_PATHS: Readonly<Record<string, readonly string[]>> = {
+  datalake: ["/health", "/query", "/aggregate", "/stats", "/stats/range", "/series"],
+};
+
+/** Is this request allowed to go to the service? Services not in READ_ONLY_SERVICE_PATHS are forwarded as they always were. */
+export function isForwardable(service: string, method: string, upstreamPath: string): boolean {
+  const allowed = READ_ONLY_SERVICE_PATHS[service];
+  if (!allowed) return true;
+  return (method === "GET" || method === "HEAD") && allowed.includes(upstreamPath);
+}
+
 export function registerLocalAiRoutes(app: express.Express, deps: { authenticate: Middleware; requireAdmin?: Middleware; requireOperator?: Middleware; adminOnly?: boolean | (() => boolean); env?: NodeJS.ProcessEnv }): void {
   const { authenticate, requireAdmin, requireOperator } = deps;
   const isAdminOnly = () => (typeof deps.adminOnly === "function" ? deps.adminOnly() : deps.adminOnly === true);
@@ -58,6 +74,8 @@ export function registerLocalAiRoutes(app: express.Express, deps: { authenticate
     "vla-engine": 8098,
     "vision-node": 8094,
     "anomaly-detector": 8097,
+    // the data lake behind the dashboard of the AI summaries: reads only (see READ_ONLY_SERVICE_PATHS)
+    datalake: 8095,
   };
 
   app.all("/api/ai/:service/*rest", authenticate, aiAccess, async (req, res) => {
@@ -69,6 +87,9 @@ export function registerLocalAiRoutes(app: express.Express, deps: { authenticate
     }
     const restSegments = req.params.rest;
     const upstreamPath = "/" + (Array.isArray(restSegments) ? restSegments.join("/") : String(restSegments ?? ""));
+    if (!isForwardable(req.params.service, req.method, upstreamPath)) {
+      return res.status(403).json({ error: `Access denied: '${req.params.service}' is reached read-only through this server (${READ_ONLY_SERVICE_PATHS[req.params.service].join(", ")})` });
+    }
     if (isWriteToModel(req.params.service, req.method, upstreamPath) && (req as any).user?.role !== "admin") {
       return res.status(403).json({ error: "Access denied: changing the baseline of the anomaly detector needs administrator privileges" });
     }

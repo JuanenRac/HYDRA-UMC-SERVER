@@ -115,6 +115,25 @@ echo "========================================"
 mkdir -p "$SCRIPT_DIR/public/admin"
 cp -r "$SCRIPT_DIR/admin-ui/dist/." "$SCRIPT_DIR/public/admin/"
 
+# The dashboard of the AI summaries (HYDRA-UMC-DASHBOARD-AI), when it is checked out next to this repo: served at /dashboard-ai, behind the
+# sessions and roles of this server. It is optional; without it nothing is served there.
+DASHBOARD_AI_DIR="$SCRIPT_DIR/../HYDRA-UMC-DASHBOARD-AI"
+if [ -d "$DASHBOARD_AI_DIR" ]; then
+  echo "========================================"
+  echo " Building HYDRA-UMC-DASHBOARD-AI ($DASHBOARD_AI_DIR)"
+  echo "========================================"
+  (cd "$DASHBOARD_AI_DIR" && npm install && npm run build)
+  if [ $? -ne 0 ]; then
+    echo ""
+    echo "DASHBOARD-AI build FAILED."
+    exit 1
+  fi
+  mkdir -p "$SCRIPT_DIR/public/dashboard-ai"
+  cp -r "$DASHBOARD_AI_DIR/dist/." "$SCRIPT_DIR/public/dashboard-ai/"
+else
+  echo "HYDRA-UMC-DASHBOARD-AI not found next to this repo - the AI dashboard is not served at /dashboard-ai."
+fi
+
 echo ""
 echo "Done - this server will now serve STUDIO's frontend at \"/\" and its"
 echo "own admin UI at \"/admin\" the next time it starts (npm run dev /"

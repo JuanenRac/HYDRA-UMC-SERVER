@@ -105,6 +105,16 @@ export function registerStaticRoutes(app: express.Express, deps: { dataPath: str
     console.log("[STARTUP] No public/ directory - running headless (no frontend served at \"/\"). Run build-frontend.sh/.bat to enable it.");
   }
 
+  // The dashboard of the AI summaries (HYDRA-UMC-DASHBOARD-AI) behind this server: its built bundle is served at /dashboard-ai, and the
+  // page talks to the data lake and the anomaly detector only through /api/ai/*, with the session of the person who signed in to STUDIO
+  // here (same origin), so the roles and the Bearer tokens of this server apply. The folder is the build output of that project
+  // (build-frontend copies it in); without it nothing is served.
+  const dashboardAiPath = path.join(process.cwd(), "public", "dashboard-ai");
+  if (fs.existsSync(dashboardAiPath)) {
+    app.use("/dashboard-ai", express.static(dashboardAiPath));
+    console.log(`[STARTUP] Serving the AI dashboard from ${dashboardAiPath} (at /dashboard-ai)`);
+  }
+
   // This server's OWN small admin panel (admin-ui/ - device list, log
   // viewer, server config, user management) - a deliberate, narrow
   // exception to "headless, no UI of its own" (see this file's own header

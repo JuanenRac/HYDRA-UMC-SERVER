@@ -135,6 +135,37 @@ echo ========================================
 mkdir "%SCRIPT_DIR%public\admin"
 xcopy "%SCRIPT_DIR%admin-ui\dist\*" "%SCRIPT_DIR%public\admin\" /e /i /y >nul
 
+REM The dashboard of the AI summaries (HYDRA-UMC-DASHBOARD-AI), when it is checked out next to this repo: served at /dashboard-ai, behind the
+REM sessions and roles of this server. It is optional; without it nothing is served there.
+set "DASHBOARD_AI_DIR=%SCRIPT_DIR%..\HYDRA-UMC-DASHBOARD-AI"
+if exist "%DASHBOARD_AI_DIR%\" (
+  echo ========================================
+  echo  Building HYDRA-UMC-DASHBOARD-AI
+  echo ========================================
+  pushd "%DASHBOARD_AI_DIR%"
+  call npm install
+  if errorlevel 1 (
+    popd
+    echo.
+    echo DASHBOARD-AI build FAILED.
+    %KEEP_OPEN%
+    exit /b 1
+  )
+  call npm run build
+  if errorlevel 1 (
+    popd
+    echo.
+    echo DASHBOARD-AI build FAILED.
+    %KEEP_OPEN%
+    exit /b 1
+  )
+  popd
+  mkdir "%SCRIPT_DIR%public\dashboard-ai"
+  xcopy "%DASHBOARD_AI_DIR%\dist\*" "%SCRIPT_DIR%public\dashboard-ai\" /e /i /y >nul
+) else (
+  echo HYDRA-UMC-DASHBOARD-AI not found next to this repo - the AI dashboard is not served at /dashboard-ai.
+)
+
 echo.
 echo Done - this server will now serve STUDIO's frontend at "/" and its own
 echo admin UI at "/admin" the next time it starts (npm run dev / npm start).
