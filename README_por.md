@@ -43,6 +43,19 @@
 | Destino | O Raspberry Pi CM5 de uma célula HYDRA-UMC |
 | Em hardware real | Ainda não: não há registo de execução em hardware real para esta versão |
 
+## 🚦 Estado do projeto
+
+Cada linha é uma parte deste repositório e a luz diz até onde chega hoje. É escrita com o que o repositório consegue demonstrar (testes, compilações, execuções), não com o que está previsto.
+
+🟢 Feito e verificado · 🟡 Funciona, com limites conhecidos · 🟠 Feito a meio ou ainda por verificar · 🔴 Por fazer ou a não funcionar
+
+| Área | Estado | O que significa aqui |
+|---|---|---|
+| Software | 🟡 | Funciona para o seu propósito principal; a verificação de honestidade acima lista o que ainda falta |
+| Testes | 🟢 | 348 testes automáticos, executados a cada alteração |
+| Hardware real | 🔴 | Ainda não: não há registo de execução em hardware real para esta versão |
+| Documentação | 🟢 | README em oito idiomas, verificado contra o manifesto a cada alteração |
+
 ## 🎯 Visão geral
 
 O HYDRA-UMC SERVER é o back-end autónomo que comanda uma célula de microfábrica multirrobô HYDRA-UMC: um motor Node.js/Express + WebSocket que guarda o estado dos robôs, o persiste em disco, autentica cada escrita e difunde atualizações em direto a todos os clientes ligados. Não traz interface de utilizador nem passo de compilação de frontend próprios - é um serviço puramente de API + WebSocket, pensado para correr headless (sem navegador, sem ecrã) na máquina que está fisicamente junto dos robôs (tipicamente um Raspberry Pi CM5).
