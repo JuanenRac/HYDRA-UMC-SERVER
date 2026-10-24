@@ -113,7 +113,14 @@ HYDRA-UMC-SERVER/
 │   ├── kinematics.ts   # 原子的ジョグエンドポイント用の逆運動学ヘルパー
 │   ├── metrics.ts      # GET /metrics を支える —— Prometheus テキスト形式（prom-client）
 │   ├── ble/            # Bluetooth LE サービス:フレーム、ゲートウェイ(コマンド、確認応答、状態)、ヘルパー転送
-│   └── users.ts        # アカウントストア（scrypt パスワードハッシュ化）
+│   ├── users.ts        # アカウントストア（scrypt パスワードハッシュ化）
+│   ├── routes/         # /api ルートを領域別に: 認証、設定、ロボットの予約、コマンド、安全上限、カメラ、Bluetooth、管理、システム、兄弟サービスへの中継、ローカル AI、アシスタント、作業ファイル、電源、情報、静的ファイル
+│   ├── auth.ts, refresh_tokens.ts, secretsPolicy.ts, securityConfig.ts, upstreamAuth.ts # トークン検証、管理者ゲート、レート制限、リフレッシュトークンの保管、本番が署名シークレットと初期パスワードとして受け入れるもの、アクセスオプション、中継先サービスに提示するトークン
+│   ├── claimPolicy.ts, robotEdit.ts, safetyLimits.ts, tableCommand.ts, playback.ts # どのロボットを誰が制御するか、オペレーターが1台のロボットに行う編集、全クライアントが守る上限、1回のリクエストでの XY テーブル移動、サーバーが正とする再生
+│   ├── settingsStore.ts, settingsBackups.ts, transactionalFiles.ts, auditLog.ts, logRotation.ts # ディスク上の設定ファイル、そのバックアップ、複数ファイルのオール・オア・ナッシング書き込み、監査記録、ログローテーション
+│   ├── ws.ts, mqttBridge.ts, mqttStart.ts, telemetryProducer.ts # ライブ接続のハブ (WebSocket)、セルのブローカーへの MQTT ブリッジとその起動、最初のテレメトリ生成元
+│   ├── cameraHealth.ts, cameraProbe.ts, cameraSupervisor.ts, mediaTickets.ts # カメラのストリームが実際にフレームを届けているか、IP カメラの探索と PTZ、ストリームプロセスの監督、カメラ画像用の短命チケット
+│   └── ecosystemStatus.ts, portsRegistry.ts, systemMetrics.ts, runtime.ts, serverPolicy.ts, redaction.ts, bluetooth.ts, upstreamConfig.ts, voiceConfirm.ts # エコシステムの検出と稼働確認、サービスポートの登録簿、ホストのメトリクス、プロセスのランタイム (mDNS、ポート)、純粋なポリシー補助、秘密情報の伏せ字処理、Bluetooth ペアリング補助、上流アドレス、音声リクエストの確認
 ├── admin-ui/            # この本サーバー自身のための独立した Vite/React 管理パネル
 │   │                      （接続デバイス、自身のログファイル、自身の設定、自身のユーザー——
 │   │                      意図的にロボット制御は含まない。それは引き続き STUDIO 専用）
@@ -133,24 +140,29 @@ HYDRA-UMC-SERVER/
 │   ├── CONTRACT_V2.md             # 第 2 契約の設計（ブロック別）
 │   ├── PRODUCTION_BOOTSTRAP.md    # 必須の JWT と初期管理者設定
 │   ├── REMOTE_ACCESS_VPN.md       # 本物のリモートアクセス/VPN デプロイガイド
-│   └── BLE_GATT.md                # Bluetooth LE サービス:キャラクタリスティック、フレーム、コマンド、確認応答
+│   ├── BLE_GATT.md                # Bluetooth LE サービス:キャラクタリスティック、フレーム、コマンド、確認応答
+│   ├── MQTT_BRIDGE.md             # セルのブローカーへの MQTT ブリッジ: モード (既定ではオフ)、トピック、コマンド
+│   └── openapi.json               # HTTP API の OpenAPI 記述 (tools/generate_openapi.mjs が生成)
 ├── images/               # メディアと図版
 ├── systemd/
 │   └── hydra-umc-server.service # CM5 上のローカル systemd ユニット
 ├── tools/
+│   ├── build_test.py            # バージョンを増やさないビルドチェック
 │   ├── ci_validate.py                                   # CI が使用する manifest/CHANGELOG/docs の検証
-│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 実サーバーに対する 25 個の実際の契約/認証否定
-│                                                           チェック（discovery、認証否定、本番ブートストラップ、
-│                                                           ロボットコマンド/所有権、リフレッシュトークン、
-│                                                           音声リレーとその独自のエラーパス、再生、永続化
-│                                                           されたXYテーブル、エコシステムのステータス/
-│                                                           サービス制御、テレメトリリレー、統合の
-│                                                           test-connection、CAN-OTAリレー、ローカルAI
-│                                                           プロキシ、connector-hubリレー）
+│   ├── generate_openapi.mjs, openapi_types.mjs          # ルートから docs/openapi.json を生成し、そこから TypeScript の型を生成
+│   ├── verify_*_contract.mjs, verify_auth_negative.mjs  # 実サーバーに対する 29 個の実際の契約/認証否定
+│   │                                                       チェック（discovery、認証否定、本番ブートストラップ、
+│   │                                                       ロボットコマンド/所有権、リフレッシュトークン、
+│   │                                                       音声リレーとその独自のエラーパス、再生、永続化
+│   │                                                       されたXYテーブル、エコシステムのステータス/
+│   │                                                       サービス制御、テレメトリリレー、統合の
+│   │                                                       test-connection、CAN-OTAリレー、ローカルAI
+│   │                                                       プロキシ、connector-hubリレー）
+│   ├── _doc_policy.py                                   # ファミリー共通のドキュメント規則 (HYDRA-UMC-SDK のコピーで、同期を維持)
+│   ├── _readme_parity.py                                # 8つの README が同じ構造であることの検査 (HYDRA-UMC-SDK のコピーで、同期を維持)
+│   └── hydra_project_tool.py                            # すべてのリポジトリで共通のコマンド: validate、test、ci、version、status、bump
 ├── tests/
-│   └── *.test.ts        # src/serverPolicy.ts と src/kinematics.ts の実際に純粋な関数に対する直接的な
-│                           ユニットテスト（node:test を tsx --test 経由で実行、`npm run test:unit`）-
-│                           サーバーを起動せずインプロセスで実行、上記のエンドツーエンド検証を補完する
+│   └── *.test.ts        # 純粋なモジュールの直接ユニットテスト (tsx --test による node:test、`npm run test:unit`): ポリシー、運動学、予約、安全上限、トークン、シークレット、BLE のフレーミングとゲートウェイ、カメラの健全性と探索、MQTT ブリッジ、テレメトリなど。同一プロセス内でサーバーは起動せず、上の tools/ のエンドツーエンド検査を補完
 ├── monitoring/           # 任意の Prometheus + Grafana スタック —— monitoring/README.md 参照
 ├── scripts/
 │   ├── ble_gatt_helper.py # Bluetooth LE サービスの BlueZ 側(D-Bus)。JSON 行でやり取り

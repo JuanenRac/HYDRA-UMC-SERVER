@@ -198,7 +198,14 @@ HYDRA-UMC-SERVER/
 │   ├── kinematics.ts   # Aide de cinématique inverse pour le point de terminaison atomique de jog
 │   ├── metrics.ts      # Alimente GET /metrics - exposition texte Prometheus (prom-client)
 │   ├── ble/            # Service Bluetooth LE : trames, passerelle (commandes, acquittements, état) et transport de l'assistant
-│   └── users.ts        # Magasin de comptes (hachage de mot de passe scrypt)
+│   ├── users.ts        # Magasin de comptes (hachage de mot de passe scrypt)
+│   ├── routes/         # Les routes /api par domaine : auth, réglages, réservations de robot, commandes, limites de sécurité, caméras, Bluetooth, admin, système, relais vers les services frères, IA locale, assistant, fichiers de travail, alimentation, infos et fichiers statiques
+│   ├── auth.ts, refresh_tokens.ts, secretsPolicy.ts, securityConfig.ts, upstreamAuth.ts # Vérification des jetons, la porte administrateur et les limiteurs de débit ; le magasin de jetons de rafraîchissement ; ce que la production accepte comme secret de signature et premier mot de passe ; les options d'accès ; les jetons présentés aux services relayés
+│   ├── claimPolicy.ts, robotEdit.ts, safetyLimits.ts, tableCommand.ts, playback.ts # Qui contrôle quel robot ; les modifications qu'un opérateur fait sur un robot ; les limites auxquelles tout client est tenu ; le déplacement de la table XY en une requête ; la lecture faisant autorité côté serveur
+│   ├── settingsStore.ts, settingsBackups.ts, transactionalFiles.ts, auditLog.ts, logRotation.ts # Les fichiers de réglages sur disque, leurs sauvegardes, les écritures tout-ou-rien de plusieurs fichiers, l'enregistrement d'audit et la rotation des journaux
+│   ├── ws.ts, mqttBridge.ts, mqttStart.ts, telemetryProducer.ts # Le hub des connexions en direct (WebSocket), le pont MQTT vers le broker de la cellule et son démarrage, et le premier producteur de télémétrie
+│   ├── cameraHealth.ts, cameraProbe.ts, cameraSupervisor.ts, mediaTickets.ts # Si un flux de caméra livre vraiment des images, sondage des caméras IP et PTZ, le superviseur des processus de flux et les tickets de courte durée pour les images de caméra
+│   └── ecosystemStatus.ts, portsRegistry.ts, systemMetrics.ts, runtime.ts, serverPolicy.ts, redaction.ts, bluetooth.ts, upstreamConfig.ts, voiceConfirm.ts # Découverte et vivacité de l'écosystème, le registre des ports de services, les métriques de l'hôte, l'environnement d'exécution du processus (mDNS, port), des aides de politique pures, l'expurgation des secrets, des aides d'appairage Bluetooth, les adresses des services en amont et la confirmation d'une demande vocale
 ├── admin-ui/            # Panneau d'administration Vite/React séparé pour CE serveur lui-même
 │   │                      (appareils connectés, son propre fichier de log, sa propre config, ses
 │   │                      propres utilisateurs - délibérément pas de contrôle robot, réservé à STUDIO)
@@ -218,25 +225,30 @@ HYDRA-UMC-SERVER/
 │   ├── CONTRACT_V2.md             # Conception du second contrat, par blocs
 │   ├── PRODUCTION_BOOTSTRAP.md    # JWT et administrateur initial obligatoires
 │   ├── REMOTE_ACCESS_VPN.md       # Guide réel de déploiement accès distant/VPN
-│   └── BLE_GATT.md                # Service Bluetooth LE : caractéristiques, trames, commandes et acquittements
+│   ├── BLE_GATT.md                # Service Bluetooth LE : caractéristiques, trames, commandes et acquittements
+│   ├── MQTT_BRIDGE.md             # Le pont MQTT vers le broker de la cellule : modes (désactivé par défaut), sujets et commandes
+│   └── openapi.json               # La description OpenAPI de l'API HTTP (générée par tools/generate_openapi.mjs)
 ├── images/               # Médias et diagrammes
 ├── systemd/
 │   └── hydra-umc-server.service # Unité systemd locale sur la CM5
 ├── tools/
+│   ├── build_test.py            # Vérification de build sans versionnage
 │   ├── ci_validate.py                                   # Validation manifest/CHANGELOG/docs utilisée par la CI
-│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 25 vérifications réelles de contrat/auth négative
-│                                                           contre un serveur réel (discovery, auth négative,
-│                                                           bootstrap de production, commandes/propriété
-│                                                           robot, jetons de rafraîchissement, relais vocal +
-│                                                           ses propres chemins d'erreur, playback, table XY
-│                                                           persistée, statut/contrôle des services de
-│                                                           l'écosystème, relais de télémétrie, test-connection
-│                                                           des intégrations, relais CAN-OTA, proxy IA locale,
-│                                                           relais connector-hub)
+│   ├── generate_openapi.mjs, openapi_types.mjs          # Génèrent docs/openapi.json à partir des routes, puis les types TypeScript à partir de celui-ci
+│   ├── verify_*_contract.mjs, verify_auth_negative.mjs  # 29 vérifications réelles de contrat/auth négative
+│   │                                                       contre un serveur réel (discovery, auth négative,
+│   │                                                       bootstrap de production, commandes/propriété
+│   │                                                       robot, jetons de rafraîchissement, relais vocal +
+│   │                                                       ses propres chemins d'erreur, playback, table XY
+│   │                                                       persistée, statut/contrôle des services de
+│   │                                                       l'écosystème, relais de télémétrie, test-connection
+│   │                                                       des intégrations, relais CAN-OTA, proxy IA locale,
+│   │                                                       relais connector-hub)
+│   ├── _doc_policy.py                                   # Règles de documentation partagées par la famille (copie de celle de HYDRA-UMC-SDK, tenue synchronisée)
+│   ├── _readme_parity.py                                # Contrôle que les huit README partagent la même structure (copie de celui de HYDRA-UMC-SDK, tenue synchronisée)
+│   └── hydra_project_tool.py                            # Les mêmes commandes dans chaque dépôt : validate, test, ci, version, status, bump
 ├── tests/
-│   └── *.test.ts        # Tests unitaires directs (node:test via tsx --test, `npm run test:unit`) pour
-│                           les vraies fonctions pures de src/serverPolicy.ts et src/kinematics.ts -
-│                           en process, sans serveur lance, en complement des vérifications ci-dessus
+│   └── *.test.ts        # Tests unitaires directs (node:test via tsx --test, `npm run test:unit`) des modules purs : politique, cinématique, réservations, limites de sécurité, jetons, secrets, trames et passerelle BLE, santé et sondage des caméras, le pont MQTT, télémétrie et plus - dans le même processus, sans lancer de serveur, en complément des contrôles de bout en bout de tools/ ci-dessus
 ├── monitoring/           # Stack Prometheus + Grafana optionnel - voir monitoring/README.md
 ├── scripts/
 │   ├── ble_gatt_helper.py # Le côté BlueZ du service Bluetooth LE (D-Bus), piloté par lignes JSON

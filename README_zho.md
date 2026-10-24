@@ -113,7 +113,14 @@ HYDRA-UMC-SERVER/
 │   ├── kinematics.ts   # 原子点动端点使用的逆运动学辅助工具
 │   ├── metrics.ts      # 支撑 GET /metrics——Prometheus 文本格式输出（prom-client）
 │   ├── ble/            # 蓝牙 LE 服务:帧、网关(命令、确认、状态)与辅助程序传输
-│   └── users.ts        # 账户存储（scrypt 密码哈希）
+│   ├── users.ts        # 账户存储（scrypt 密码哈希）
+│   ├── routes/         # 按领域划分的 /api 路由: 认证、设置、机器人预约、命令、安全限值、摄像头、蓝牙、管理、系统、到同级服务的中继、本地 AI、助手、工作文件、电源、信息和静态文件
+│   ├── auth.ts, refresh_tokens.ts, secretsPolicy.ts, securityConfig.ts, upstreamAuth.ts # 令牌校验、管理员关卡和速率限制器;刷新令牌存储;生产环境接受的签名密钥与首个密码;访问选项;向被中继服务出示的令牌
+│   ├── claimPolicy.ts, robotEdit.ts, safetyLimits.ts, tableCommand.ts, playback.ts # 谁控制哪台机器人;操作员对单台机器人的编辑;所有客户端必须遵守的限值;一次请求完成的 XY 工作台移动;以服务器为准的回放
+│   ├── settingsStore.ts, settingsBackups.ts, transactionalFiles.ts, auditLog.ts, logRotation.ts # 磁盘上的设置文件、其备份、多个文件的全有或全无写入、审计记录与日志轮转
+│   ├── ws.ts, mqttBridge.ts, mqttStart.ts, telemetryProducer.ts # 实时连接中心 (WebSocket)、通往单元代理的 MQTT 桥及其启动,以及第一个遥测生产者
+│   ├── cameraHealth.ts, cameraProbe.ts, cameraSupervisor.ts, mediaTickets.ts # 摄像头流是否真的在送出画面、IP 摄像头探测与 PTZ、流进程监督器,以及摄像头画面的短时效票据
+│   └── ecosystemStatus.ts, portsRegistry.ts, systemMetrics.ts, runtime.ts, serverPolicy.ts, redaction.ts, bluetooth.ts, upstreamConfig.ts, voiceConfirm.ts # 生态系统的发现与存活检测、服务端口注册表、主机指标、进程运行时 (mDNS、端口)、纯策略辅助函数、机密脱敏、蓝牙配对辅助、上游地址以及语音请求的确认
 ├── admin-ui/            # 为本服务器自身独立提供的 Vite/React 管理面板
 │   │                      （已连接设备、自身日志文件、自身配置、自身用户——刻意不包含
 │   │                      机器人控制，那始终仅属于 STUDIO）
@@ -133,22 +140,27 @@ HYDRA-UMC-SERVER/
 │   ├── CONTRACT_V2.md             # 第二版契约的设计（按块）
 │   ├── PRODUCTION_BOOTSTRAP.md    # 必需的 JWT 与初始管理员配置
 │   ├── REMOTE_ACCESS_VPN.md       # 真实的远程访问/VPN 部署指南
-│   └── BLE_GATT.md                # 蓝牙 LE 服务:特征、帧、命令与确认
+│   ├── BLE_GATT.md                # 蓝牙 LE 服务:特征、帧、命令与确认
+│   ├── MQTT_BRIDGE.md             # 通往单元代理的 MQTT 桥: 模式 (默认关闭)、主题与命令
+│   └── openapi.json               # HTTP API 的 OpenAPI 描述 (由 tools/generate_openapi.mjs 生成)
 ├── images/               # 媒体与图示
 ├── systemd/
 │   └── hydra-umc-server.service # CM5 本地 systemd 单元
 ├── tools/
+│   ├── build_test.py            # 不递增版本号的构建检查
 │   ├── ci_validate.py                                   # CI 使用的 manifest/CHANGELOG/docs 校验
-│   └── verify_*_contract.mjs, verify_auth_negative.mjs  # 针对真实服务器的 25 项真实契约/负向认证
-│                                                           检查（discovery、负向认证、生产环境 bootstrap、
-│                                                           机器人指令/所有权、刷新令牌、语音中继及其自身
-│                                                           错误路径、回放、持久化的 XY 表、生态系统状态/
-│                                                           服务控制、遥测中继、集成 test-connection、
-│                                                           CAN-OTA 中继、本地 AI 代理、connector-hub 中继）
+│   ├── generate_openapi.mjs, openapi_types.mjs          # 根据路由生成 docs/openapi.json,并由它生成 TypeScript 类型
+│   ├── verify_*_contract.mjs, verify_auth_negative.mjs  # 针对真实服务器的 29 项真实契约/负向认证
+│   │                                                       检查（discovery、负向认证、生产环境 bootstrap、
+│   │                                                       机器人指令/所有权、刷新令牌、语音中继及其自身
+│   │                                                       错误路径、回放、持久化的 XY 表、生态系统状态/
+│   │                                                       服务控制、遥测中继、集成 test-connection、
+│   │                                                       CAN-OTA 中继、本地 AI 代理、connector-hub 中继）
+│   ├── _doc_policy.py                                   # 家族共享的文档规则 (HYDRA-UMC-SDK 的副本,保持同步)
+│   ├── _readme_parity.py                                # 检查八个 README 结构一致 (HYDRA-UMC-SDK 的副本,保持同步)
+│   └── hydra_project_tool.py                            # 每个仓库相同的命令: validate、test、ci、version、status、bump
 ├── tests/
-│   └── *.test.ts        # 针对 src/serverPolicy.ts 和 src/kinematics.ts 中真正纯函数的直接单元测试
-│                           (通过 tsx --test 运行 node:test,即 `npm run test:unit`)——在进程内运行,
-│                           不启动真实服务器,是对上面端到端检查的补充
+│   └── *.test.ts        # 对纯模块的直接单元测试 (通过 tsx --test 运行 node:test,`npm run test:unit`): 策略、运动学、预约、安全限值、令牌、密钥、BLE 分帧与网关、摄像头健康与探测、MQTT 桥、遥测等 - 在进程内运行、不启动服务器,补充上面 tools/ 的端到端检查
 ├── monitoring/           # 可选的 Prometheus + Grafana 技术栈——见 monitoring/README.md
 ├── scripts/
 │   ├── ble_gatt_helper.py # 蓝牙 LE 服务的 BlueZ 端(D-Bus),通过 JSON 行通信
