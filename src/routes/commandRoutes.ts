@@ -61,6 +61,9 @@ const KNOWN_COMMANDS = new Set([
   "valve", "pump", "speed", "trajectory", "vision", "table",
 ]);
 
+/** The commands the route accepts (the Bluetooth service lets a phone send only these). */
+export const ROBOT_COMMANDS: ReadonlySet<string> = KNOWN_COMMANDS;
+
 /**
  * The value of the `command` label of hydra_robot_commands_total: the command itself when it is one of the
  * closed list above, "unknown" for anything else. The label never carries text chosen by a client, so a

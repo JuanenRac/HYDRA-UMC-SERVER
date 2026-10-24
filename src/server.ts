@@ -32,16 +32,18 @@ import { registerSystemRoutes } from "./routes/systemRoutes";
 import { registerAdminRoutes } from "./routes/adminRoutes";
 import { registerCameraRoutes } from "./routes/cameraRoutes";
 import { registerRobotRoutes } from "./routes/robotRoutes";
-import { registerCommandRoutes } from "./routes/commandRoutes";
+import { registerCommandRoutes, ROBOT_COMMANDS } from "./routes/commandRoutes";
 import { registerUpstreamRoutes } from "./routes/upstreamRoutes";
-import { realSettings, wsQueryTokenAllowed } from "./serverPolicy";
+import { realSettings, redactSettingsSecrets, wsQueryTokenAllowed } from "./serverPolicy";
 import { ensureSeedUser, findUser, verifyPassword } from "./users";
 import { pruneExpiredRefreshTokens } from "./refresh_tokens";
 import { SafetyLimits, JogArming } from "./safetyLimits";
 import { registerSafetyRoutes } from "./routes/safetyRoutes";
 import { listClaims } from "./claimPolicy";
 import { AuditLog, auditOptionsFromEnv } from "./auditLog";
-import { SecurityConfig, certFingerprint, resolveTls, securityEnvFrom } from "./securityConfig";
+import { SecurityConfig, certFingerprint, resolveBleMode, resolveTls, securityEnvFrom } from "./securityConfig";
+import { startBle } from "./ble/start";
+import type { BleGateway } from "./ble/bleGateway";
 import { cameraAuthRequiredByDefault, issueMediaTicket, mediaTicketKey, verifyMediaTicket } from "./mediaTickets";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerSettingsRoutes } from "./routes/settings";
@@ -216,7 +218,13 @@ async function startServer() {
     telemetryProducer.start();
     console.log("[STARTUP] Sending robot telemetry to the collector (HYDRA_UMC_TELEMETRY_COLLECTOR_URL)");
   }
-  const hub = createWsHub({ setSettings, onRobotDelta: telemetryProducer ? (deltas) => telemetryProducer.record(deltas) : undefined });
+  // Off unless an administrator (or HYDRA_UMC_BLE_GATT) turns the Bluetooth LE service on: then the phones near the CM5 get the state and, in "commands" mode, may send commands.
+  let bleGateway: BleGateway | null = null;
+  const hub = createWsHub({
+    setSettings,
+    onRobotDelta: telemetryProducer ? (deltas) => telemetryProducer.record(deltas) : undefined,
+    onStateChanged: () => bleGateway?.publishState(),
+  });
   const { wsClients, broadcastSettings, broadcastRobotDelta } = hub;
 
   const playback = createPlayback({ getSettings, queueSettingsWrite, broadcastRobotDelta });
@@ -271,10 +279,11 @@ async function startServer() {
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
     save: (file) => {
-      const { aiAccess, infoAuth, tls } = file;
-      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls });
+      const { aiAccess, infoAuth, tls, ble } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble });
     },
     tlsActive: startupTls.enabled,
+    bleActiveMode: resolveBleMode(securityEnvFrom(process.env).bleGatt, loadServerConfig()).value,
     log: industrialLog,
   });
 
@@ -411,6 +420,19 @@ async function startServer() {
     industrialLog(` STATUS: Running on port ${PORT} (${tlsEnabled ? "HTTPS/WSS" : "HTTP/WS"})`);
     industrialLog(` DISCOVERY: Active (mDNS + ${tlsEnabled ? "HTTPS + WSS" : "HTTP + WS"})`);
     industrialLog(`=================================================`);
+    const ble = security.ble();
+    void startBle({
+      mode: ble.mode,
+      requireEncryption: ble.requireEncryption,
+      file: ble.file,
+      port: PORT,
+      tls: tlsEnabled,
+      getState: () => redactSettingsSecrets(getSettings()),
+      allowedCommands: ROBOT_COMMANDS,
+      log: industrialLog,
+    }).then((gateway) => {
+      bleGateway = gateway;
+    });
   });
 
   // Graceful shutdown: a
@@ -434,6 +456,7 @@ async function startServer() {
     // this app entirely) and keep holding the real camera device open,
     // so a fresh server start can't reopen it either.
     for (const key of cameraProcesses.keys()) stopCameraProcess(key);
+    void bleGateway?.stop().catch(() => undefined);
     closeLog();
     httpServer.close(() => process.exit(0));
     // httpServer.close() waits for in-flight HTTP requests but not for

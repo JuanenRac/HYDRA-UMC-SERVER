@@ -131,7 +131,7 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
       saveServerConfig({ ...loadServerConfig(), port: portNum });
     }
     let security_result: ReturnType<SecurityConfig["update"]> | undefined;
-    const wantsSecurity = req.body && (req.body.aiAccess !== undefined || req.body.infoAuth !== undefined || req.body.tls !== undefined);
+    const wantsSecurity = req.body && (req.body.aiAccess !== undefined || req.body.infoAuth !== undefined || req.body.tls !== undefined || req.body.ble !== undefined);
     if (wantsSecurity) {
       try {
         security_result = security.update(req.body, String((req as any).user?.username ?? "admin"));

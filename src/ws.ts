@@ -18,8 +18,10 @@ export function createWsHub(deps: {
   setSettings: (payload: any) => void;
   /** Told of every robot delta right after it is broadcast (the telemetry producer records its numbers). A failure here never reaches the command. */
   onRobotDelta?: (deltas: { controllerId: string; robotId: number; patch: Record<string, unknown> }[]) => void;
+  /** Told after any change of the state that was broadcast (the Bluetooth service publishes it to the phones). A failure here never reaches the write. */
+  onStateChanged?: () => void;
 }) {
-  const { setSettings, onRobotDelta } = deps;
+  const { setSettings, onRobotDelta, onStateChanged } = deps;
   // Every open WebSocket client (the browser UI itself, plus any remote
   // clients - HYDRA-UMC SUITE, the mobile control apps) - broadcastSettings()
   // pushes to all of them on every write, whichever path (REST POST or a
@@ -57,6 +59,11 @@ export function createWsHub(deps: {
     }
     const newServerName = realSettings(payload)?.serverName;
     if (newServerName) setupDiscovery(newServerName);
+    try {
+      onStateChanged?.();
+    } catch {
+      // publishing to the phones must never break a write
+    }
   }
 
   /**
@@ -104,6 +111,11 @@ export function createWsHub(deps: {
     } catch {
       // recording telemetry must never break a command
     }
+    try {
+      onStateChanged?.();
+    } catch {
+      // publishing to the phones must never break a command
+    }
   }
 
   /**
@@ -114,6 +126,11 @@ export function createWsHub(deps: {
     const msg = JSON.stringify({ type: "claims", schema: 2, claims });
     for (const client of wsClients) {
       if (client.readyState === WebSocket.OPEN && (client as any).schema >= 2) client.send(msg);
+    }
+    try {
+      onStateChanged?.();
+    } catch {
+      // publishing to the phones must never break a claim
     }
   }
 

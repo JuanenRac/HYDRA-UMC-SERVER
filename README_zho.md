@@ -38,7 +38,7 @@
 |---|---|
 | 版本 | `0.8.1.1` |
 | 成熟度 | 可用 |
-| 测试 | 273 (`npm run test:unit`) |
+| 测试 | 348 (`npm run test:unit`) |
 | 技术栈 | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | 目标 | HYDRA-UMC 工作单元的 Raspberry Pi CM5 |
 | 真实硬件 | 尚未：此版本没有在真实硬件上运行的记录 |
@@ -74,6 +74,7 @@ HYDRA-UMC SERVER 是驱动 HYDRA-UMC 多机器人微工厂单元的独立后端�
 - `/api/*` 下的 REST API——设置读写、原子化机器人指令（点动/播放/暂停/停止/工具/阀门/泵/速度/视觉）、账户管理、工作文件上传/下载、模型提交、系统指标、发现服务。
 - 单一的 `/ws` WebSocket 端点（承载令牌通过 `hydra.bearer` 子协议传递，查询字符串中的令牌会被拒绝，除非安装方重新允许），在状态发生变化时向所有已连接客户端广播完整树形的 `settings` 快照及更轻量的 `delta` 更新。
 - `POST /api/stop-all` 是全局停止:一次调用,向任何已登录账户开放,无论预约如何,都会停止所有机器人并关闭所有阀门和泵,并为每个机器人返回一个结果。
+- 蓝牙 LE(默认关闭):CM5 附近的手机可以读取机器人状态,并在管理员允许时发送命令;服务器只有在网络客户端所用的同一路由作出响应之后才会确认。详见 [`docs/BLE_GATT.md`](docs/BLE_GATT.md)。
 - 每次写入均需 JWT 承载令牌身份验证；两种账户角色（`admin`、`operator`）分别控制设置/用户管理写入与日常机器人操作的权限。
 - `_hydra._tcp` mDNS/Bonjour 广播，实现局域网内零配置发现，另配有一个纯粹的 `GET /api/hydra-info` 供子网扫描使用。
 - `GET /metrics`——Prometheus 导出格式（`prom-client`），供下文“📊 监控”一节所述的可选 Grafana 仪表盘使用。
@@ -98,6 +99,7 @@ HYDRA-UMC-SERVER/
 │   ├── server.ts       # 精简的启动文件，把下列模块连接起来；/api 路由在 src/routes/，实时连接在 ws.ts，设置文件在 settingsStore.ts
 │   ├── kinematics.ts   # 原子点动端点使用的逆运动学辅助工具
 │   ├── metrics.ts      # 支撑 GET /metrics——Prometheus 文本格式输出（prom-client）
+│   ├── ble/            # 蓝牙 LE 服务:帧、网关(命令、确认、状态)与辅助程序传输
 │   └── users.ts        # 账户存储（scrypt 密码哈希）
 ├── admin-ui/            # 为本服务器自身独立提供的 Vite/React 管理面板
 │   │                      （已连接设备、自身日志文件、自身配置、自身用户——刻意不包含
@@ -117,7 +119,8 @@ HYDRA-UMC-SERVER/
 │   ├── REMOTE_API.md              # 完整契约：路由、WS 协议、身份验证
 │   ├── CONTRACT_V2.md             # 第二版契约的设计（按块）
 │   ├── PRODUCTION_BOOTSTRAP.md    # 必需的 JWT 与初始管理员配置
-│   └── REMOTE_ACCESS_VPN.md       # 真实的远程访问/VPN 部署指南
+│   ├── REMOTE_ACCESS_VPN.md       # 真实的远程访问/VPN 部署指南
+│   └── BLE_GATT.md                # 蓝牙 LE 服务:特征、帧、命令与确认
 ├── images/               # 媒体与图示
 ├── systemd/
 │   └── hydra-umc-server.service # CM5 本地 systemd 单元
@@ -135,6 +138,7 @@ HYDRA-UMC-SERVER/
 │                           不启动真实服务器,是对上面端到端检查的补充
 ├── monitoring/           # 可选的 Prometheus + Grafana 技术栈——见 monitoring/README.md
 ├── scripts/
+│   ├── ble_gatt_helper.py # 蓝牙 LE 服务的 BlueZ 端(D-Bus),通过 JSON 行通信
 │   └── bump-version.mjs # 里程表式版本递增（仅由显式 `bump` 命令运行）
 ├── bump_manifest_version.py # 将 hydra-umc.project.json 的版本与原生版本同步（--sync）
 ├── build.bat / build.sh # 安装依赖 + 生产构建
@@ -175,6 +179,7 @@ npm install
 - `TLS_CERT_PATH` / `TLS_KEY_PATH`——**两者均**设置后，可将服务器（REST API + 共享同一监听器的 `/ws` WebSocket）从纯 HTTP/WS 切换为 HTTPS/WSS。详见下文“TLS / HTTPS”。任一未设置则保持当前的纯 HTTP 行为不变。
 - `HYDRA_UMC_CAMERA_AUTH`——摄像头画面(实时流、已保存的照片和录像)**默认**要求短时效 `?ticket=`(由 `POST /api/camera/ticket` 发给已登录客户端)或 Bearer 令牌;`HYDRA_UMC_CAMERA_AUTH=open` 是供尚未请求票据的客户端使用的临时退路。
 - `HYDRA_UMC_WS_QUERY_TOKEN`——`/ws?token=` **默认被拒绝**(令牌以 `hydra.bearer` 子协议传递);`HYDRA_UMC_WS_QUERY_TOKEN=allow` 是供尚未迁移的客户端使用的临时退路。只要设置了退路,服务器每次启动都会发出警告。
+- `HYDRA_UMC_BLE_GATT`——蓝牙 LE 服务:`off`(默认)、`state`(手机读取状态)或 `commands`(并发送命令,每条命令都带有账户的访问令牌)。`HYDRA_UMC_BLE_ENCRYPTION=off` 不再要求加密链路(默认要求)。两者也可在服务器管理界面中设置;更改在下次启动时生效。主机上需要 BlueZ、`python3-dbus` 和 `python3-gi`。
 - `HYDRA_UMC_INFO_AUTH=required`——要求已登录的客户端才能获取只读的主机信息(`/metrics`、`/api/system/metrics`、`/api/system/supervisor`、`/api/ecosystem/status`、`/api/models`)。默认关闭,以便尚未在这些路由上发送令牌的客户端继续可用;生产环境启动时在关闭期间会发出警告。
 - `HYDRA_UMC_AI_ACCESS=admin` - 将通往本地 AI 服务的中继（`/api/ai/*`）限制为仅管理员可用。默认关闭，因此与以前一样，任何已登录用户都可使用。
 - `HYDRA_UMC_VISUAL_SERVOING_TOKEN`、`HYDRA_UMC_VLA_ENGINE_TOKEN`、`HYDRA_UMC_COGNITIVE_NODE_TOKEN`、`HYDRA_UMC_DETECTION_HEF_TOKEN`、`HYDRA_UMC_VISION_NODE_TOKEN` 和 `HYDRA_UMC_ANOMALY_TOKEN`(用于中继 `/api/ai/*`)、`HYDRA_UMC_VISION_STREAMER_TOKEN`(用于摄像头流)以及 `HYDRA_UMC_DATALAKE_READ_TOKEN`,否则 `HYDRA_UMC_DATALAKE_TOKEN`(用于遥测)——本服务器向要求令牌的服务出示的 Bearer 令牌;每个变量也读取 `..._FILE`,即首行为令牌的文件。它们是各服务自己读取的名称,因此同一个环境文件可同时供两者使用,任何客户端都看不到它们。未配置令牌的服务与以前完全一样地访问。中继还会拒绝既不是管理员也不是操作员的会话,只有管理员才能更改异常检测器的基线(除 `/detect` 之外的任何 `POST`);`vision-node` 和 `anomaly-detector` 加入该中继。

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { SecurityConfig, SecurityConfigError, resolveAiAccess, resolveInfoAuth, resolveTls, type SecurityFile } from "../src/securityConfig.ts";
+import { SecurityConfig, SecurityConfigError, resolveAiAccess, resolveBleEncryption, resolveBleMode, resolveInfoAuth, resolveTls, type SecurityFile } from "../src/securityConfig.ts";
 
 function makeConfig(env: any = {}, initial: SecurityFile = {}, tlsActive = false) {
   let stored: SecurityFile = { ...initial };
@@ -136,4 +136,60 @@ test("the admin route reads and changes the options and maps errors to statuses"
   const port = call("PUT /api/admin/server-config", { port: 3100 });
   assert.equal(port.payload.appliesOnRestart, true);
   assert.equal(saved.aiAccess, "admin"); // the security choice kept by a port change
+});
+
+test("Bluetooth is off by default and asks for an encrypted link", () => {
+  assert.deepEqual(resolveBleMode(undefined, {}), { value: "off", source: "default" });
+  assert.deepEqual(resolveBleEncryption(undefined, {}), { value: true, source: "default" });
+  assert.deepEqual(makeConfig().config.snapshot().ble, {
+    mode: { value: "off", source: "default" }, requireEncryption: { value: true, source: "default" }, activeMode: "off", appliesOnRestart: false,
+  });
+});
+
+test("the environment wins for Bluetooth and a word it does not know means off", () => {
+  assert.deepEqual(resolveBleMode("commands", { ble: { mode: "off" } }), { value: "commands", source: "env" });
+  assert.deepEqual(resolveBleMode("COMMANDS ", {}), { value: "commands", source: "env" });
+  assert.deepEqual(resolveBleMode("yes", { ble: { mode: "commands" } }), { value: "off", source: "env" });
+  assert.deepEqual(resolveBleMode(undefined, { ble: { mode: "state" } }), { value: "state", source: "config" });
+  assert.deepEqual(resolveBleEncryption("off", { ble: { requireEncryption: true } }), { value: false, source: "env" });
+  assert.deepEqual(resolveBleEncryption("anything", {}), { value: true, source: "env" });
+  assert.deepEqual(resolveBleEncryption(undefined, { ble: { requireEncryption: false } }), { value: false, source: "config" });
+});
+
+test("an administrator can turn Bluetooth on from the app; it applies on the next start", () => {
+  const { config, logs, stored } = makeConfig({}, { aiAccess: "admin" });
+  const result = config.update({ ble: { mode: "state" } }, "root");
+  assert.equal(result.appliesOnRestart, true);
+  assert.equal(result.snapshot.ble.mode.value, "state");
+  assert.equal(result.snapshot.ble.appliesOnRestart, true, "the running mode is still off");
+  assert.deepEqual(stored().ble, { mode: "state" });
+  assert.equal(stored().aiAccess, "admin", "the other options are kept");
+  assert.match(logs.at(-1)!, /root set Bluetooth to state; it applies on the next start/);
+  assert.deepEqual(result.warnings, []);
+});
+
+test("commands over Bluetooth without an encrypted link warn", () => {
+  const { config, logs } = makeConfig();
+  const result = config.update({ ble: { mode: "commands", requireEncryption: false } }, "root");
+  assert.deepEqual(result.warnings, ["ble_commands_unencrypted"]);
+  assert.match(logs.at(-1)!, /WITHOUT link encryption/);
+  assert.deepEqual(config.update({ ble: { requireEncryption: true } }, "root").warnings, []);
+  assert.deepEqual(config.ble().file, { mode: "commands", requireEncryption: true });
+});
+
+test("bad Bluetooth values are refused, and one fixed by the environment is locked", () => {
+  const { config, stored } = makeConfig();
+  for (const bad of [{ ble: "on" }, { ble: [] }, { ble: { mode: "all" } }, { ble: { requireEncryption: "yes" } }]) {
+    assert.throws(() => config.update(bad, "root"), (error: any) => error instanceof SecurityConfigError && error.status === 400, JSON.stringify(bad));
+  }
+  assert.deepEqual(stored(), {});
+  const locked = makeConfig({ bleGatt: "state", bleEncryption: "required" });
+  assert.throws(() => locked.config.update({ ble: { mode: "off" } }, "root"), (error: any) => error instanceof SecurityConfigError && error.status === 409);
+  assert.throws(() => locked.config.update({ ble: { requireEncryption: false } }, "root"), (error: any) => error instanceof SecurityConfigError && error.status === 409);
+});
+
+test("the tunables of the Bluetooth service stay in the saved file, untouched by a change of mode", () => {
+  const { config, stored } = makeConfig({}, { ble: { name: "Cell 3", commandsPerSecond: 4, helperCommand: "python3" } });
+  config.update({ ble: { mode: "state" } }, "root");
+  assert.deepEqual(stored().ble, { name: "Cell 3", commandsPerSecond: 4, helperCommand: "python3", mode: "state" });
 });

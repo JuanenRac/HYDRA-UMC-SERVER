@@ -36,7 +36,7 @@
 |---|---|
 | Version | `0.8.1.1` |
 | Maturité | Fonctionnel |
-| Tests | 273 (`npm run test:unit`) |
+| Tests | 348 (`npm run test:unit`) |
 | Technologie | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | Cible | Le Raspberry Pi CM5 d'une cellule HYDRA-UMC |
 | Sur matériel réel | Pas encore : aucune exécution sur du matériel réel n'est consignée pour cette version |
@@ -133,6 +133,7 @@ client de HYDRA-UMC STUDIO lui-même. En résumé :
   change.
 - `POST /api/stop-all` est l'arrêt global : un appel, ouvert à tout compte connecté, arrête tous les robots et coupe toutes les vannes et pompes,
   quelle que soit la réservation, et répond un résultat par robot.
+- Bluetooth LE (désactivé par défaut) : un téléphone proche de la CM5 peut lire l'état des robots et, si un administrateur l'autorise, envoyer des commandes que le serveur n'acquitte qu'une fois que la même route qu'utilise un client réseau a répondu. Voir [`docs/BLE_GATT.md`](docs/BLE_GATT.md).
 - Authentification JWT par jeton bearer sur chaque écriture ; deux rôles
   de compte (`admin`, `operator`) filtrent les écritures de
   settings/gestion des utilisateurs par rapport à l'exploitation
@@ -183,6 +184,7 @@ HYDRA-UMC-SERVER/
 │   ├── server.ts       # Démarrage léger qui relie les modules ci-dessous ; les routes /api sont dans src/routes/, les connexions en direct dans ws.ts, les fichiers de réglages dans settingsStore.ts
 │   ├── kinematics.ts   # Aide de cinématique inverse pour le point de terminaison atomique de jog
 │   ├── metrics.ts      # Alimente GET /metrics - exposition texte Prometheus (prom-client)
+│   ├── ble/            # Service Bluetooth LE : trames, passerelle (commandes, acquittements, état) et transport de l'assistant
 │   └── users.ts        # Magasin de comptes (hachage de mot de passe scrypt)
 ├── admin-ui/            # Panneau d'administration Vite/React séparé pour CE serveur lui-même
 │   │                      (appareils connectés, son propre fichier de log, sa propre config, ses
@@ -202,7 +204,8 @@ HYDRA-UMC-SERVER/
 │   ├── REMOTE_API.md              # Contrat complet : routes, protocole WS, auth
 │   ├── CONTRACT_V2.md             # Conception du second contrat, par blocs
 │   ├── PRODUCTION_BOOTSTRAP.md    # JWT et administrateur initial obligatoires
-│   └── REMOTE_ACCESS_VPN.md       # Guide réel de déploiement accès distant/VPN
+│   ├── REMOTE_ACCESS_VPN.md       # Guide réel de déploiement accès distant/VPN
+│   └── BLE_GATT.md                # Service Bluetooth LE : caractéristiques, trames, commandes et acquittements
 ├── images/               # Médias et diagrammes
 ├── systemd/
 │   └── hydra-umc-server.service # Unité systemd locale sur la CM5
@@ -223,6 +226,7 @@ HYDRA-UMC-SERVER/
 │                           en process, sans serveur lance, en complement des vérifications ci-dessus
 ├── monitoring/           # Stack Prometheus + Grafana optionnel - voir monitoring/README.md
 ├── scripts/
+│   ├── ble_gatt_helper.py # Le côté BlueZ du service Bluetooth LE (D-Bus), piloté par lignes JSON
 │   └── bump-version.mjs # Incrément de version type compteur kilométrique (exécuté seulement par la commande `bump` explicite)
 ├── bump_manifest_version.py # Synchronise la version de hydra-umc.project.json avec la version native (--sync)
 ├── build.bat / build.sh # Installe les dépendances + build de production
@@ -308,6 +312,7 @@ menace de "LAN de confiance uniquement" à "accessible par n'importe qui"
   comportement HTTP en clair actuel sans changement.
 - `HYDRA_UMC_CAMERA_AUTH` - les images des caméras (flux en direct, photos et enregistrements sauvegardés) exigent **par défaut** un `?ticket=` de courte durée (`POST /api/camera/ticket` en remet un à un client connecté) ou un jeton Bearer ; `HYDRA_UMC_CAMERA_AUTH=open` est l'issue temporaire pour les clients qui ne demandent pas encore de tickets.
 - `HYDRA_UMC_WS_QUERY_TOKEN` - `/ws?token=` est **refusé par défaut** (le jeton voyage comme sous-protocole `hydra.bearer`) ; `HYDRA_UMC_WS_QUERY_TOKEN=allow` est l'issue temporaire pour les clients qui n'ont pas encore migré. Le serveur avertit à chaque démarrage tant qu'une issue est active.
+- `HYDRA_UMC_BLE_GATT` - le service Bluetooth LE : `off` (par défaut), `state` (les téléphones lisent l'état) ou `commands` (et envoient des commandes, chacune avec le jeton d'accès du compte). `HYDRA_UMC_BLE_ENCRYPTION=off` cesse d'exiger une liaison chiffrée (elle est exigée par défaut). Les deux se règlent aussi depuis l'écran d'administration du serveur ; un changement s'applique au prochain démarrage. Nécessite BlueZ, `python3-dbus` et `python3-gi` sur la machine.
 - `HYDRA_UMC_INFO_AUTH=required` - exige un client connecté pour les informations en lecture seule de la machine (`/metrics`, `/api/system/metrics`, `/api/system/supervisor`, `/api/ecosystem/status`, `/api/models`). Désactivé par défaut pour qu'un client qui n'envoie pas encore son jeton sur ces routes continue de fonctionner ; un démarrage en production avertit tant qu'il est désactivé.
 - `HYDRA_UMC_AI_ACCESS=admin` - réserve aux administrateurs le relais vers les services d'IA locaux (`/api/ai/*`). Désactivé par défaut : tout utilisateur connecté peut l'utiliser, comme avant.
 - `HYDRA_UMC_VISUAL_SERVOING_TOKEN`, `HYDRA_UMC_VLA_ENGINE_TOKEN`, `HYDRA_UMC_COGNITIVE_NODE_TOKEN`, `HYDRA_UMC_DETECTION_HEF_TOKEN`, `HYDRA_UMC_VISION_NODE_TOKEN` et `HYDRA_UMC_ANOMALY_TOKEN` (pour le relais `/api/ai/*`), `HYDRA_UMC_VISION_STREAMER_TOKEN` (pour les flux caméra) et `HYDRA_UMC_DATALAKE_READ_TOKEN`, sinon `HYDRA_UMC_DATALAKE_TOKEN` (pour la télémétrie) - le jeton Bearer que ce serveur présente à un service qui en demande un ; chacune lit aussi `..._FILE`, un fichier dont la première ligne est le jeton. Ce sont les noms que les services lisent eux-mêmes, un seul fichier d'environnement sert donc aux deux, et aucun client ne les voit jamais. Un service sans jeton configuré est joint exactement comme avant. Le relais refuse en outre une session qui n'est ni administrateur ni opérateur, et seul un administrateur peut modifier la base de référence du détecteur d'anomalies (tout `POST` autre que `/detect`) ; `vision-node` et `anomaly-detector` rejoignent le relais.

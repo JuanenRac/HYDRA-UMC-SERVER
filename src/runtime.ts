@@ -42,11 +42,14 @@ if (!fs.existsSync(path.dirname(LOG_FILE))) fs.mkdirSync(path.dirname(LOG_FILE),
 // and is read once at startup rather than kept live in memory throughout.
 const SERVER_CONFIG_FILE = path.join(process.cwd(), "data", "server-config.json");
 
+import type { BleFile } from "./securityConfig";
+
 export interface ServerConfig {
   port?: number;
   aiAccess?: "open" | "admin";
   infoAuth?: boolean;
   tls?: { enabled?: boolean; certPath?: string; keyPath?: string };
+  ble?: BleFile;
 }
 
 export function loadServerConfig(): ServerConfig {

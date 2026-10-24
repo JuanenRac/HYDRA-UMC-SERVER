@@ -37,7 +37,7 @@
 |---|---|
 | Versión | `0.8.1.1` |
 | Madurez | Funcional |
-| Tests | 273 (`npm run test:unit`) |
+| Tests | 348 (`npm run test:unit`) |
 | Tecnología | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | Destino | La Raspberry Pi CM5 de una celda HYDRA-UMC |
 | En hardware real | Todavía no: no consta ninguna ejecución en hardware real para esta versión |
@@ -132,6 +132,7 @@ propio código cliente de HYDRA-UMC STUDIO. En resumen:
   `delta` a cada cliente conectado cuando cambia el estado.
 - `POST /api/stop-all` es la parada global: una llamada, abierta a toda cuenta con sesión, detiene todos los robots y apaga todas las válvulas y bombas
   diga lo que diga cualquier reserva, y responde un resultado por robot.
+- Bluetooth LE (apagado por defecto): un teléfono cerca de la CM5 puede leer el estado de los robots y, cuando un administrador lo permite, enviar órdenes que el servidor acusa solo después de que la misma ruta que usa un cliente de red haya respondido. Véase [`docs/BLE_GATT.md`](docs/BLE_GATT.md).
 - Autenticación JWT por bearer token en cada escritura; dos roles de
   cuenta (`admin`, `operator`) filtran las escrituras de settings/gestión
   de usuarios frente a la operación diaria de robots.
@@ -182,6 +183,7 @@ HYDRA-UMC-SERVER/
 │   ├── server.ts       # Arranque delgado que une los módulos de abajo; las rutas /api están en src/routes/, las conexiones en vivo en ws.ts, los archivos de ajustes en settingsStore.ts
 │   ├── kinematics.ts   # Ayudante de cinemática inversa para el endpoint atómico de jog
 │   ├── metrics.ts      # Respalda GET /metrics - exposición Prometheus en texto (prom-client)
+│   ├── ble/            # Servicio Bluetooth LE: tramas, pasarela (órdenes, acuses, estado) y transporte del ayudante
 │   └── users.ts        # Almacén de cuentas (hash de contraseña scrypt)
 ├── admin-ui/            # Panel de administración Vite/React independiente para ESTE servidor
 │   │                      (dispositivos conectados, su propio log, su propia config, sus propios
@@ -201,7 +203,8 @@ HYDRA-UMC-SERVER/
 │   ├── REMOTE_API.md              # Contrato completo: cada ruta, protocolo WS, auth
 │   ├── CONTRACT_V2.md             # Diseño del segundo contrato, por bloques
 │   ├── PRODUCTION_BOOTSTRAP.md    # JWT y administrador inicial obligatorios
-│   └── REMOTE_ACCESS_VPN.md       # Guía real de despliegue de acceso remoto/VPN
+│   ├── REMOTE_ACCESS_VPN.md       # Guía real de despliegue de acceso remoto/VPN
+│   └── BLE_GATT.md                # Servicio Bluetooth LE: características, tramas, órdenes y acuses
 ├── images/               # Medios y diagramas
 ├── systemd/
 │   └── hydra-umc-server.service # Unidad systemd local en la CM5
@@ -222,6 +225,7 @@ HYDRA-UMC-SERVER/
 │                           en proceso, sin arrancar un servidor, complementando las pruebas end-to-end
 ├── monitoring/           # Stack opcional Prometheus + Grafana - ver monitoring/README.md
 ├── scripts/
+│   ├── ble_gatt_helper.py # El lado BlueZ del servicio Bluetooth LE (D-Bus), con líneas JSON
 │   └── bump-version.mjs # Incremento de versión tipo cuentakilómetros (solo lo ejecuta el comando `bump` explícito)
 ├── bump_manifest_version.py # Sincroniza la versión de hydra-umc.project.json con la nativa (--sync)
 ├── build.bat / build.sh # Instala dependencias + build de producción
@@ -307,6 +311,7 @@ de "solo LAN de confianza" a "alcanzable por cualquiera" (ver
   actual sin cambios.
 - `HYDRA_UMC_CAMERA_AUTH` - las imágenes de las cámaras (streams en vivo, fotos y grabaciones guardadas) exigen **por defecto** un `?ticket=` de vida corta (`POST /api/camera/ticket` lo entrega a un cliente con sesión) o un token Bearer; `HYDRA_UMC_CAMERA_AUTH=open` es la salida temporal para clientes que aún no piden tickets.
 - `HYDRA_UMC_WS_QUERY_TOKEN` - `/ws?token=` se **rechaza por defecto** (el token viaja como subprotocolo `hydra.bearer`); `HYDRA_UMC_WS_QUERY_TOKEN=allow` es la salida temporal para clientes que aún no migraron. El servidor avisa en cada arranque mientras haya una salida activa.
+- `HYDRA_UMC_BLE_GATT` - el servicio Bluetooth LE: `off` (por defecto), `state` (los teléfonos leen el estado) o `commands` (y envían órdenes, cada una con el token de acceso de la cuenta). `HYDRA_UMC_BLE_ENCRYPTION=off` deja de exigir un enlace cifrado (se exige por defecto). Ambos se pueden fijar también desde la pantalla de administración del servidor; un cambio se aplica en el siguiente arranque. Necesita BlueZ, `python3-dbus` y `python3-gi` en el equipo.
 - `HYDRA_UMC_INFO_AUTH=required` - hace que la información de solo lectura del equipo (`/metrics`, `/api/system/metrics`, `/api/system/supervisor`, `/api/ecosystem/status`, `/api/models`) exija un cliente con sesión. Desactivado por defecto para que un cliente que aún no envía su token en esas rutas siga funcionando; un arranque en producción avisa mientras esté desactivado.
 - `HYDRA_UMC_AI_ACCESS=admin` - limita a los administradores el relé hacia los servicios de IA locales (`/api/ai/*`). Desactivado por defecto: cualquier usuario con sesión puede usarlo, como antes.
 - `HYDRA_UMC_VISUAL_SERVOING_TOKEN`, `HYDRA_UMC_VLA_ENGINE_TOKEN`, `HYDRA_UMC_COGNITIVE_NODE_TOKEN`, `HYDRA_UMC_DETECTION_HEF_TOKEN`, `HYDRA_UMC_VISION_NODE_TOKEN` y `HYDRA_UMC_ANOMALY_TOKEN` (para el relay `/api/ai/*`), `HYDRA_UMC_VISION_STREAMER_TOKEN` (para las transmisiones de cámara) y `HYDRA_UMC_DATALAKE_READ_TOKEN`, o si no `HYDRA_UMC_DATALAKE_TOKEN` (para la telemetría) - el token Bearer que este servidor presenta a un servicio que lo pide; cada una lee también `..._FILE`, un fichero cuya primera línea es el token. Son los nombres que leen los propios servicios, así que un único fichero de entorno sirve a ambos, y ningún cliente los ve nunca. Un servicio sin token configurado se alcanza exactamente como antes. El relay rechaza además una sesión que no sea de administrador ni de operador, y solo un administrador puede cambiar la línea base del detector de anomalías (cualquier `POST` que no sea `/detect`); `vision-node` y `anomaly-detector` se suman al relay.
