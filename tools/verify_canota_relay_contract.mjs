@@ -242,14 +242,35 @@ async function main() {
     assert.deepEqual(stub.getLastFirmwareBytes(), realFirmwareBytes,
       "the real firmware bytes were not forwarded byte-for-byte to spi_bridge");
 
+    // The signing fields travel to the flashing service, and a malformed one never does.
+    const signature = "ab".repeat(64);
+    const signedResponse = await fetch(
+      `http://127.0.0.1:${serverPortWithBridge}/api/hardware/canota/flash?tier=1&slot=0&hardware_id=1&version_major=0&version_minor=2&version_patch=3&downgrade_from=0.9.1&signature=${signature.toUpperCase()}`,
+      { method: "POST", headers: { "content-type": "application/octet-stream", ...adminAuth }, body: realFirmwareBytes },
+    );
+    assert.equal(signedResponse.status, 200);
+    const forwarded = stub.seenRequests.filter((line) => line.startsWith("/flash")).pop();
+    assert.match(forwarded, /version_patch=3/);
+    assert.match(forwarded, /downgrade_from=0\.9\.1/);
+    assert.match(forwarded, new RegExp(`signature=${signature}`), "the signature arrives in lower case");
+    const flashesBefore = stub.seenRequests.filter((line) => line.startsWith("/flash")).length;
+    for (const bad of ["signature=zz", `signature=${"a".repeat(127)}`, "downgrade_from=1.2", "downgrade_from=1.2.3;rm", "version_patch=-1"]) {
+      const refused = await fetch(
+        `http://127.0.0.1:${serverPortWithBridge}/api/hardware/canota/flash?tier=1&slot=0&${bad}`,
+        { method: "POST", headers: { "content-type": "application/octet-stream", ...adminAuth }, body: realFirmwareBytes },
+      );
+      assert.equal(refused.status, 400, bad);
+    }
+    assert.equal(stub.seenRequests.filter((line) => line.startsWith("/flash")).length, flashesBefore, "a malformed field never reached the service");
+
     // Give the WS message loop a moment to drain (broadcast happens
     // synchronously per line, but the client-side message handler is
     // still async).
     await new Promise((resolve) => setTimeout(resolve, 200));
-    assert.equal(canotaMessages.length, 3, `expected 3 real progress messages over WS, got: ${JSON.stringify(canotaMessages)}`);
+    assert.ok(canotaMessages.length >= 3, `expected the real progress messages over WS, got: ${JSON.stringify(canotaMessages)}`);
     assert.equal(canotaMessages[canotaMessages.length - 1].phase, "done");
 
-    console.log("SERVER_CANOTA_RELAY_CONTRACT=PASS unconfigured=1 auth=1 admin_gate=1 version=1 flash=1 ws_progress=1");
+    console.log("SERVER_CANOTA_RELAY_CONTRACT=PASS unconfigured=1 auth=1 admin_gate=1 version=1 flash=1 signing=1 ws_progress=1");
   } catch (error) {
     throw new Error(`${error instanceof Error ? error.message : error}\nServer startup output:\n${logs || "<no output>"}`);
   } finally {

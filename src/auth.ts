@@ -10,6 +10,7 @@ import jwt from "jsonwebtoken";
 import { findUser, effectiveTokenVersion, effectiveId, ScryptOverloadError } from "./users";
 import { jwtSecretProblem } from "./secretsPolicy";
 import { authFailuresTotal } from "./metrics";
+import { viewerMayCall } from "./serverPolicy";
 
 export const NODE_ENV = process.env.NODE_ENV || "development";
 
@@ -112,6 +113,11 @@ export function authenticate(req: any, res: any, next: any) {
       });
     }
     req.user = { ...user, role: currentUser.role };
+    // A read-only account reads and nothing else; the role is the live one of the account, never the token's own claim.
+    if (currentUser.role === "viewer" && !viewerMayCall(req.method, req.path ?? req.url)) {
+      authFailuresTotal.inc({ reason: "viewer_read_only" });
+      return res.status(403).json({ error: "Access denied: this account is read-only", code: "VIEWER_READ_ONLY" });
+    }
     next();
   });
 }

@@ -400,3 +400,38 @@ export function wsTokenFromSubprotocol(header: string | string[] | undefined): s
 export function wsQueryTokenAllowed(value: string | undefined): boolean {
   return ["allow", "true", "1", "yes", "on"].includes((value ?? "").trim().toLowerCase());
 }
+
+/**
+ * What a read-only ("viewer") account may call. Reading (GET, HEAD, OPTIONS) is open to it; anything that writes is
+ * refused, except the one call that only reads in substance: the ticket that lets a browser open a camera stream
+ * (POST /api/camera/ticket). Decided by method and path alone, in one place, so a route added later is read-only for
+ * a viewer without having to remember it.
+ */
+export function viewerMayCall(method: string | undefined, path: string | undefined): boolean {
+  const verb = (method ?? "").toUpperCase();
+  if (verb === "GET" || verb === "HEAD" || verb === "OPTIONS") return true;
+  const clean = (path ?? "").split("?")[0].replace(/\/+$/, "");
+  return verb === "POST" && clean === "/api/camera/ticket";
+}
+
+/**
+ * The signing part of a firmware flash request: `signature` (the Ed25519 signature of the image, 128 hexadecimal digits)
+ * and `downgrade_from` (the version installed now, major.minor.patch, asked for when the image is older). Anything else
+ * in those two fields is refused here, before it is put into the address of the request to the flashing service.
+ */
+export function flashSigningQuery(query: Record<string, unknown>): { ok: true; params: Record<string, string> } | { ok: false; error: string } {
+  const params: Record<string, string> = {};
+  const signature = query.signature;
+  if (signature !== undefined) {
+    if (typeof signature !== "string" || !/^[0-9a-fA-F]{128}$/.test(signature)) return { ok: false, error: "signature must be 128 hexadecimal digits" };
+    params.signature = signature.toLowerCase();
+  }
+  const downgrade = query.downgrade_from;
+  if (downgrade !== undefined) {
+    if (typeof downgrade !== "string" || !/^\d{1,5}\.\d{1,5}\.\d{1,5}$/.test(downgrade)) return { ok: false, error: "downgrade_from must be major.minor.patch" };
+    params.downgrade_from = downgrade;
+  }
+  const patch = query.version_patch;
+  if (patch !== undefined && (typeof patch !== "string" || !/^\d{1,5}$/.test(patch))) return { ok: false, error: "version_patch must be a whole number" };
+  return { ok: true, params };
+}

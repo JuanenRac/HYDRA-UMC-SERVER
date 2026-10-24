@@ -28,6 +28,8 @@ import {
   hi3510Action,
   safeIdSegment,
   slugify,
+  viewerMayCall,
+  flashSigningQuery,
 } from "../src/serverPolicy";
 
 test("realSettings", async (t) => {
@@ -319,4 +321,23 @@ test("camera credentials travel in the environment of the child, not in its argu
   assert.deepEqual(plain.extraEnv, {});
   const legacy = cameraSpawnSpec(url, 8100, "off");
   assert.equal(legacy.args.includes(url), true);
+});
+
+test("viewerMayCall: a read-only account reads and asks for a camera ticket, nothing else", () => {
+  for (const method of ["GET", "get", "HEAD", "OPTIONS"]) assert.equal(viewerMayCall(method, "/api/robot/1"), true, method);
+  assert.equal(viewerMayCall("POST", "/api/camera/ticket"), true);
+  assert.equal(viewerMayCall("POST", "/api/camera/ticket/"), true);
+  assert.equal(viewerMayCall("POST", "/api/camera/ticket?x=1"), true);
+  for (const [method, path] of [["POST", "/api/robot/1/command"], ["POST", "/api/stop-all"], ["PUT", "/api/users/a"], ["DELETE", "/api/camera/media/1/x/y"], ["PATCH", "/api/camera/ticket"], ["POST", "/api/camera/ticketx"], [undefined, "/api/x"], ["POST", undefined]] as const) {
+    assert.equal(viewerMayCall(method, path), false, `${method} ${path}`);
+  }
+});
+
+test("flashSigningQuery: only a well formed signature, version patch and installed version go on to the flashing service", () => {
+  const signature = "Ab".repeat(64);
+  assert.deepEqual(flashSigningQuery({}), { ok: true, params: {} });
+  assert.deepEqual(flashSigningQuery({ signature, downgrade_from: "0.9.12", version_patch: "4" }), { ok: true, params: { signature: signature.toLowerCase(), downgrade_from: "0.9.12" } });
+  for (const query of [{ signature: "zz" }, { signature: "a".repeat(127) }, { signature: ["a"] }, { downgrade_from: "1.2" }, { downgrade_from: "1.2.3 " }, { downgrade_from: "a.b.c" }, { version_patch: "-1" }, { version_patch: "1e3" }]) {
+    assert.equal(flashSigningQuery(query as any).ok, false, JSON.stringify(query));
+  }
 });

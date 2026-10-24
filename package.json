@@ -10,8 +10,8 @@
     "typecheck": "tsc --noEmit",
     "openapi": "node tools/generate_openapi.mjs",
     "openapi:check": "node tools/generate_openapi.mjs --check",
-    "test:unit": "tsx --test tests/serverPolicy.test.ts tests/secretsPolicy.test.ts tests/mediaTickets.test.ts tests/kinematics.test.ts tests/users.test.ts tests/refreshTokens.test.ts tests/stopAll.test.ts tests/cameraProbe.test.ts tests/cameraHealth.test.ts tests/bluetoothEcosystem.test.ts tests/robotCommand.test.ts tests/robotClaims.test.ts tests/routeAuthScan.test.ts tests/logRotation.test.ts tests/localAiAccess.test.ts tests/securityConfig.test.ts tests/settingsStore.test.ts tests/safetyLimits.test.ts tests/redaction.test.ts tests/contractV2.test.ts tests/portsRegistry.test.ts tests/upstreamAuth.test.ts tests/voiceConfirm.test.ts tests/telemetryProducer.test.ts tests/bleFraming.test.ts tests/bleGateway.test.ts tests/bleHelperTransport.test.ts",
-    "test": "npm run test:unit && npm run openapi:check && node tools/verify_discovery_contract.mjs && node tools/verify_auth_negative.mjs && node tools/verify_route_auth_matrix.mjs && node tools/verify_production_bootstrap_contract.mjs && node tools/verify_robot_command_contract.mjs && node tools/verify_robot_ownership_contract.mjs && node tools/verify_refresh_token_contract.mjs && node tools/verify_voice_relay_contract.mjs && node tools/verify_voice_turn_error_paths_contract.mjs && node tools/verify_server_playback_contract.mjs && node tools/verify_persisted_work_xy_table.mjs && node tools/verify_ecosystem_status_contract.mjs && node tools/verify_ecosystem_service_control_contract.mjs && node tools/verify_telemetry_relay_contract.mjs && node tools/verify_integrations_test_connection_contract.mjs && node tools/verify_canota_relay_contract.mjs && node tools/verify_local_ai_proxy_contract.mjs && node tools/verify_connector_hub_relay_contract.mjs && node tools/verify_supervisor_contract.mjs && node tools/verify_ws_sustained_reconnect_contract.mjs && node tools/verify_bluetooth_contract.mjs && node tools/verify_camera_media_contract.mjs && node tools/verify_hardening_contract.mjs && node tools/verify_global_stop_contract.mjs && node tools/verify_legacy_opt_out_contract.mjs && node tools/verify_telemetry_producer_contract.mjs && node tools/verify_ble_gatt_contract.mjs"
+    "test:unit": "tsx --test tests/serverPolicy.test.ts tests/secretsPolicy.test.ts tests/mediaTickets.test.ts tests/kinematics.test.ts tests/users.test.ts tests/refreshTokens.test.ts tests/stopAll.test.ts tests/cameraProbe.test.ts tests/cameraHealth.test.ts tests/bluetoothEcosystem.test.ts tests/robotCommand.test.ts tests/robotClaims.test.ts tests/routeAuthScan.test.ts tests/logRotation.test.ts tests/localAiAccess.test.ts tests/securityConfig.test.ts tests/settingsStore.test.ts tests/safetyLimits.test.ts tests/redaction.test.ts tests/contractV2.test.ts tests/portsRegistry.test.ts tests/upstreamAuth.test.ts tests/voiceConfirm.test.ts tests/robotEdit.test.ts tests/mqttBridge.test.ts tests/telemetryProducer.test.ts tests/bleFraming.test.ts tests/bleGateway.test.ts tests/bleHelperTransport.test.ts",
+    "test": "npm run test:unit && npm run openapi:check && node tools/verify_discovery_contract.mjs && node tools/verify_auth_negative.mjs && node tools/verify_route_auth_matrix.mjs && node tools/verify_production_bootstrap_contract.mjs && node tools/verify_robot_command_contract.mjs && node tools/verify_robot_ownership_contract.mjs && node tools/verify_refresh_token_contract.mjs && node tools/verify_voice_relay_contract.mjs && node tools/verify_voice_turn_error_paths_contract.mjs && node tools/verify_server_playback_contract.mjs && node tools/verify_persisted_work_xy_table.mjs && node tools/verify_ecosystem_status_contract.mjs && node tools/verify_ecosystem_service_control_contract.mjs && node tools/verify_telemetry_relay_contract.mjs && node tools/verify_integrations_test_connection_contract.mjs && node tools/verify_canota_relay_contract.mjs && node tools/verify_local_ai_proxy_contract.mjs && node tools/verify_connector_hub_relay_contract.mjs && node tools/verify_supervisor_contract.mjs && node tools/verify_ws_sustained_reconnect_contract.mjs && node tools/verify_bluetooth_contract.mjs && node tools/verify_camera_media_contract.mjs && node tools/verify_hardening_contract.mjs && node tools/verify_global_stop_contract.mjs && node tools/verify_legacy_opt_out_contract.mjs && node tools/verify_telemetry_producer_contract.mjs && node tools/verify_ble_gatt_contract.mjs && node tools/verify_viewer_role_contract.mjs"
   },
   "dependencies": {
     "bonjour-service": "^1.3.0",
@@ -19,6 +19,7 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.6.2",
     "jsonwebtoken": "^9.0.2",
+    "mqtt": "^5.16.1",
     "prom-client": "^15.1.3",
     "ws": "^8.21.3"
   },
@@ -28,6 +29,7 @@
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^24.13.3",
     "@types/ws": "^8.18.1",
+    "aedes": "^1.2.0",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.12",
     "typescript": "~6.0.2"

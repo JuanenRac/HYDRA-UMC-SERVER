@@ -4,10 +4,10 @@
 // GPL-3.0 - see LICENSE
 //
 // Real multi-user accounts, replacing a single hardcoded "demo"/"demo"
-// login every server in this ecosystem would otherwise ship with. Two
+// login every server in this ecosystem would otherwise ship with. Three
 // roles: "admin" (full access - settings writes, user
-// management, robot commands) and "operator" (robot commands only, no
-// settings overwrite, no user management) - see server.ts's own
+// management, robot commands), "operator" (robot commands only, no
+// settings overwrite, no user management) and "viewer" (read only) - see server.ts's own
 // requireAdmin() for exactly which routes need which.
 //
 // Passwords are never stored in plaintext - scrypt (Node's own built-in
@@ -24,7 +24,12 @@ import path from "path";
 import crypto from "crypto";
 import { bootstrapPasswordProblem, MIN_PASSWORD_LENGTH } from "./secretsPolicy";
 
-export type UserRole = "admin" | "operator";
+// "viewer" is a read-only account (a poller, a wall display): it reads the state and the media and changes nothing; see viewerMayCall() in
+// serverPolicy.ts, which authenticate() applies to every request of such an account.
+export type UserRole = "admin" | "operator" | "viewer";
+
+export const USER_ROLES: readonly UserRole[] = ["admin", "operator", "viewer"];
+export const isUserRole = (value: unknown): value is UserRole => typeof value === "string" && (USER_ROLES as readonly string[]).includes(value);
 
 export interface StoredUser {
   username: string;

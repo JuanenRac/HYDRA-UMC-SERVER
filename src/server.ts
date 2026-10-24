@@ -42,6 +42,8 @@ import { registerSafetyRoutes } from "./routes/safetyRoutes";
 import { listClaims } from "./claimPolicy";
 import { AuditLog, auditOptionsFromEnv } from "./auditLog";
 import { SecurityConfig, certFingerprint, resolveBleMode, resolveTls, securityEnvFrom } from "./securityConfig";
+import { resolveMqttMode, type MqttBridge } from "./mqttBridge";
+import { startMqttBridge } from "./mqttStart";
 import { startBle } from "./ble/start";
 import type { BleGateway } from "./ble/bleGateway";
 import { cameraAuthRequiredByDefault, issueMediaTicket, mediaTicketKey, verifyMediaTicket } from "./mediaTickets";
@@ -220,10 +222,12 @@ async function startServer() {
   }
   // Off unless an administrator (or HYDRA_UMC_BLE_GATT) turns the Bluetooth LE service on: then the phones near the CM5 get the state and, in "commands" mode, may send commands.
   let bleGateway: BleGateway | null = null;
+  // Off unless an administrator (or HYDRA_UMC_MQTT_BRIDGE) turns the MQTT bridge on: then the robots' state goes to the broker of the cell and, in "commands" mode, a command published there is carried out.
+  let mqttBridge: MqttBridge | null = null;
   const hub = createWsHub({
     setSettings,
     onRobotDelta: telemetryProducer ? (deltas) => telemetryProducer.record(deltas) : undefined,
-    onStateChanged: () => bleGateway?.publishState(),
+    onStateChanged: () => { bleGateway?.publishState(); mqttBridge?.publishState(); },
   });
   const { wsClients, broadcastSettings, broadcastRobotDelta } = hub;
 
@@ -279,11 +283,12 @@ async function startServer() {
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
     save: (file) => {
-      const { aiAccess, infoAuth, tls, ble } = file;
-      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble });
+      const { aiAccess, infoAuth, tls, ble, mqtt } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt });
     },
     tlsActive: startupTls.enabled,
     bleActiveMode: resolveBleMode(securityEnvFrom(process.env).bleGatt, loadServerConfig()).value,
+    mqttActiveMode: resolveMqttMode(securityEnvFrom(process.env).mqtt?.mode, loadServerConfig()).value,
     log: industrialLog,
   });
 
@@ -433,6 +438,15 @@ async function startServer() {
     }).then((gateway) => {
       bleGateway = gateway;
     });
+    mqttBridge = startMqttBridge({
+      settings: security.mqtt(),
+      env: securityEnvFrom(process.env).mqtt ?? {},
+      port: PORT,
+      tls: tlsEnabled,
+      getSettings: () => redactSettingsSecrets(getSettings()),
+      allowedCommands: ROBOT_COMMANDS,
+      log: industrialLog,
+    });
   });
 
   // Graceful shutdown: a
@@ -457,6 +471,7 @@ async function startServer() {
     // so a fresh server start can't reopen it either.
     for (const key of cameraProcesses.keys()) stopCameraProcess(key);
     void bleGateway?.stop().catch(() => undefined);
+    void mqttBridge?.stop().catch(() => undefined);
     closeLog();
     httpServer.close(() => process.exit(0));
     // httpServer.close() waits for in-flight HTTP requests but not for

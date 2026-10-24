@@ -13,6 +13,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import tls from "node:tls";
+import { MQTT_MODES, mqttEnvFrom, resolveMqttMode, resolveMqttSettings, validMqttPrefix, validMqttUrl, type MqttEnv, type MqttFile, type MqttMode, type MqttSettings } from "./mqttBridge";
 
 export type AiAccess = "open" | "admin";
 export type Source = "env" | "config" | "default";
@@ -45,6 +46,8 @@ export interface SecurityFile {
   infoAuth?: boolean;
   tls?: TlsFile;
   ble?: BleFile;
+  /** The bridge to the MQTT broker (src/mqttBridge.ts). */
+  mqtt?: MqttFile;
 }
 
 export interface SecurityEnv {
@@ -54,6 +57,7 @@ export interface SecurityEnv {
   tlsKeyPath?: string;
   bleGatt?: string;
   bleEncryption?: string;
+  mqtt?: MqttEnv;
 }
 
 export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
@@ -64,6 +68,7 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     tlsKeyPath: env.TLS_KEY_PATH,
     bleGatt: env.HYDRA_UMC_BLE_GATT,
     bleEncryption: env.HYDRA_UMC_BLE_ENCRYPTION,
+    mqtt: mqttEnvFrom(env),
   };
 }
 
@@ -153,6 +158,7 @@ export interface SecuritySnapshot {
   infoAuth: { value: boolean; source: Source };
   tls: { enabled: boolean; source: Source; certPath: string | null; keyPath: string | null; fingerprint256: string | null; active: boolean; appliesOnRestart: boolean };
   ble: { mode: { value: BleMode; source: Source }; requireEncryption: { value: boolean; source: Source }; activeMode: BleMode; appliesOnRestart: boolean };
+  mqtt: { mode: { value: MqttMode; source: Source }; url: string; prefix: string; username: string | null; commandUser: string | null; activeMode: MqttMode; appliesOnRestart: boolean };
 }
 
 export interface SecurityConfigOptions {
@@ -164,6 +170,8 @@ export interface SecurityConfigOptions {
   tlsActive: boolean;
   /** The mode the Bluetooth service started with (it changes only on a restart). */
   bleActiveMode?: BleMode;
+  /** The mode the MQTT bridge started with (it changes only on a restart). */
+  mqttActiveMode?: MqttMode;
   log?: (message: string) => void;
 }
 
@@ -194,6 +202,10 @@ export class SecurityConfig {
     };
   }
 
+  mqtt(): MqttSettings {
+    return resolveMqttSettings(this.options.env.mqtt ?? {}, this.file);
+  }
+
   snapshot(): SecuritySnapshot {
     const tls = this.tls();
     return {
@@ -214,13 +226,25 @@ export class SecurityConfig {
         activeMode: this.options.bleActiveMode ?? "off",
         appliesOnRestart: resolveBleMode(this.options.env.bleGatt, this.file).value !== (this.options.bleActiveMode ?? "off"),
       },
+      mqtt: (() => {
+        const settings = this.mqtt();
+        return {
+          mode: { value: settings.mode, source: settings.modeSource },
+          url: redactMqttUrl(settings.url),
+          prefix: settings.prefix,
+          username: settings.username ?? null,
+          commandUser: settings.commandUser ?? null,
+          activeMode: this.options.mqttActiveMode ?? "off",
+          appliesOnRestart: settings.mode !== (this.options.mqttActiveMode ?? "off"),
+        };
+      })(),
     };
   }
 
   /** Applies a change asked for by an administrator; returns the new state and the warnings to show. */
   update(patch: any, actor: string): { snapshot: SecuritySnapshot; warnings: string[]; appliesOnRestart: boolean } {
     const warnings: string[] = [];
-    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined };
+    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined };
     let appliesOnRestart = false;
     const log = this.options.log ?? (() => undefined);
     const lockedBy = (name: string) => new SecurityConfigError(409, `${name} is set in the environment of this server; remove it there to change it here`);
@@ -283,6 +307,43 @@ export class SecurityConfig {
       if (mode === "commands" && !encrypted) warnings.push("ble_commands_unencrypted");
     }
 
+    if (patch.mqtt !== undefined) {
+      const mqttPatch = patch.mqtt;
+      if (typeof mqttPatch !== "object" || mqttPatch === null || Array.isArray(mqttPatch)) throw new SecurityConfigError(400, "mqtt must be an object");
+      const merged: MqttFile = { ...(next.mqtt ?? {}) };
+      const envOf = this.options.env.mqtt ?? {};
+      if (mqttPatch.mode !== undefined) {
+        if (!(MQTT_MODES as readonly unknown[]).includes(mqttPatch.mode)) throw new SecurityConfigError(400, 'mqtt.mode must be "off", "state" or "commands"');
+        if (resolveMqttMode(envOf.mode, this.file).source === "env") throw lockedBy("HYDRA_UMC_MQTT_BRIDGE");
+        merged.mode = mqttPatch.mode;
+      }
+      if (mqttPatch.url !== undefined) {
+        const url = validMqttUrl(mqttPatch.url);
+        if (!url) throw new SecurityConfigError(400, "mqtt.url must be an mqtt://, mqtts://, ws:// or wss:// address");
+        if (isSet(envOf.url)) throw lockedBy("HYDRA_UMC_MQTT_URL");
+        merged.url = url;
+      }
+      if (mqttPatch.prefix !== undefined) {
+        const prefix = validMqttPrefix(mqttPatch.prefix);
+        if (!prefix) throw new SecurityConfigError(400, "mqtt.prefix must be topic levels of letters, digits, . _ - separated by /");
+        if (isSet(envOf.prefix)) throw lockedBy("HYDRA_UMC_MQTT_PREFIX");
+        merged.prefix = prefix;
+      }
+      for (const field of ["username", "commandUser"] as const) {
+        if (mqttPatch[field] !== undefined) {
+          if (typeof mqttPatch[field] !== "string" || mqttPatch[field].length > 128 || /[ -]/.test(mqttPatch[field])) throw new SecurityConfigError(400, `mqtt.${field} must be a short text`);
+          merged[field] = mqttPatch[field].trim();
+        }
+      }
+      next.mqtt = merged;
+      appliesOnRestart = true;
+      const resolved = resolveMqttSettings(envOf, { mqtt: merged });
+      if (resolved.mode === "commands") {
+        if (!resolved.commandUser) throw new SecurityConfigError(400, "mqtt commands need an account to carry them out (mqtt.commandUser, and its password in HYDRA_UMC_MQTT_COMMAND_PASSWORD or HYDRA_UMC_MQTT_COMMAND_PASSWORD_FILE)");
+        warnings.push("mqtt_commands_on");
+      }
+    }
+
     this.options.save(next);
     this.file = next;
     const snapshot = this.snapshot();
@@ -297,7 +358,22 @@ export class SecurityConfig {
     if (patch.ble !== undefined) {
       log(`[SECURITY] ${actor} set Bluetooth to ${snapshot.ble.mode.value}${snapshot.ble.requireEncryption.value ? "" : " WITHOUT link encryption"}; it applies on the next start.`);
     }
+    if (patch.mqtt !== undefined) {
+      log(`[SECURITY] ${actor} set the MQTT bridge to ${snapshot.mqtt.mode.value}${snapshot.mqtt.mode.value === "commands" ? ` (commands carried out as ${snapshot.mqtt.commandUser})` : ""}; it applies on the next start.`);
+    }
     if (patch.tls !== undefined) log(`[SECURITY] ${actor} set TLS to ${snapshot.tls.enabled ? "enabled" : "disabled"}; it applies on the next start.`);
     return { snapshot, warnings, appliesOnRestart };
+  }
+}
+
+/** The address of the broker without a user name or password typed into it. */
+function redactMqttUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.username = "";
+    parsed.password = "";
+    return parsed.toString();
+  } catch {
+    return "";
   }
 }

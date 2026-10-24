@@ -193,3 +193,36 @@ test("the tunables of the Bluetooth service stay in the saved file, untouched by
   config.update({ ble: { mode: "state" } }, "root");
   assert.deepEqual(stored().ble, { name: "Cell 3", commandsPerSecond: 4, helperCommand: "python3", mode: "state" });
 });
+
+test("the MQTT bridge is off by default and an administrator can set it up without any secret in the file", () => {
+  const { config, logs, stored } = makeConfig();
+  assert.equal(config.snapshot().mqtt.mode.value, "off");
+  assert.equal(config.snapshot().mqtt.mode.source, "default");
+  const first = config.update({ mqtt: { mode: "state", url: "mqtts://broker.local:8883", prefix: "plant/cell1", username: "hydra" } }, "root");
+  assert.equal(first.appliesOnRestart, true);
+  assert.deepEqual(stored().mqtt, { mode: "state", url: "mqtts://broker.local:8883", prefix: "plant/cell1", username: "hydra" });
+  assert.equal(config.snapshot().mqtt.prefix, "plant/cell1");
+  assert.equal(config.snapshot().mqtt.activeMode, "off", "the running mode only changes on a restart");
+  assert.equal(config.snapshot().mqtt.appliesOnRestart, true);
+  assert.match(logs.at(-1)!, /root set the MQTT bridge to state/);
+  assert.ok(!JSON.stringify(config.snapshot()).includes("password"));
+});
+
+test("the MQTT commands need the account that carries them out, and bad values are refused", () => {
+  const { config } = makeConfig();
+  assert.throws(() => config.update({ mqtt: { mode: "commands" } }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 400 && /commandUser/.test(e.message));
+  const on = config.update({ mqtt: { mode: "commands", commandUser: "mqtt-bridge" } }, "root");
+  assert.deepEqual(on.warnings, ["mqtt_commands_on"]);
+  for (const bad of [{ mode: "banana" }, { url: "http://x" }, { url: "file:///etc/passwd" }, { prefix: "a/#" }, { prefix: "../x" }, { username: 5 }, { commandUser: "a\nb" }]) {
+    assert.throws(() => config.update({ mqtt: bad }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 400, JSON.stringify(bad));
+  }
+  assert.throws(() => config.update({ mqtt: "state" }, "root"), SecurityConfigError);
+});
+
+test("an MQTT setting fixed in the environment cannot be changed from the app, and the address shows no credentials", () => {
+  const { config } = makeConfig({ mqtt: { mode: "state", url: "mqtt://user:secret@10.0.0.5:1883" } });
+  assert.equal(config.snapshot().mqtt.mode.source, "env");
+  assert.ok(!JSON.stringify(config.snapshot()).includes("secret"));
+  assert.throws(() => config.update({ mqtt: { mode: "off" } }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 409 && /HYDRA_UMC_MQTT_BRIDGE/.test(e.message));
+  assert.throws(() => config.update({ mqtt: { url: "mqtt://other:1883" } }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 409);
+});

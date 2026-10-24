@@ -181,12 +181,20 @@ POST /api/login
   password of fewer than 12 characters, or a `JWT_SECRET` that is an example
   value or has fewer than 32 characters** (see `docs/PRODUCTION_BOOTSTRAP.md`).
   Passwords of accounts created afterwards need at least 8 characters.
-- Two roles: `admin` (full access - can overwrite global settings, manage
-  accounts, and send robot commands) and `operator` (can sign in, read
+- Three roles: `admin` (full access - can overwrite global settings, manage
+  accounts, and send robot commands), `operator` (can sign in, read
   state, and send robot commands via section 2c's atomic endpoint, but
-  gets `403` from `POST /api/settings` and every route in section 2b).
-  Create additional accounts of either role from Config -> Users
-  (admin-only) or via section 2b directly.
+  gets `403` from `POST /api/settings` and every route in section 2b) and
+  `viewer` (read only: it reads the state, the claims, the limits, the
+  camera lists and pictures and asks for a camera ticket, and gets `403`
+  `{ "code": "VIEWER_READ_ONLY" }` from every call that writes - a robot command,
+  the global stop included, a claim, an upload, a settings write). The
+  read-only rule is decided in one place, by method, so a route added later
+  is read-only for a viewer too; it uses the role the account has now, so
+  demoting an account to `viewer` ends what its open session could do on the
+  very next call. The role is meant for pollers and wall displays (the OPC UA
+  server, a monitor). Create additional accounts of any role from Config ->
+  Users (admin-only) or via section 2b directly.
 - The returned token is a JWT signed server-side (`JWT_SECRET` in
   `server.ts`) carrying `{ username, role }`, valid 30 days
   (`JWT_EXPIRES_IN`).
@@ -237,7 +245,7 @@ file-backed (`data/users.json`) store.
 - `GET /api/users` -> `{ "users": [{ "username", "role", "createdAt" }, ...] }`
   (never includes password hashes).
 - `POST /api/users` (body: `{ "username", "password", "role" }`, role
-  `"admin"` or `"operator"`) creates a new account. `400` on a duplicate
+  `"admin"`, `"operator"` or `"viewer"`) creates a new account. `400` on a duplicate
   username or a password under 4 characters.
 - `PUT /api/users/:username` (body: any of `{ "newUsername", "password",
   "role" }`) renames the account, changes its password, and/or changes its
@@ -311,11 +319,36 @@ a separate one.
   persists/broadcasts both the trajectory and its selected source; it
   deliberately does not replace a combined robot's independent Work.
 
+  **The edits of one robot** are commands too, so an `operator` can make them
+  without the settings tree (which only an administrator writes). Each is checked
+  as a whole before anything changes and answers `400` with a `code` when a value
+  is wrong; they follow the claim rule of every command except `stop`, the
+  `If-Match` rule, and are persisted and broadcast as a delta that carries the
+  whole top-level field they set:
+  - `points` `{ "points": [ ... ] }` replaces the recorded points (0 to 10,000,
+    each as in `trajectory`; an empty list clears them). `409` `robot-running`
+    while the robot is playing. Unlike `trajectory` it leaves the playback cursor
+    and the selected Work alone.
+  - `loop` `{ "value": true }` sets `playbackState.isLooping`.
+  - `model` `{ "model": "UR5e (6-DOF)" }` (1 to 64 letters, digits, spaces and
+    `. _ ( ) + - /`; `409` `robot-running` while playing) and `role` `{ "role":
+    "Idle" | "CNC" | "Laser" | "Pnp" | "3D printing" | "Inspection" }`.
+  - `combine` `{ "with": [2, 3] }` sets `combinedWith` of this robot only (ids of
+    other robots of the same controller, at most 8); the claim check covers the old
+    and the new group.
+  - `joints` `{ "joints": { "j1": 0, ..., "j6": 0 } }` sets the six joint values
+    (finite, within +-720); it is a jog for the arming rule (`jog-not-armed` when the
+    installation asks for it).
+  - `xyTableConfig` `{ "enabled"?, "tableSize"?: { "width", "length" },
+    "worldPos"?: { "x", "y" }, "worldRot"?, "renderScale"? }` changes the layout of
+    the XY table and keeps the rest of it; the delta carries the whole `xyTable`.
+  The Bluetooth service and the MQTT bridge never accept these (they stay on the
+  network API).
+
 - `POST /api/stop-all` (no body, no confirmation) is the **global stop**: it stops
   every robot of every controller and switches every valve and pump off, in one call.
-  **Any signed-in account, `admin` or `operator`, may call it** (the role model has no
-  narrower set that still lets every logged-in operator stop; a read-only role added
-  later would not be allowed). A reservation never blocks it - same rule as the
+  **Any signed-in account that can write, `admin` or `operator`, may call it**; a
+  `viewer` gets `403` like from every other write. A reservation never blocks it - same rule as the
   per-robot `"stop"`: the robots reserved by another account are stopped too, and
   each such entry carries `reservedBy`, while the reservation itself is left untouched.
   The in-memory state changes and the playback timers stop before anything is
@@ -582,7 +615,7 @@ process" posture as the Voice UI relay above.
   "firmware_minor" }`. `relay=1` tunnels through the resolved Tier 0/1
   target to reach Tier 2 (the URTC Tool Head) - see `spi_bridge`'s own
   `relay_tunnel.py`.
-- `POST /api/hardware/canota/flash?tier=&slot=&relay=&hardware_id=&version_major=&version_minor=`
+- `POST /api/hardware/canota/flash?tier=&slot=&relay=&hardware_id=&version_major=&version_minor=[&version_patch=][&downgrade_from=x.y.z][&signature=HEX]`
   - **`admin` only** (unlike the read-only version query above - writing
   firmware is exactly the kind of action every other bridge in this
   ecosystem gates more tightly than a read). Body: raw firmware bytes,
@@ -592,7 +625,14 @@ process" posture as the Voice UI relay above.
   "canota_progress", "payload": { "phase", "pages_sent", "pages_total",
   "percent", "error" } }` while the flash is in progress (see section 3).
   This response only reports the final outcome once the cycle ends:
-  `{ "success": bool, "finalPhase" }`.
+  `{ "success": bool, "finalPhase" }`. The bootloaders of the HYDRA-UMC boards
+  accept an image only with the Ed25519 signature of its header and bytes, made
+  where the private key is (`tools/image_header.py sign` in HYDRA-UMC): the
+  request carries it as `signature` (128 hexadecimal digits), the patch of the
+  version as `version_patch`, and an older image than the installed one also
+  `downgrade_from` (the installed `major.minor.patch`). The server checks the
+  shape of the three (`400` `invalid-flash-signature` otherwise) and hands them on; it
+  holds no key.
 
 The Server reads `HYDRA_UMC_SPI_BRIDGE_URL`,
 `HYDRA_UMC_SPI_BRIDGE_TIMEOUT_MS` (version query, default 4000ms) and
@@ -680,6 +720,7 @@ Environment variables, read once at start (see `docs/PRODUCTION_BOOTSTRAP.md`):
 | `HYDRA_UMC_<SERVICE>_TOKEN` (or `..._TOKEN_FILE`) | The Bearer token this server presents to a service that asks for one, never to a client: `HYDRA_UMC_VISUAL_SERVOING_TOKEN`, `HYDRA_UMC_VLA_ENGINE_TOKEN`, `HYDRA_UMC_COGNITIVE_NODE_TOKEN`, `HYDRA_UMC_DETECTION_HEF_TOKEN`, `HYDRA_UMC_VISION_NODE_TOKEN`, `HYDRA_UMC_ANOMALY_TOKEN` (`/api/ai/*`), `HYDRA_UMC_VISION_STREAMER_TOKEN` (the camera streams), `HYDRA_UMC_DATALAKE_READ_TOKEN` else `HYDRA_UMC_DATALAKE_TOKEN` (the telemetry). The names the services read themselves; `..._FILE` names a file whose first line is the token. None configured sends no header, as before. |
 | `/dashboard-ai` and `/api/ai/datalake/*` | The AI dashboard (HYDRA-UMC-DASHBOARD-AI, copied to `public/dashboard-ai/` by `build-frontend`) is served at `/dashboard-ai`. It reads through `/api/ai/*` with the session of the person signed in to STUDIO. The data lake is reached read-only there: `GET`/`HEAD` of `/health`, `/query`, `/aggregate`, `/stats`, `/stats/range` and `/series`; any other method or path answers 403 and is never forwarded. |
 | `HYDRA_UMC_TELEMETRY_COLLECTOR_URL` (+ `HYDRA_UMC_TELEMETRY_COLLECTOR_TOKEN` or `..._FILE`, `HYDRA_UMC_TELEMETRY_INTERVAL_MS`) | Turns on the telemetry producer: the numbers of every robot delta (`pos_*`, `joints_*`, `playbackState_*`) are posted to the collector's `/ingest/ws` as one `robot_state` sample per robot (`sourceId` `robot-<controllerId>-<robotId>`, a growing `sequence`), at most one per interval (100-60000 ms, 1000 by default), merged. Off without the address. Never delays a command; bounded (256 robots, 32 fields a sample); 30 s pause after a failure. |
+| `HYDRA_UMC_MQTT_BRIDGE` (`off`, `state` or `commands`) (+ `HYDRA_UMC_MQTT_URL`, `HYDRA_UMC_MQTT_PREFIX`, `HYDRA_UMC_MQTT_USERNAME`, `HYDRA_UMC_MQTT_PASSWORD` or `..._PASSWORD_FILE`, `HYDRA_UMC_MQTT_COMMAND_USER`, `HYDRA_UMC_MQTT_COMMAND_PASSWORD` or `..._PASSWORD_FILE`) | The bridge to the MQTT broker of the cell; off by default, also settable by an administrator in `data/server-config.json` (`mqtt`: mode, url, prefix, username, commandUser; `PUT /api/admin/server-config` with `{ "mqtt": { ... } }`, effective on the next start; the passwords only from the environment). See `docs/MQTT_BRIDGE.md`. |
 | `HYDRA_UMC_LOG_MAX_BYTES`, `HYDRA_UMC_LOG_KEEP` | The size at which the server log rotates (default 10 MB) and how many rotated files are kept (`.1` to `.N`, default 1). |
 
 The page address of the embedded 3D view (`/?hideUI=true&robotId=<id>&token=<JWT>`, which the

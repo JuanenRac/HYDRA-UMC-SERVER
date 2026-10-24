@@ -15,6 +15,7 @@ import type { JogArming, SafetyLimits } from "../safetyLimits";
 import type { AuditLog } from "../auditLog";
 import { ifMatchAgrees, robotRevision } from "../serverPolicy";
 import { applyTableMove, planTableMove, type TablePlan } from "../tableCommand";
+import { EDIT_COMMANDS, cleanPoints, editAffectedIds, planRobotEdit } from "../robotEdit";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
@@ -59,10 +60,12 @@ function switchAllOff(outputs: unknown): number {
 const KNOWN_COMMANDS = new Set([
   "stop", "play", "pause", "jog", "reset", "jogStep", "reset3D", "tool",
   "valve", "pump", "speed", "trajectory", "vision", "table",
+  // the edits an operator makes on one robot (src/robotEdit.ts)
+  ...EDIT_COMMANDS,
 ]);
 
-/** The commands the route accepts (the Bluetooth service lets a phone send only these). */
-export const ROBOT_COMMANDS: ReadonlySet<string> = KNOWN_COMMANDS;
+/** The commands a phone may send over Bluetooth: the control commands, not the edits of the robot's data (src/robotEdit.ts), which stay on the network API. */
+export const ROBOT_COMMANDS: ReadonlySet<string> = new Set([...KNOWN_COMMANDS].filter((command) => !EDIT_COMMANDS.has(command)));
 
 /**
  * The value of the `command` label of hydra_robot_commands_total: the command itself when it is one of the
@@ -196,9 +199,11 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     // rejected with 409 when a different, still-active claim exists.
     // A trajectory belongs to one robot. Unlike play/pause/stop, loading it
     // must not overwrite a combined sibling's independently selected Work.
-    const affectedIds = command === "trajectory" || command === "table"
-      ? [robotId]
-      : [robotId, ...(targetRobot.combinedWith || [])];
+    const affectedIds = EDIT_COMMANDS.has(command)
+      ? editAffectedIds(command, targetRobot, params)
+      : command === "trajectory" || command === "table"
+        ? [robotId]
+        : [robotId, ...(targetRobot.combinedWith || [])];
 
     // The claim check covers EVERY robot the command will touch, not only
     // the target: a combined sibling claimed by someone else must not move
@@ -246,7 +251,7 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     }
 
     // A table move is one jog of the table: it needs the same arming.
-    if ((command === "jog" || command === "table") && safety?.get().jog.armRequired && !arming?.isArmed(robotId, (req as any).user.id, callerController)) {
+    if ((command === "jog" || command === "table" || command === "joints") && safety?.get().jog.armRequired && !arming?.isArmed(robotId, (req as any).user.id, callerController)) {
       return res.status(403).json({ error: "the jog is not armed for this robot: arm it first (POST /api/robot/:id/jog-arm)", code: "jog-not-armed" });
     }
     if (command === "stop") {
@@ -262,6 +267,18 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
       tablePlan = plan;
     }
 
+    // The edits of one robot are checked as a whole before anything is changed.
+    let editPatch: Record<string, unknown> | undefined;
+    if (EDIT_COMMANDS.has(command)) {
+      const siblingIds: number[] = [];
+      getSettings().controllers.forEach((c: any) => {
+        if ((c.robots ?? []).some((r: any) => r.id === robotId)) (c.robots ?? []).forEach((r: any) => siblingIds.push(r.id));
+      });
+      const plan = planRobotEdit(command, params, { robot: targetRobot, siblingIds });
+      if (!plan.ok) return res.status(plan.status).json({ error: plan.error, code: plan.code });
+      editPatch = plan.patch;
+    }
+
     // Work loading used to be a browser-only change followed by the normal
     // 500 ms full-settings debounce. A Play click could therefore arrive at
     // Server first and replay the previous trajectory. Validate and prepare
@@ -271,36 +288,8 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     let validatedWorkFile: string | undefined;
     let validatedExample: string | undefined;
     if (command === "trajectory") {
-      const rawPoints = params?.points;
-      const numericFields = ["j1", "j2", "j3", "j4", "j5", "j6", "x", "y", "z", "a", "b", "c", "tx", "ty", "trz"];
-      if (!Array.isArray(rawPoints) || rawPoints.length === 0 || rawPoints.length > 10000) {
-        return res.status(400).json({ error: "trajectory requires between 1 and 10000 points" });
-      }
       try {
-        validatedTrajectory = rawPoints.map((rawPoint: unknown) => {
-          if (!rawPoint || typeof rawPoint !== "object" || Array.isArray(rawPoint)) {
-            throw new Error("each trajectory point must be an object");
-          }
-          const point = rawPoint as Record<string, unknown>;
-          const clean: Record<string, number | string> = {};
-          for (const field of numericFields) {
-            if (point[field] === undefined) continue;
-            if (typeof point[field] !== "number" || !Number.isFinite(point[field])) {
-              throw new Error(`trajectory ${field} must be finite`);
-            }
-            clean[field] = point[field];
-          }
-          if (point.motionType !== undefined) {
-            if (point.motionType !== "model-joints") throw new Error("unsupported trajectory motionType");
-            clean.motionType = "model-joints";
-          }
-          const hasNativeJoints = ["j1", "j2", "j3", "j4", "j5", "j6"].every((field) => typeof clean[field] === "number");
-          const hasCartesianPose = ["x", "y", "z"].every((field) => typeof clean[field] === "number");
-          if (!hasNativeJoints && !hasCartesianPose) {
-            throw new Error("trajectory point requires native joints or x/y/z");
-          }
-          return clean;
-        });
+        validatedTrajectory = cleanPoints(params?.points, 1);
       } catch (error) {
         return res.status(400).json({ error: error instanceof Error ? error.message : "invalid trajectory" });
       }
@@ -667,6 +656,20 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
                 ...(validatedExample !== undefined ? { selectedExample: robot.selectedExample } : {}),
                 playbackState: robot.playbackState,
               };
+              break;
+            // The edits of one robot, planned and checked above: the patch is the new value of whole top-level fields.
+            case "points":
+            case "loop":
+            case "model":
+            case "role":
+            case "combine":
+            case "joints":
+            case "xyTableConfig":
+              // Only the target changes: a combination also checks the robots it joins or leaves, but does not edit them.
+              if (editPatch && robot.id === robotId) {
+                Object.assign(robot, editPatch);
+                patch = { ...editPatch };
+              }
               break;
             // Lets a remote client (the Android app's own Camera
             // screen) toggle a robot's vision system without a full

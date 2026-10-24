@@ -43,6 +43,7 @@ if (!fs.existsSync(path.dirname(LOG_FILE))) fs.mkdirSync(path.dirname(LOG_FILE),
 const SERVER_CONFIG_FILE = path.join(process.cwd(), "data", "server-config.json");
 
 import type { BleFile } from "./securityConfig";
+import type { MqttFile } from "./mqttBridge";
 
 export interface ServerConfig {
   port?: number;
@@ -50,6 +51,7 @@ export interface ServerConfig {
   infoAuth?: boolean;
   tls?: { enabled?: boolean; certPath?: string; keyPath?: string };
   ble?: BleFile;
+  mqtt?: MqttFile;
 }
 
 export function loadServerConfig(): ServerConfig {

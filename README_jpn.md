@@ -75,7 +75,7 @@ HYDRA-UMC SERVER は、HYDRA-UMC マルチロボット・マイクロファク�
 - 単一の `/ws` WebSocket エンドポイント（ベアラートークンは `hydra.bearer` サブプロトコルで、クエリ文字列内のトークンは、インストール側が再び許可しない限り拒否されます）で、状態が変化するたびに全接続クライアントへ完全なツリー形式の `settings` スナップショットと、より軽量な `delta` 更新をブロードキャストします。
 - `POST /api/stop-all` はグローバル停止です。ログイン済みのどのアカウントでも呼べる 1 回の呼び出しで、予約に関わらず全ロボットを停止し、全バルブとポンプをオフにし、ロボットごとの結果を返します。
 - Bluetooth LE(既定ではオフ):CM5 の近くにあるスマートフォンはロボットの状態を読み取れ、管理者が許可した場合はコマンドも送れます。サーバーは、ネットワーククライアントが使うのと同じルートが応答した後にのみ確認応答を返します。[`docs/BLE_GATT.md`](docs/BLE_GATT.md) を参照してください。
-- すべての書き込みに JWT ベアラートークン認証が必要です。2 つのアカウントロール（`admin`、`operator`）が、設定／ユーザー管理の書き込みと日常のロボット操作の権限をそれぞれ制御します。
+- すべての書き込みに JWT ベアラートークン認証が必要です。3 つのアカウントロール（`admin`、`operator`、読み取り専用の `viewer`）が、設定／ユーザー管理の書き込みと日常のロボット操作の権限をそれぞれ制御します。
 - ローカルネットワーク上でのゼロコンフィグ発見のための `_hydra._tcp` mDNS/Bonjour 広告、加えてサブネットスキャン用の単純な `GET /api/hydra-info`。
 - `GET /metrics` —— Prometheus エクスポジション形式（`prom-client`）。下記「📊 モニタリング」で説明する任意の Grafana ダッシュボード向け。
 
@@ -183,6 +183,7 @@ npm install
 - `HYDRA_UMC_CAMERA_AUTH` —— カメラ映像(ライブストリーム、保存済みの写真と録画)は**既定で**短寿命の `?ticket=`(ログイン済みクライアントに `POST /api/camera/ticket` が渡します)または Bearer トークンを要求します。`HYDRA_UMC_CAMERA_AUTH=open` は、まだチケットを要求しないクライアント向けの一時的な回避策です。
 - `HYDRA_UMC_WS_QUERY_TOKEN` —— `/ws?token=` は**既定で拒否**されます(トークンは `hydra.bearer` サブプロトコルで送られます)。`HYDRA_UMC_WS_QUERY_TOKEN=allow` は、まだ移行していないクライアント向けの一時的な回避策です。回避策が有効な間、サーバーは起動のたびに警告します。
 - `HYDRA_UMC_BLE_GATT` - Bluetooth LE サービス:`off`(既定)、`state`(スマートフォンが状態を読む)、`commands`(コマンドも送る。各コマンドにアカウントのアクセストークンを付ける)。`HYDRA_UMC_BLE_ENCRYPTION=off` で暗号化リンクを要求しなくなります(既定では要求します)。どちらもサーバー管理画面から設定でき、変更は次回の起動時に反映されます。ホストに BlueZ、`python3-dbus`、`python3-gi` が必要です。
+- `HYDRA_UMC_MQTT_BRIDGE` - セルの MQTT ブローカーへのブリッジ:`off`(既定)、`state`(各ロボットの状態を retained トピックに出力)、`commands`(ロボットのトピックに発行されたコマンドを、ネットワーククライアントと同じルートで、`HYDRA_UMC_MQTT_COMMAND_USER` が指す専用アカウントのトークンで実行)。アドレス、トピックの接頭辞、ユーザー名は Server Admin 画面からも設定でき、パスワードは環境変数のみです。[`docs/MQTT_BRIDGE.md`](docs/MQTT_BRIDGE.md) を参照。
 - `HYDRA_UMC_INFO_AUTH=required` —— 読み取り専用のホスト情報(`/metrics`、`/api/system/metrics`、`/api/system/supervisor`、`/api/ecosystem/status`、`/api/models`)にログイン済みクライアントを要求します。それらのルートでまだトークンを送らないクライアントが動き続けるよう既定ではオフで、本番起動時はオフの間警告します。
 - `HYDRA_UMC_AI_ACCESS=admin` - ローカル AI サービスへのリレー（`/api/ai/*`）を管理者のみに制限します。既定ではオフで、これまでどおりログイン済みのユーザーなら誰でも使えます。
 - `HYDRA_UMC_VISUAL_SERVOING_TOKEN`、`HYDRA_UMC_VLA_ENGINE_TOKEN`、`HYDRA_UMC_COGNITIVE_NODE_TOKEN`、`HYDRA_UMC_DETECTION_HEF_TOKEN`、`HYDRA_UMC_VISION_NODE_TOKEN`、`HYDRA_UMC_ANOMALY_TOKEN`(リレー `/api/ai/*` 用)、`HYDRA_UMC_VISION_STREAMER_TOKEN`(カメラストリーム用)、`HYDRA_UMC_DATALAKE_READ_TOKEN`(なければ `HYDRA_UMC_DATALAKE_TOKEN`、テレメトリ用)- トークンを要求するサービスにこのサーバーが提示する Bearer トークン。いずれも `..._FILE`(1 行目がトークンのファイル)でも指定できます。サービス自身が読む名前なので 1 つの環境ファイルが両方に使え、クライアントには決して見えません。トークン未設定のサービスは従来どおり到達できます。リレーは管理者でもオペレーターでもないセッションも拒否し、異常検知器のベースラインを変更できる(`/detect` 以外の `POST`)のは管理者だけです。`vision-node` と `anomaly-detector` がリレーに加わります。

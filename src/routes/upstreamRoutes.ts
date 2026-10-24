@@ -11,6 +11,7 @@ import express from "express";
 import { WebSocket } from "ws";
 import { probeTcp } from "../ecosystemStatus";
 import { upstreamHeaders } from "../upstreamAuth";
+import { flashSigningQuery } from "../serverPolicy";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
@@ -164,9 +165,13 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
         return res.status(400).json({ error: "request body must be a non-empty application/octet-stream firmware image" });
       }
       const qs = new URLSearchParams();
-      for (const key of ["tier", "slot", "relay", "hardware_id", "version_major", "version_minor"]) {
+      for (const key of ["tier", "slot", "relay", "hardware_id", "version_major", "version_minor", "version_patch"]) {
         if (typeof req.query[key] === "string") qs.set(key, req.query[key] as string);
       }
+      // The signature of the image (made on the machine that holds the private key; the CM5 holds none) and, for a downgrade, the version installed now.
+      const signed = flashSigningQuery(req.query);
+      if (!signed.ok) return res.status(400).json({ error: signed.error, code: "invalid-flash-signature" });
+      for (const [key, value] of Object.entries(signed.params)) qs.set(key, value);
       const username = (req as any).user?.username ?? "unknown";
       industrialLog(`[CANOTA] flash requested by=${username} tier=${qs.get("tier")} slot=${qs.get("slot")} bytes=${firmware.length}`);
 

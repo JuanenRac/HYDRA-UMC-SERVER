@@ -11,7 +11,7 @@ import express from "express";
 import fs from "fs";
 import { WebSocket } from "ws";
 import { SecurityConfig, SecurityConfigError } from "../securityConfig";
-import { listUsers, createUser, updateUser, deleteUser, type UserRole } from "../users";
+import { listUsers, createUser, updateUser, deleteUser, isUserRole, type UserRole } from "../users";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
@@ -44,7 +44,7 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
 
   app.post("/api/users", authenticate, requireAdmin, asyncHandler(async (req, res) => {
     const { username, password, role } = req.body || {};
-    const safeRole: UserRole = role === "operator" ? "operator" : "admin";
+    const safeRole: UserRole = role === "operator" || role === "viewer" ? role : "admin";
     if (typeof username !== "string" || typeof password !== "string") {
       return res.status(400).json({ error: "username and password required" });
     }
@@ -55,7 +55,7 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
 
   app.put("/api/users/:username", authenticate, requireAdmin, asyncHandler(async (req, res) => {
     const { newUsername, password, role } = req.body || {};
-    const safeRole: UserRole | undefined = role === "operator" || role === "admin" ? role : undefined;
+    const safeRole: UserRole | undefined = isUserRole(role) ? role : undefined;
     const result = await updateUser(req.params.username, { newUsername, password, role: safeRole });
     if (!result.ok) return res.status(400).json({ error: result.error });
     res.json({ success: true });
@@ -131,7 +131,7 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
       saveServerConfig({ ...loadServerConfig(), port: portNum });
     }
     let security_result: ReturnType<SecurityConfig["update"]> | undefined;
-    const wantsSecurity = req.body && (req.body.aiAccess !== undefined || req.body.infoAuth !== undefined || req.body.tls !== undefined || req.body.ble !== undefined);
+    const wantsSecurity = req.body && (req.body.aiAccess !== undefined || req.body.infoAuth !== undefined || req.body.tls !== undefined || req.body.ble !== undefined || req.body.mqtt !== undefined);
     if (wantsSecurity) {
       try {
         security_result = security.update(req.body, String((req as any).user?.username ?? "admin"));
