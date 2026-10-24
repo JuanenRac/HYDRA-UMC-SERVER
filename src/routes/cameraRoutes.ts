@@ -15,6 +15,7 @@ import { promisify } from "util";
 import { Readable } from "stream";
 import { discoverRtspPath, sendPtzCommand } from "../cameraProbe";
 import { visionStreamerExecutablePath } from "../ecosystemStatus";
+import { upstreamHeaders } from "../upstreamAuth";
 import { cameraStreamPort, isValidCameraId, MAX_CAMERAS } from "../serverPolicy";
 
 const execFileAsync = promisify(execFile);
@@ -79,7 +80,8 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
     const connectController = new AbortController();
     const connectTimeout = setTimeout(() => connectController.abort(), 5000);
     try {
-      upstream = await fetch(`http://127.0.0.1:${port}/stream`, { signal: connectController.signal });
+      // the stream asks for the Bearer token of the streamer when it has one; the picture the client gets carries none of it
+      upstream = await fetch(`http://127.0.0.1:${port}/stream`, { signal: connectController.signal, headers: upstreamHeaders("vision-streamer") });
     } catch {
       return res.status(503).json({ error: `No camera stream running locally for camera ${id} (expected on 127.0.0.1:${port}) - see HYDRA-UMC-VISION-STREAMER's own "stream serve" command.`, available: false });
     } finally {
@@ -206,7 +208,7 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
     const connectController = new AbortController();
     const connectTimeout = setTimeout(() => connectController.abort(), 5000);
     try {
-      const upstream = await fetch(`http://127.0.0.1:${port}/stream`, { signal: connectController.signal });
+      const upstream = await fetch(`http://127.0.0.1:${port}/stream`, { signal: connectController.signal, headers: upstreamHeaders("vision-streamer") });
       if (!upstream.ok || !upstream.body) throw new Error("unexpected upstream response");
       return upstream;
     } finally {

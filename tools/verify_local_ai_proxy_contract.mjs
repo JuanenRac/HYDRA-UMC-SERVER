@@ -16,7 +16,7 @@
 
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import http from "node:http";
 import { tmpdir } from "node:os";
@@ -76,7 +76,7 @@ function startLocalAiStub(fixedResponse) {
       if (chunks.length > 0) {
         try { parsedBody = JSON.parse(Buffer.concat(chunks).toString("utf-8")); } catch { /* not JSON */ }
       }
-      seenRequests.push({ method: req.method, pathname: url.pathname, search: url.search, body: parsedBody });
+      seenRequests.push({ method: req.method, pathname: url.pathname, search: url.search, body: parsedBody, authorization: req.headers.authorization ?? null });
       res.writeHead(fixedResponse.status ?? 200, { "content-type": "application/json" });
       res.end(JSON.stringify(fixedResponse.body ?? {}));
     });
@@ -93,6 +93,11 @@ async function main() {
   await Promise.all([once(cognitiveNodeStub.server, "listening"), once(vlaEngineStub.server, "listening")]);
 
   const serverPort = await reservePort();
+  // the tokens this server presents to the services: one in the environment, one in a file (the way the deployment keeps secrets)
+  const COGNITIVE_TOKEN = "cognitive-node-token-for-the-contract";
+  const VLA_TOKEN = "vla-engine-token-in-a-file-for-contract";
+  const vlaTokenFile = path.join(workspace, "vla-engine.token");
+  await writeFile(vlaTokenFile, `${VLA_TOKEN}\n`);
   let child;
   let logs = "";
 
@@ -107,6 +112,8 @@ async function main() {
         JWT_SECRET: "local-ai-proxy-contract-secret-not-for-deployment",
         HYDRA_UMC_BOOTSTRAP_ADMIN_USERNAME: ADMIN.username,
         HYDRA_UMC_BOOTSTRAP_ADMIN_PASSWORD: ADMIN.password,
+        HYDRA_UMC_COGNITIVE_NODE_TOKEN: COGNITIVE_TOKEN,
+        HYDRA_UMC_VLA_ENGINE_TOKEN_FILE: vlaTokenFile,
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -143,6 +150,9 @@ async function main() {
     assert.equal(cognitiveNodeStub.seenRequests[0].method, "GET");
     assert.equal(cognitiveNodeStub.seenRequests[0].pathname, "/family-status");
     assert.equal(cognitiveNodeStub.seenRequests[0].search, "?family=ur5");
+    // the service's own Bearer token is presented by this server (from the environment), and the client's session token is not forwarded
+    assert.equal(cognitiveNodeStub.seenRequests[0].authorization, `Bearer ${COGNITIVE_TOKEN}`);
+    assert.notEqual(cognitiveNodeStub.seenRequests[0].authorization, auth.authorization);
 
     // A real running local service (POST, real JSON body forwarded).
     const postResponse = await fetch(
@@ -156,6 +166,8 @@ async function main() {
     assert.equal(vlaEngineStub.seenRequests[0].method, "POST");
     assert.equal(vlaEngineStub.seenRequests[0].pathname, "/tokens/encode");
     assert.deepEqual(vlaEngineStub.seenRequests[0].body, { action: "grip" });
+    // ...and the one kept in a file
+    assert.equal(vlaEngineStub.seenRequests[0].authorization, `Bearer ${VLA_TOKEN}`);
 
     // A real, known service whose own systemd unit simply isn't running
     // right now (nothing bound on its port) - a clean 503, not a hang or
@@ -168,7 +180,7 @@ async function main() {
     const notRunningBody = await notRunning.json();
     assert.equal(notRunningBody.available, false);
 
-    console.log("SERVER_LOCAL_AI_PROXY_CONTRACT=PASS auth=1 unknown_service=1 get_forward=1 post_forward=1 not_running=1");
+    console.log("SERVER_LOCAL_AI_PROXY_CONTRACT=PASS auth=1 unknown_service=1 get_forward=1 post_forward=1 not_running=1 service_tokens=2");
   } catch (error) {
     throw new Error(`${error instanceof Error ? error.message : error}\nServer startup output:\n${logs || "<no output>"}`);
   } finally {

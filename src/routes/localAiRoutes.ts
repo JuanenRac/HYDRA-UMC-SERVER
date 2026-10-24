@@ -5,6 +5,7 @@
 // =============================================================================
 // The passthrough to the local AI services, moved out of server.ts unchanged.
 import express from "express";
+import { upstreamHeaders } from "../upstreamAuth";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
@@ -13,11 +14,25 @@ export function aiAccessAdminOnly(value: string | undefined): boolean {
   return (value ?? "").trim().toLowerCase() === "admin";
 }
 
-export function registerLocalAiRoutes(app: express.Express, deps: { authenticate: Middleware; requireAdmin?: Middleware; adminOnly?: boolean | (() => boolean) }): void {
-  const { authenticate, requireAdmin } = deps;
+/** Does this request change something in the service (not just ask it)? Used to keep the writes that shape a model for administrators. */
+export function isWriteToModel(service: string, method: string, upstreamPath: string): boolean {
+  // The anomaly detector scores any window an operator sends (POST /detect) but its baseline and drift state are shared: fitting
+  // or initialising them from any other POST would let one operator change what every other client is told is normal.
+  if (service !== "anomaly-detector") return false;
+  if (["GET", "HEAD", "OPTIONS"].includes(method)) return false;
+  return upstreamPath !== "/detect";
+}
+
+export function registerLocalAiRoutes(app: express.Express, deps: { authenticate: Middleware; requireAdmin?: Middleware; requireOperator?: Middleware; adminOnly?: boolean | (() => boolean); env?: NodeJS.ProcessEnv }): void {
+  const { authenticate, requireAdmin, requireOperator } = deps;
   const isAdminOnly = () => (typeof deps.adminOnly === "function" ? deps.adminOnly() : deps.adminOnly === true);
   // HYDRA_UMC_AI_ACCESS=admin: only administrators may use the relay (it reaches services that can move robots or run models).
-  const aiAccess: Middleware = (req, res, next) => (isAdminOnly() && requireAdmin ? requireAdmin(req, res, next) : next());
+  // Whatever that setting says, the session must be an administrator or an operator: any other role is refused before a request
+  // is forwarded, and the services hold their own Bearer token that only this server presents (see upstreamAuth.ts).
+  const aiAccess: Middleware = (req, res, next) => {
+    const afterRole: Middleware = (rq, rs, nx) => (isAdminOnly() && requireAdmin ? requireAdmin(rq, rs, nx) : nx());
+    return requireOperator ? requireOperator(req, res, () => afterRole(req, res, next)) : afterRole(req, res, next);
+  };
   // Real proxy to this cell's own local Hailo-accelerated AI services -
   // each one already runs as its own real systemd unit
   // (hydra-umc-<service>.service), bound to 127.0.0.1 only by design
@@ -41,6 +56,8 @@ export function registerLocalAiRoutes(app: express.Express, deps: { authenticate
     "detection-hef": 8093,
     "visual-servoing-api": 8116,
     "vla-engine": 8098,
+    "vision-node": 8094,
+    "anomaly-detector": 8097,
   };
 
   app.all("/api/ai/:service/*rest", authenticate, aiAccess, async (req, res) => {
@@ -52,6 +69,9 @@ export function registerLocalAiRoutes(app: express.Express, deps: { authenticate
     }
     const restSegments = req.params.rest;
     const upstreamPath = "/" + (Array.isArray(restSegments) ? restSegments.join("/") : String(restSegments ?? ""));
+    if (isWriteToModel(req.params.service, req.method, upstreamPath) && (req as any).user?.role !== "admin") {
+      return res.status(403).json({ error: "Access denied: changing the baseline of the anomaly detector needs administrator privileges" });
+    }
     const queryString = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
     const url = `http://127.0.0.1:${port}${upstreamPath}${queryString}`;
 
@@ -59,10 +79,12 @@ export function registerLocalAiRoutes(app: express.Express, deps: { authenticate
     const controller = new AbortController();
     const connectTimeout = setTimeout(() => controller.abort(), 10000);
     let upstream: Response;
+    // the Bearer token of this service, when it has one: only this server holds it, a client never sees it
+    const headers: Record<string, string> = { ...upstreamHeaders(req.params.service, deps.env ?? process.env), ...(hasBody ? { "Content-Type": "application/json" } : {}) };
     try {
       upstream = await fetch(url, {
         method: req.method,
-        headers: hasBody ? { "Content-Type": "application/json" } : undefined,
+        headers: Object.keys(headers).length > 0 ? headers : undefined,
         body: hasBody ? JSON.stringify(req.body ?? {}) : undefined,
         signal: controller.signal,
       });

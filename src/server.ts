@@ -55,7 +55,7 @@ import { createSettingsStore, settingsStoreOptionsFromEnv, sweepOrphanedTmpFiles
 import { createCameraSupervisor } from "./cameraSupervisor";
 import { createPlayback } from "./playback";
 import { createWsHub, attachWebSocketServer } from "./ws";
-import { NODE_ENV, JWT_SECRET, authenticate, asyncHandler, requireAdmin, stopAllRateLimiter } from "./auth";
+import { NODE_ENV, JWT_SECRET, authenticate, asyncHandler, requireAdmin, requireOperator, stopAllRateLimiter } from "./auth";
 import { DATALAKE_URL, DATALAKE_TIMEOUT_MS, CONNECTOR_HUB_URL, CONNECTOR_HUB_TIMEOUT_MS, SPI_BRIDGE_URL, SPI_BRIDGE_VERSION_TIMEOUT_MS, SPI_BRIDGE_FLASH_TIMEOUT_MS } from "./upstreamConfig";
 import { LOG_FILE, bonjour, setupDiscovery, loadServerConfig, saveServerConfig, resolvePort, industrialLog, setCurrentPort, getCurrentPort, closeLog } from "./runtime";
 
@@ -343,7 +343,7 @@ async function startServer() {
   registerCameraRoutes(app, { authenticate, requireAdmin, mediaAccess, issueMediaTicket: issueMediaTicketFor, dataPath, resolveWithinDataDir, cameraProcesses });
 
   if (security.aiAdminOnly()) console.log("[SECURITY] The local AI relay (/api/ai/*) answers administrators only.");
-  registerLocalAiRoutes(app, { authenticate, requireAdmin, adminOnly: () => security.aiAdminOnly() });
+  registerLocalAiRoutes(app, { authenticate, requireAdmin, requireOperator, adminOnly: () => security.aiAdminOnly() });
 
   registerSystemRoutes(app, { authenticate, requireAdmin, industrialLog, infoAccess });
 

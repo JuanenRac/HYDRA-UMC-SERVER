@@ -158,6 +158,17 @@ export function requireAdmin(req: any, res: any, next: any) {
   next();
 }
 
+/** Chain after authenticate() - lets through an "admin" or an "operator" and nobody else. Gates the relays that reach services able
+ * to move a robot or run a model: a session whose role is anything other than these two (a role that does not exist yet, a value
+ * that is missing) is refused instead of being let through because it signed in. */
+export function requireOperator(req: any, res: any, next: any) {
+  const role = req.user?.role;
+  if (role !== "admin" && role !== "operator") {
+    return res.status(403).json({ error: "Access denied: operator or admin privileges required" });
+  }
+  next();
+}
+
 // Throttles POST /api/login only - every other route stays unlimited (a
 // robot-control endpoint being rate-limited would be a much worse problem
 // than the one this solves). Exposed to the internet via NAT/port-forward,

@@ -10,6 +10,7 @@
 import express from "express";
 import { WebSocket } from "ws";
 import { probeTcp } from "../ecosystemStatus";
+import { upstreamHeaders } from "../upstreamAuth";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
@@ -52,6 +53,8 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
     }
     try {
       const upstream = await fetch(`${DATALAKE_URL}${path}?${qs.toString()}`, {
+        // the read token of the data lake, when it asks for one (HYDRA_UMC_DATALAKE_READ_TOKEN, else HYDRA_UMC_DATALAKE_TOKEN)
+        headers: upstreamHeaders("datalake"),
         signal: AbortSignal.timeout(DATALAKE_TIMEOUT_MS),
       });
       const body = await upstream.json().catch(() => null);
