@@ -34,7 +34,7 @@
 
 | | |
 |---|---|
-| Versione | `0.8.1.1` |
+| Versione | `0.8.1.2` |
 | Maturità | Funzionale |
 | Test | 348 (`npm run test:unit`) |
 | Tecnologia | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |

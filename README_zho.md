@@ -36,7 +36,7 @@
 
 | | |
 |---|---|
-| 版本 | `0.8.1.1` |
+| 版本 | `0.8.1.2` |
 | 成熟度 | 可用 |
 | 测试 | 348 (`npm run test:unit`) |
 | 技术栈 | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |

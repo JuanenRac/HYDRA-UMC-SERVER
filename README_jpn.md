@@ -36,7 +36,7 @@
 
 | | |
 |---|---|
-| バージョン | `0.8.1.1` |
+| バージョン | `0.8.1.2` |
 | 成熟度 | 機能する |
 | テスト | 348 (`npm run test:unit`) |
 | 技術 | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
