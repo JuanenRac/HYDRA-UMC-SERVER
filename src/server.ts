@@ -55,6 +55,7 @@ import { createSettingsStore, settingsStoreOptionsFromEnv, sweepOrphanedTmpFiles
 import { createCameraSupervisor } from "./cameraSupervisor";
 import { createPlayback } from "./playback";
 import { createWsHub, attachWebSocketServer } from "./ws";
+import { createTelemetryProducer } from "./telemetryProducer";
 import { NODE_ENV, JWT_SECRET, authenticate, asyncHandler, requireAdmin, requireOperator, stopAllRateLimiter } from "./auth";
 import { DATALAKE_URL, DATALAKE_TIMEOUT_MS, CONNECTOR_HUB_URL, CONNECTOR_HUB_TIMEOUT_MS, SPI_BRIDGE_URL, SPI_BRIDGE_VERSION_TIMEOUT_MS, SPI_BRIDGE_FLASH_TIMEOUT_MS } from "./upstreamConfig";
 import { LOG_FILE, bonjour, setupDiscovery, loadServerConfig, saveServerConfig, resolvePort, industrialLog, setCurrentPort, getCurrentPort, closeLog } from "./runtime";
@@ -209,7 +210,13 @@ async function startServer() {
   const supervisor = createCameraSupervisor();
   const { cameraProcesses, stopCameraProcess, reconcileCameraProcesses, reapOrphanedCameraProcesses } = supervisor;
 
-  const hub = createWsHub({ setSettings });
+  // Off unless HYDRA_UMC_TELEMETRY_COLLECTOR_URL is set: then every robot delta also becomes a sample for the telemetry collector.
+  const telemetryProducer = createTelemetryProducer();
+  if (telemetryProducer) {
+    telemetryProducer.start();
+    console.log("[STARTUP] Sending robot telemetry to the collector (HYDRA_UMC_TELEMETRY_COLLECTOR_URL)");
+  }
+  const hub = createWsHub({ setSettings, onRobotDelta: telemetryProducer ? (deltas) => telemetryProducer.record(deltas) : undefined });
   const { wsClients, broadcastSettings, broadcastRobotDelta } = hub;
 
   const playback = createPlayback({ getSettings, queueSettingsWrite, broadcastRobotDelta });

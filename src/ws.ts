@@ -14,8 +14,12 @@ import { authFailuresTotal, setWsClientsSource } from "./metrics";
 import { JWT_SECRET } from "./auth";
 import { setupDiscovery } from "./runtime";
 
-export function createWsHub(deps: { setSettings: (payload: any) => void }) {
-  const { setSettings } = deps;
+export function createWsHub(deps: {
+  setSettings: (payload: any) => void;
+  /** Told of every robot delta right after it is broadcast (the telemetry producer records its numbers). A failure here never reaches the command. */
+  onRobotDelta?: (deltas: { controllerId: string; robotId: number; patch: Record<string, unknown> }[]) => void;
+}) {
+  const { setSettings, onRobotDelta } = deps;
   // Every open WebSocket client (the browser UI itself, plus any remote
   // clients - HYDRA-UMC SUITE, the mobile control apps) - broadcastSettings()
   // pushes to all of them on every write, whichever path (REST POST or a
@@ -94,6 +98,11 @@ export function createWsHub(deps: { setSettings: (payload: any) => void }) {
       } else {
         client.send(clientMaySeeSecrets(client) ? fullMsg : safeFullMsg);
       }
+    }
+    try {
+      onRobotDelta?.(deltas);
+    } catch {
+      // recording telemetry must never break a command
     }
   }
 
