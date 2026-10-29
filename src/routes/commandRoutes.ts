@@ -13,6 +13,7 @@ import { robotCommandsTotal } from "../metrics";
 import { claimConflict, readControllerId, type ClaimConflict } from "../claimPolicy";
 import type { JogArming, SafetyLimits } from "../safetyLimits";
 import type { AuditLog } from "../auditLog";
+import { JogSequence, parseSequence } from "../jogSequence";
 import { ifMatchAgrees, robotRevision } from "../serverPolicy";
 import { applyTableMove, planTableMove, type TablePlan } from "../tableCommand";
 import { EDIT_COMMANDS, cleanPoints, editAffectedIds, planRobotEdit } from "../robotEdit";
@@ -36,6 +37,8 @@ export interface CommandRouteDeps {
   /** The limits every client is held to (size of a jog, arming of the jog). Without it the built-in hard cap of the jog applies. */
   safety?: SafetyLimits;
   arming?: JogArming;
+  /** The order of the numbered motion commands of one client (optional `seq`); one is created when none is given. */
+  jogSequence?: JogSequence;
   /** The audit record (global stops are recorded). */
   audit?: AuditLog;
   /** Called after the arming of a jog was dropped (pushes the `claims` message of the WebSocket). */
@@ -98,6 +101,7 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     audit,
     onClaimsChanged,
   } = deps;
+  const jogSequence = deps.jogSequence ?? new JogSequence();
 
   // GLOBAL STOP: one call stops every robot, whoever reserved it, and switches every valve and pump off. A safety stop is never blocked by a reservation
   // (same rule as the single-robot "stop"), needs no confirmation and no parameters, and is open to every signed-in account: the role model only has "admin"
@@ -254,7 +258,22 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     if ((command === "jog" || command === "table" || command === "joints") && safety?.get().jog.armRequired && !arming?.isArmed(robotId, (req as any).user.id, callerController)) {
       return res.status(403).json({ error: "the jog is not armed for this robot: arm it first (POST /api/robot/:id/jog-arm)", code: "jog-not-armed" });
     }
+    // A client that numbers its motion commands (`seq`) is protected from a jog that arrives after the stop sent later than it.
+    const rawSeq = (req.body as any)?.seq;
+    if (rawSeq !== undefined && command !== "stop" && (command === "jog" || command === "table" || command === "joints")) {
+      const seq = parseSequence(rawSeq);
+      if (seq === null) {
+        return res.status(400).json({ error: "seq must be an integer from 1 up", code: "invalid-sequence" });
+      }
+      const verdict = jogSequence.accept(robotId, (req as any).user.id, callerController, seq);
+      if (!verdict.ok) {
+        return res.status(409).json({ error: "an older motion command: a command with a higher seq was already received for this robot", code: "stale-sequence", lastSeq: verdict.last });
+      }
+    }
     if (command === "stop") {
+      // a stop is never refused for its number; a valid one only raises the mark
+      const seq = parseSequence(rawSeq);
+      if (seq !== null) jogSequence.noteStop(robotId, (req as any).user.id, callerController, seq);
       arming?.disarm(robotId);
       onClaimsChanged?.();
     }

@@ -268,7 +268,7 @@ export const REQUESTS = {
   "POST /api/integrations/test-connection": { required: ["host", "port"], fields: { host: str, port: int } },
   "POST /api/camera/discover-rtsp-path": { required: ["host"], fields: { host: str, port: int, username: str, password: str } },
   "POST /api/camera/{id}/ptz": { required: ["host"], fields: { host: str, port: int, username: str, password: str, channel: int, pan: num, tilt: num, zoom: num } },
-  "POST /api/robot/{id}/command": { required: ["command"], fields: { command: str, params: { type: "object" } } },
+  "POST /api/robot/{id}/command": { required: ["command"], fields: { command: str, params: { type: "object" }, seq: int } },
 };
 
 export const errorResponse = ref("Error");

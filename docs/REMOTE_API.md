@@ -306,6 +306,14 @@ a separate one.
   capped at 1 MB. Camera ids run from 1 to 8; any other id is rejected with
   `400`.
 
+  A client may number its motion commands with `seq` (an integer from 1 up, growing, in the body). A
+  `jog`, `table` or `joints` whose `seq` is not above the highest one the server has seen from the same
+  account and controller for that robot is refused with `409` (`stale-sequence`, with `lastSeq`) and moves
+  nothing; a `seq` that is not an integer from 1 up is `400` (`invalid-sequence`). A `stop` may carry one too:
+  it raises that mark, so a jog sent before the stop that arrives after it is refused. A `stop` is never
+  refused for its `seq`. Without `seq` a command is handled as before. The marks are kept in memory, are
+  forgotten after an hour without a command and are lost at a restart.
+
   `command: "trajectory"` atomically loads a Work before playback. Its
   `params` contains `points` (1 to 10,000 points, each with either finite
   `j1`–`j6` native joints or finite `x`/`y`/`z`), plus an optional safe
