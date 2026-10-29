@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here.
 
+## [Unreleased]
+
+- **The layout of the README is checked in the CI:** the validator runs `tools/universal_readme_check.py` and lists, as a warning, what differs from the universal layout of the README.
+
 ## [0.8.1.2] - A read-only role, `viewer` and the edits of one robot are commands, so an operator can make them
 
 ### Firmware and protocol
