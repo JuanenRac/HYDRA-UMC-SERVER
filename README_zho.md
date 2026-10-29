@@ -1,36 +1,39 @@
+<!-- =============================================================================
+HYDRA-UMC-SERVER - Headless REST and WebSocket backend of the HYDRA-UMC micro-factory
+Copyright (C) JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
+GPL-3.0-or-later - see LICENSE
+============================================================================= -->
+
 <p align="center">
   <img src="images/HYDRA_UMC_BANNER.svg" alt="HYDRA-UMC-SERVER banner" width="100%">
 </p>
-# 🛰️ HYDRA-UMC SERVER
 
-<p align="center">
-  <a href="README.md">🇺🇸 English</a> |
-  <a href="README_spa.md">🇪🇸 Español</a> |
-  <a href="README_fra.md">🇫🇷 Français</a> |
-  <a href="README_ita.md">🇮🇹 Italiano</a> |
-  <a href="README_deu.md">🇩🇪 Deutsch</a> |
-  🇨🇳 <b>简体中文</b> |
-  <a href="README_jpn.md">🇯🇵 日本語</a> |
-  <a href="README_por.md">🇵🇹 Português</a>
-</p>
+# 🤖 HYDRA-UMC-SERVER
 
+<p align="center"><a href="README.md">🇺🇸 English</a> | <a href="README_spa.md">🇪🇸 Español</a> | <a href="README_fra.md">🇫🇷 Français</a> | <a href="README_ita.md">🇮🇹 Italiano</a> | <a href="README_deu.md">🇩🇪 Deutsch</a> | 🇨🇳 <b>简体中文</b> | <a href="README_jpn.md">🇯🇵 日本語</a> | <a href="README_por.md">🇵🇹 Português</a></p>
 
 ### 🤖 HYDRA-UMC 多机器人微工厂的无头式 API/WebSocket 后端
 
 <p align="center">
-  <img src="https://img.shields.io/badge/License-GPL%203.0-blue.svg" alt="GPL 3.0">
-  <img src="https://img.shields.io/badge/Runtime-Node.js-339933.svg" alt="Node.js">
-  <img src="https://img.shields.io/badge/Framework-Express-000000.svg" alt="Express">
-  <img src="https://img.shields.io/badge/Language-TypeScript-3178C6.svg" alt="TypeScript">
-  <img src="https://img.shields.io/badge/Protocol-WebSocket-lightgrey.svg" alt="WebSocket">
+  <img src="https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
+  <img src="https://img.shields.io/badge/Runtime-Node.js-339933.svg" alt="Runtime">
+  <img src="https://img.shields.io/badge/Framework-Express-000000.svg" alt="Framework">
+  <img src="https://img.shields.io/badge/Language-TypeScript-3178C6.svg" alt="Language">
+  <img src="https://img.shields.io/badge/Protocol-WebSocket-lightgrey.svg" alt="Protocol">
+  <img src="https://img.shields.io/badge/Tests-377%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Version-0.8.1.2-0f6cbd.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
 
+---
 
-**诚实核查——今天真正能跑起来的部分：** Express + WebSocket 引擎、它的 REST/WS API 接口、带刷新令牌轮换的 JWT 认证、scrypt 密码哈希、mDNS 发现、机器人所有权/占用仲裁、回放（playback），以及通往 CAN-OTA/遥测/语音/本地 AI/connector-hub 的中继（`src/server.ts`、`src/users.ts`、`src/kinematics.ts`、`src/metrics.ts`）都是真实且经过测试的——不是针对模拟对象（mock），而是针对测试工具自身启动的这个服务器的一个真实实例：211 个单元测试（`npm run test:unit`，基于 `node:test` 针对 `src/serverPolicy.ts`/`src/kinematics.ts`），外加 `tools/` 目录下 25 个端到端契约/负向认证脚本（discovery、负向认证、生产环境 bootstrap、机器人指令/所有权、刷新令牌、语音中继及其自身错误路径、回放、持久化的 XY 表、生态系统状态/服务控制、遥测中继、集成 test-connection、CAN-OTA 中继、本地 AI 代理、connector-hub 中继、系统监控、持续 WS 重连），全部通过 `npm run test`。真正属于"贴近硬件但尚未在此完全验证"的部分：连接到真实 HYDRA-UMC CM5+STM32H745 主板的 `spi_bridge` 链路，以及提供 STUDIO/admin-ui 静态前端的可选路径，都是真实代码，并通过上述 API/契约层得到了验证，但本环境没有物理的 CM5/STM32 来闭合最后这一环。TLS/HTTPS 以及 `monitoring/` 中的 Prometheus/Grafana 技术栈都是真实且可选的，默认关闭。已交付的具体内容见 `CHANGELOG.md`。
+> **诚实检查——今天真正可运行的部分：** Express + WebSocket 引擎、其 REST 和 WebSocket 接口（58 条路径上的 63 个操作）、带刷新令牌轮换和 scrypt 的 JWT 登录、mDNS 发现、机器人预约与修订、播放，以及通往 CAN-OTA、遥测、语音、本地 AI 服务和连接器中枢的中继都是真实的，并针对测试自己启动的本服务器真实实例做过测试：377 个单元测试加 28 个端到端契约脚本，全部通过。与硬件相关、此处未验证的部分：到带 STM32H745 板的真实 HYDRA-UMC CM5 的连接，这是真实代码，但只通过 API 和契约层验证过。TLS、蓝牙 LE、MQTT 桥以及 Prometheus 和 Grafana 栈都是真实的、可选的，默认关闭。
 
 ---
 
 > **安全与安防现状:**本生态系统不是经认证的安全系统。目前尚无硬件 E-STOP 通路,没有由固件强制执行的限位或联锁,也没有经过验证的运动指令;固件映像使用 CRC32 和共享密钥的 HMAC-SHA256 校验,而非非对称签名;TLS 与双向 TLS 均为可选项,默认关闭;自制电路板尚未组装或测试。在依赖此处任何说法来保障人身安全之前,请先阅读[安全基线](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/SECURITY_BASELINE.md)和[威胁模型](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/THREAT_MODEL.md)。
+
+---
 
 ## 📋 速览
 
@@ -38,10 +41,12 @@
 |---|---|
 | 版本 | `0.8.1.2` |
 | 成熟度 | 可用 |
-| 测试 | 348 (`npm run test:unit`) |
+| 测试 | 377 (`npm run test:unit`) |
 | 技术栈 | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | 目标 | HYDRA-UMC 工作单元的 Raspberry Pi CM5 |
 | 真实硬件 | 尚未：此版本没有在真实硬件上运行的记录 |
+
+**跳转：** [概述](#-概述) · [架构](#-架构) · [功能](#-功能) · [安全与防护](#-安全与防护) · [接口](#-接口) · [配置](#-配置) · [快速开始](#-快速开始) · [测试](#-测试) · [故障排除](#-故障排除) · [仓库结构](#-仓库结构) · [相关项目](#-相关项目)
 
 ## 🚦 项目状态
 
@@ -52,7 +57,7 @@
 | 领域 | 状态 | 在这里的含义 |
 |---|---|---|
 | 软件 | 🟡 | 主要用途可用；上面的诚实性检查列出了仍然缺少的内容 |
-| 测试 | 🟢 | 348 项自动测试，每次变更都会运行 |
+| 测试 | 🟢 | 377 项自动测试，每次变更都会运行 |
 | 真实硬件 | 🔴 | 尚未：此版本没有在真实硬件上运行的记录 |
 | 文档 | 🟢 | 八种语言的 README，每次变更都会与清单核对 |
 
@@ -71,7 +76,17 @@ HYDRA-UMC SERVER 是驱动 HYDRA-UMC 多机器人微工厂单元的独立后端�
 - **HYDRA-UMC SERVER**（本仓库）——引擎本身：机器人/控制器状态、REST + WebSocket API、身份验证、mDNS 发现、模型提交。无界面、无打包工具、无前端构建步骤。
 - **[HYDRA-UMC STUDIO](https://github.com/JuanenRac/HYDRA-UMC-STUDIO)**——现在是一个纯粹的 Vite/React 客户端，通过网络与本服务器通信，与本 API 的所有其他客户端完全一致。
 
-## 🧩 存在的原因
+## 🧩 在 HYDRA-UMC 中的角色
+
+**HYDRA-UMC-SERVER** 是单元的引擎：一个无界面的 Node.js 和 Express 后端，保存机器人状态并写入磁盘，要求每次写入带有角色，并通过一个 WebSocket 向所有客户端推送实时更新。所有客户端（STUDIO、SUITE、手机应用、触摸屏、手表、命令行工具）都经过它，只有它决定谁能移动哪个机器人以及移动多远。
+
+## 🏛️ 架构
+
+<p align="center">
+  <img src="images/architecture.svg" alt="HYDRA-UMC-SERVER architecture" width="100%">
+</p>
+
+### 存在的原因
 
 将引擎从网页仪表盘中拆分出来是一项经过深思熟虑的变更，而非为改而改：
 
@@ -80,7 +95,36 @@ HYDRA-UMC SERVER 是驱动 HYDRA-UMC 多机器人微工厂单元的独立后端�
 - **独立的生命周期。** 网页 UI 可以重新部署、重启，或热替换为更新的构建版本，而完全不影响本进程——发布 UI 修复无需任何机器人控制停机时间。
 - **灵活的托管方式。** 本服务器旨在运行于它所控制的硬件上（或紧邻其旁）；而渲染它的客户端则可以完全托管于其他任何地方，通过网络访问，与该 API 的其他远程客户端完全一致。
 
-## 🔌 API 与 WebSocket 接口
+## ✨ 功能
+
+### 数据与持久化
+
+本服务器所拥有的一切均存放于 `data/` 目录下，首次运行时自动创建：
+
+- `data/settings.json`——完整的状态树：控制器、机器人、系统配置。绝不作为静态文件提供（明确返回 404）——只能通过经过身份验证的 `/api/settings` 路由访问。
+- `data/users.json`——账户凭证（经 scrypt 哈希加盐处理，绝不以明文存储）。同样绝不以静态方式提供。
+- `data/logs/server.log`——每一条指令的仅追加式工业日志。
+- `data/WORKS/`——已保存的机器人轨迹，默认每个机器人一个文件夹，以纯静态文件形式提供（索引及各个工作文件）。
+- `data/model_submissions.json` 及提交的模型文件夹本身——[HYDRA-UMC-EDITOR-URDF](https://github.com/JuanenRac/HYDRA-UMC-EDITOR-URDF) 的“将完成的机器人模型直接推送到本服务器目录”流程在服务端的对应部分。
+
+## 🔒 安全与防护
+
+| 威胁 | 防御 | 位置 |
+|---|---|---|
+| 用已知密钥签名的令牌 | `NODE_ENV=production` 时，如果 `JWT_SECRET` 为空、是示例值或过短，或没有初始管理员，服务器拒绝启动；开发时使用内置值并打印 `[SECURITY]` 警告 | `src/auth.ts`, `src/secretsPolicy.ts` |
+| 对登录的暴力破解，或大量停止请求 | 每个地址每 15 分钟最多 5 次登录失败（`429`），每分钟 120 次刷新和 60 次全局停止，均可用 `LOGIN_RATE_LIMIT_MAX`、`REFRESH_RATE_LIMIT_MAX` 和 `STOP_ALL_RATE_LIMIT_MAX` 调整；密码使用带随机盐的 scrypt，同时最多 4 个、排队最多 20 个，洪水请求无法拖垮服务器 | `src/auth.ts`, `src/users.ts` |
+| 被盗的令牌，或从地址中读取的令牌 | 访问令牌会过期（`JWT_EXPIRES_IN`，默认 30 天，在可信局域网之外建议 24 小时），并由轮换的刷新令牌续期；WebSocket 以 `hydra.bearer` 子协议接收令牌，除非 `HYDRA_UMC_WS_QUERY_TOKEN=allow` 重新允许，否则拒绝 `?token=`，每次启动都会警告 | `src/refresh_tokens.ts`, `src/ws.ts` |
+| 两个客户端移动同一个机器人，或机器人不该收到的命令 | 机器人被预约给一个账户和窗口，写入需要 `If-Match`（过期的修订号得到 `412`），观察者角色不能写入，点动幅度和热床最高目标温度来自管理员设置的安全限制；无论预约如何，全局停止都有效 | `src/claimPolicy.ts`, `src/safetyLimits.ts`, `src/routes/commandRoutes.ts` |
+| 网络上任何人都能看到摄像头画面 | 实时画面、照片和录像需要有效期 5 分钟的签名票据（或持有者令牌）；最多 8 个摄像头；摄像头密码不会出现在进程列表和日志中；`HYDRA_UMC_CAMERA_AUTH=open` 是临时的退出开关 | `src/mediaTickets.ts`, `src/serverPolicy.ts` |
+| 超大或恶意的请求，以及开放的跨源访问 | JSON 请求体上限 1 MB（仅大文件上传路由为 50 MB）；`CORS_ALLOWED_ORIGINS` 是允许列表，在生产环境中未设置时拒绝所有浏览器跨源请求（开发环境允许任何来源并给出警告）；`settings.json` 和 `users.json` 绝不会作为文件提供 | `src/server.ts` |
+| 弱访问选项一直开着：语音文字、识别置信度、MAVLink 签名、蓝牙、MQTT、TLS | 每一项都有管理员通过 `PUT /api/admin/server-config`（仅管理员）编辑的开关，默认值保守，且环境变量优先于已保存的值；响应会列出 `voice_heard_text_on`、`voice_confidence_off`、`mavlink_unsigned_allowed` 和 `mavlink_signing_off` 等警告；语音中继会用管理员的设置替换客户端发送的任何 `options`，MAVLink 密钥文件在保存路径前会被检查（32 字节或 64 个十六进制字符） | `src/securityConfig.ts`, `src/routes/adminRoutes.ts`, `src/routes/assistantRoutes.ts` |
+| 被篡改的“谁做了什么”记录 | 只追加的审计记录，条目通过哈希链接（`GET /api/audit`，`?verify=1` 检查链条）；服务器日志按大小轮转；写入任何内容之前都会先脱敏以去除机密 | `src/auditLog.ts`, `src/logRotation.ts`, `src/redaction.ts` |
+
+**它绝不做的事：** 充当经过认证的安全功能。限制和停止是此进程中的软件；其背后还没有硬件紧急停止路径、固件强制的限制或真实的控制板。
+
+## 🔌 接口
+
+### API 与 WebSocket 接口
 
 每一个路由、WebSocket 消息契约、身份验证机制以及逐客户端的远程访问模型，均记录于 **[`docs/REMOTE_API.md`](docs/REMOTE_API.md)** 中——这是与本服务器通信的任何组件（包括 HYDRA-UMC STUDIO 自身的客户端代码）的唯一权威来源。简而言之：
 
@@ -94,100 +138,26 @@ HYDRA-UMC SERVER 是驱动 HYDRA-UMC 多机器人微工厂单元的独立后端�
 
 CORS 通过一个可配置的白名单（`CORS_ALLOWED_ORIGINS`，见下文“环境变量”）启用，因为本服务器的客户端不再保证与其自身同源。若未设置，在 `NODE_ENV=production` 之外始终保持完全开放（这是当前本地开发下的零配置行为）；在生产环境中，则会拒绝所有跨源浏览器请求，直至设置该白名单为止——完整推理过程见 `src/server.ts` 中 `app.use(cors(corsOptions))` 上方的注释。
 
-## 💾 数据与持久化
+### 监控（可选）
 
-本服务器所拥有的一切均存放于 `data/` 目录下，首次运行时自动创建：
+`GET /metrics` 以 Prometheus 格式导出进程运行时长、已连接的 WebSocket 客户端数、`settings.json` 写入延迟、按类型统计的原子机器人指令、身份验证失败次数，以及与 `GET /api/system/metrics` 相同的 CPU/内存/温度数据。一套可直接运行的 Prometheus + Grafana 技术栈（附带一个起始仪表盘）位于 **[`monitoring/`](monitoring/README.md)**：在该目录下执行 `docker compose up -d` 即可运行。完全可选——服务器本身的工作并不依赖此处的任何内容。
 
-- `data/settings.json`——完整的状态树：控制器、机器人、系统配置。绝不作为静态文件提供（明确返回 404）——只能通过经过身份验证的 `/api/settings` 路由访问。
-- `data/users.json`——账户凭证（经 scrypt 哈希加盐处理，绝不以明文存储）。同样绝不以静态方式提供。
-- `data/logs/server.log`——每一条指令的仅追加式工业日志。
-- `data/WORKS/`——已保存的机器人轨迹，默认每个机器人一个文件夹，以纯静态文件形式提供（索引及各个工作文件）。
-- `data/model_submissions.json` 及提交的模型文件夹本身——[HYDRA-UMC-EDITOR-URDF](https://github.com/JuanenRac/HYDRA-UMC-EDITOR-URDF) 的“将完成的机器人模型直接推送到本服务器目录”流程在服务端的对应部分。
+| 主题或路由 | 内容 |
+|---|---|
+| `/api/login`, `/api/refresh`, `/api/logout` | 登录（有频率限制）、轮换刷新令牌、退出 |
+| `/api/users`, `/api/users/:username` | 列出、创建、修改和删除账户（`admin`、`operator`、`viewer`）；仅管理员 |
+| `/api/settings`, `/api/robot/:id`, `/api/robot/:id/command` | 状态树和原子的带类型命令（点动、播放、暂停、停止、工具、阀门、泵、速度、视觉、工作台），带 `If-Match` |
+| `/api/robot/:id/claim`, `/release`, `/jog-arm`, `/api/claims`, `/api/stop-all`, `/api/safety-limits` | 预约、启用点动、谁持有什么、全局停止和安全限制 |
+| `/api/admin/server-config`, `/clients`, `/logs`, `/restart`, `/safety-limits` | 管理：访问开关、已连接的应用、服务器日志、重启和安全限制；仅管理员 |
+| `/api/camera/*`, `/api/cameras/status` | 摄像头流、快照、录像、PTZ 和 `POST /api/camera/ticket` |
+| `/api/system/metrics`, `/api/system/supervisor`, `/api/ecosystem/status`, `/api/system/bluetooth/*` | 主机信息、进程监控、生态系统服务的状态与控制、蓝牙配对 |
+| `/api/voice/turn`, `/api/voice/confirm`, `/api/watch/system-status`, `/api/ai/*` | 到语音服务、手表状态和本地 AI 服务的中继 |
+| `/ws` | 一个 WebSocket：完整的 `settings` 快照、轻量的 `delta` 更新和 `claims` 消息；令牌作为 `hydra.bearer` 子协议传送 |
+| `GET /api/hydra-info`, `_hydra._tcp` | 发现：远程契约版本（`remoteApiVersion` 2）、应用版本以及控制器和机器人的数量，通过 mDNS 公布 |
+| `/admin`, `/dashboard-ai`, `/` | 可选的静态页面，仅在 `build-frontend` 于本仓库旁构建后才提供：管理面板、DASHBOARD-AI 和 STUDIO |
+| `/metrics` | Prometheus 文本：运行时间、WebSocket 客户端、写入延迟、按类型的命令、认证失败、主机数据 |
 
-## 📂 仓库结构
-
-```
-HYDRA-UMC-SERVER/
-├── src/
-│   ├── server.ts       # 精简的启动文件，把下列模块连接起来；/api 路由在 src/routes/，实时连接在 ws.ts，设置文件在 settingsStore.ts
-│   ├── kinematics.ts   # 原子点动端点使用的逆运动学辅助工具
-│   ├── metrics.ts      # 支撑 GET /metrics——Prometheus 文本格式输出（prom-client）
-│   ├── ble/            # 蓝牙 LE 服务:帧、网关(命令、确认、状态)与辅助程序传输
-│   ├── users.ts        # 账户存储（scrypt 密码哈希）
-│   ├── routes/         # 按领域划分的 /api 路由: 认证、设置、机器人预约、命令、安全限值、摄像头、蓝牙、管理、系统、到同级服务的中继、本地 AI、助手、工作文件、电源、信息和静态文件
-│   ├── auth.ts, refresh_tokens.ts, secretsPolicy.ts, securityConfig.ts, upstreamAuth.ts # 令牌校验、管理员关卡和速率限制器;刷新令牌存储;生产环境接受的签名密钥与首个密码;访问选项;向被中继服务出示的令牌
-│   ├── claimPolicy.ts, robotEdit.ts, safetyLimits.ts, tableCommand.ts, playback.ts # 谁控制哪台机器人;操作员对单台机器人的编辑;所有客户端必须遵守的限值;一次请求完成的 XY 工作台移动;以服务器为准的回放
-│   ├── settingsStore.ts, settingsBackups.ts, transactionalFiles.ts, auditLog.ts, logRotation.ts # 磁盘上的设置文件、其备份、多个文件的全有或全无写入、审计记录与日志轮转
-│   ├── ws.ts, mqttBridge.ts, mqttStart.ts, telemetryProducer.ts # 实时连接中心 (WebSocket)、通往单元代理的 MQTT 桥及其启动,以及第一个遥测生产者
-│   ├── cameraHealth.ts, cameraProbe.ts, cameraSupervisor.ts, mediaTickets.ts # 摄像头流是否真的在送出画面、IP 摄像头探测与 PTZ、流进程监督器,以及摄像头画面的短时效票据
-│   └── ecosystemStatus.ts, portsRegistry.ts, systemMetrics.ts, runtime.ts, serverPolicy.ts, redaction.ts, bluetooth.ts, upstreamConfig.ts, voiceConfirm.ts # 生态系统的发现与存活检测、服务端口注册表、主机指标、进程运行时 (mDNS、端口)、纯策略辅助函数、机密脱敏、蓝牙配对辅助、上游地址以及语音请求的确认
-├── admin-ui/            # 为本服务器自身独立提供的 Vite/React 管理面板
-│   │                      （已连接设备、自身日志文件、自身配置、自身用户——刻意不包含
-│   │                      机器人控制，那始终仅属于 STUDIO）
-│   ├── src/
-│   │   ├── App.tsx, main.tsx, index.css, api.ts, LoginScreen.tsx
-│   │   └── tabs/AboutTab.tsx, ConfigTab.tsx, DevicesTab.tsx, LogsTab.tsx, UsersTab.tsx
-│   ├── package.json / tsconfig.json / vite.config.ts
-│   └── README.md
-├── data/                # 运行时状态——设置、用户、日志、工作文件、已保存的点位
-│   ├── settings.json
-│   ├── users.json
-│   ├── logs/
-│   ├── points/
-│   └── WORKS/
-├── docs/
-│   ├── REMOTE_API.md              # 完整契约：路由、WS 协议、身份验证
-│   ├── CONTRACT_V2.md             # 第二版契约的设计（按块）
-│   ├── PRODUCTION_BOOTSTRAP.md    # 必需的 JWT 与初始管理员配置
-│   ├── REMOTE_ACCESS_VPN.md       # 真实的远程访问/VPN 部署指南
-│   ├── BLE_GATT.md                # 蓝牙 LE 服务:特征、帧、命令与确认
-│   ├── MQTT_BRIDGE.md             # 通往单元代理的 MQTT 桥: 模式 (默认关闭)、主题与命令
-│   └── openapi.json               # HTTP API 的 OpenAPI 描述 (由 tools/generate_openapi.mjs 生成)
-├── images/               # 媒体与图示
-├── systemd/
-│   └── hydra-umc-server.service # CM5 本地 systemd 单元
-├── tools/
-│   ├── build_test.py            # 不递增版本号的构建检查
-│   ├── ci_validate.py                                   # CI 使用的 manifest/CHANGELOG/docs 校验
-│   ├── generate_openapi.mjs, openapi_types.mjs          # 根据路由生成 docs/openapi.json,并由它生成 TypeScript 类型
-│   ├── verify_*_contract.mjs, verify_auth_negative.mjs  # 针对真实服务器的 29 项真实契约/负向认证
-│   │                                                       检查（discovery、负向认证、生产环境 bootstrap、
-│   │                                                       机器人指令/所有权、刷新令牌、语音中继及其自身
-│   │                                                       错误路径、回放、持久化的 XY 表、生态系统状态/
-│   │                                                       服务控制、遥测中继、集成 test-connection、
-│   │                                                       CAN-OTA 中继、本地 AI 代理、connector-hub 中继）
-│   ├── _doc_policy.py                                   # 家族共享的文档规则 (HYDRA-UMC-SDK 的副本,保持同步)
-│   ├── _readme_parity.py                                # 检查八个 README 结构一致 (HYDRA-UMC-SDK 的副本,保持同步)
-│   └── hydra_project_tool.py                            # 每个仓库相同的命令: validate、test、ci、version、status、bump
-├── tests/
-│   └── *.test.ts        # 对纯模块的直接单元测试 (通过 tsx --test 运行 node:test,`npm run test:unit`): 策略、运动学、预约、安全限值、令牌、密钥、BLE 分帧与网关、摄像头健康与探测、MQTT 桥、遥测等 - 在进程内运行、不启动服务器,补充上面 tools/ 的端到端检查
-├── monitoring/           # 可选的 Prometheus + Grafana 技术栈——见 monitoring/README.md
-├── scripts/
-│   ├── ble_gatt_helper.py # 蓝牙 LE 服务的 BlueZ 端(D-Bus),通过 JSON 行通信
-│   └── bump-version.mjs # 里程表式版本递增（仅由显式 `bump` 命令运行）
-├── bump_manifest_version.py # 将 hydra-umc.project.json 的版本与原生版本同步（--sync）
-├── build.bat / build.sh # 安装依赖 + 生产构建
-├── dev.bat / dev.sh      # 安装依赖 + 启动开发服务器
-├── package.json
-├── tsconfig.json
-├── CHANGELOG.md
-└── LICENSE
-```
-
-`public/`（STUDIO 编译后的静态前端，与本服务器一同部署在 `/`）已加入
-gitignore——通过复制 STUDIO 自身的构建输出填充，不属于全新克隆的一部分。
-
-## 🛠️ 开发环境
-
-### 系统要求
-- [Node.js](https://nodejs.org/)（建议 v18 或更高版本）
-- npm
-
-### 安装
-
-```bash
-npm install
-```
+## ⚙️ 配置
 
 ### 环境变量
 
@@ -234,6 +204,54 @@ npm install
   ```
   然后设置 `TLS_CERT_PATH=./cert.pem` 和 `TLS_KEY_PATH=./key.pem`。
 
+以下访问开关就是 STUDIO 和 SUITE 的 Server Admin 画面所编辑的那些。每一项都按相同顺序决定：先是部署环境变量（画面中显示为锁定），然后是管理员保存在 `data/server-config.json` 中的值，最后是保守的默认值。其余一切由上面列出的变量涵盖。
+
+| 变量 | 默认值 | 设置内容 |
+|---|---|---|
+| `aiAccess`, `HYDRA_UMC_AI_ACCESS` | `open` | 谁可以使用本地 AI 中继：`open` 为任何已登录账户，`admin` 仅管理员 |
+| `infoAuth`, `HYDRA_UMC_INFO_AUTH` | 关闭 | 对只读主机信息（指标、进程监控、生态系统状态）要求登录 |
+| `tls.enabled`, `TLS_CERT_PATH, TLS_KEY_PATH` | 关闭（明文 HTTP） | 使用你指定的证书和密钥启用 HTTPS 与 WSS；画面显示正在使用的证书指纹 |
+| `ble.mode`, `HYDRA_UMC_BLE_GATT` | `off` | 供服务器附近手机使用的蓝牙 LE：`off`、`state`（仅发布状态）或 `commands`（也接受命令）；未知词表示关闭 |
+| `ble.requireEncryption`, `HYDRA_UMC_BLE_ENCRYPTION` | 开启 | 命令特征值的写入和状态的读取只在加密链路上进行；只有变量为 `off` 才会关闭 |
+| `mqtt.mode`, `MQTT environment of the deployment` | `off` | 连接单元代理的 MQTT 桥：`off`、`state` 或 `commands`，以及其 URL、前缀和用户 |
+| `voice.includeHeardText`, `HYDRA_UMC_VOICE_UI_INCLUDE_HEARD_TEXT` | 关闭 | 语音回复会复述所说的话；这属于个人数据，所以默认关闭，变量中只有恰好为 `1` 才会开启 |
+| `voice.minConfidence`, `HYDRA_UMC_VOICE_UI_MIN_CONFIDENCE` | `0.6` | 语音识别器接受启动运动请求所需的最低置信度（0 到 1）；0 表示关闭检查，停止命令从不被拦下，变量中的无效数字会被忽略 |
+| `mavlink.signingKeyFile`, `HYDRA_UMC_BRIDGE_UAV_SIGNING_KEY_FILE` | 空（不签名） | UAV 桥的 MAVLink 2 签名：包含 32 字节密钥的文件路径（32 个原始字节或 64 个十六进制字符）；只保存路径，绝不保存密钥，桥在启动时读取 |
+| `mavlink.signingAllowUnsigned`, `HYDRA_UMC_BRIDGE_UAV_SIGNING_ALLOW_UNSIGNED` | 关闭 | 仍接受未签名的消息（尚不签名的载具）；开启期间画面会给出警告 |
+
+## 🚀 快速开始
+
+需要 Node.js 22 或更高版本及 npm。服务器无需配置即可以适合开发的默认值运行；在它能被可信局域网之外访问之前，请设置“配置”一节中的变量。
+
+```bash
+npm install
+./dev.sh                    # runs the server with tsx on port 3000, no frontend (dev.bat on Windows)
+npm run test:unit           # the unit tests
+npm test                    # unit tests, the OpenAPI check and the contract scripts against a live instance
+npm run build && npm start  # one bundled file (build.sh and build.bat make a versioned release build)
+```
+
+服务器监听 `0.0.0.0:3000`；它的全部状态都在 `data/` 中。本仓库有意不提供 Dockerfile：由 HYDRA-UMC-OS 在 CM5 上安装它（`provisioning/install_server.sh`）。运行中的版本可从 `GET /api/hydra-info`（`appVersion`）读取；只有根目录的 `build*.sh` 和 `build*.bat` 会生成带版本的发布构建，`npm run build` 只编译。
+
+## 🧪 测试
+
+运行 `npm run test:unit` 会执行 377 个自动测试。 此外，`npm test` 会运行 OpenAPI 检查，以及针对本服务器真实实例的 `tools/` 中 28 个端到端契约脚本（发现、无凭据和有凭据登录、生产环境引导、机器人命令与归属、刷新令牌、语音中继及其错误路径、播放、全局停止、蓝牙和 MQTT 桥、摄像头媒体、AI 与连接器中枢中继、观察者角色等）；全部通过。都不需要硬件。
+
+CI 运行 `HYDRA_UMC_CI=1 python tools/ci_validate.py`，检查清单、文档、八个 README 和图片。
+
+## 🏗️ 构建与发布
+
+### 系统要求
+
+- [Node.js](https://nodejs.org/)（建议 v18 或更高版本）
+- npm
+
+### 安装
+
+```bash
+npm install
+```
+
 ### 开发模式
 
 直接使用 `tsx` 运行 API/WebSocket 服务器（无打包工具，不涉及前端）：
@@ -255,13 +273,78 @@ npm start
 
 本仓库有意不提供 Dockerfile：服务器由 [HYDRA-UMC-OS](https://github.com/JuanenRac/HYDRA-UMC-OS)（`provisioning/install_server.sh`）打包并安装到 CM5 上。
 
-### 版本管理
+## 🩺 故障排除
 
-只有根目录的 `build*.bat` 与 `build*.sh` 会创建发布版本递增。它们只调用一次 `bump_manifest_version.py`，并依照十进制“里程表”规则（`0.0.9` -> `0.1.0`，绝不产生 `0.0.10`）同步 `package.json`、`hydra-umc.project.json` 与 [`CHANGELOG.md`](CHANGELOG.md)。`npm run build` 被刻意设计为只编译，因此直接构建和 `build-test` 验证都不会只修改 `package.json` 的版本。运行中的版本可通过 `GET /api/hydra-info`（`appVersion`）读取。
+| 你看到 | 原因 | 处理 |
+|---|---|---|
+| 生产环境下服务器启动时停止 | `NODE_ENV=production` 要求真实的 `JWT_SECRET`（至少 32 个字符，不能是示例值），且首次启动需要初始管理员 | 设置 `JWT_SECRET`、`HYDRA_UMC_BOOTSTRAP_ADMIN_USERNAME` 和 `HYDRA_UMC_BOOTSTRAP_ADMIN_PASSWORD`（见 `docs/PRODUCTION_BOOTSTRAP.md`） |
+| 登录时出现 `429` | 同一地址在 15 分钟内登录失败超过 5 次 | 等待时间窗口结束；只在可信网络中提高 `LOGIN_RATE_LIMIT_MAX` |
+| 浏览器应用被 CORS 拦截 | 生产环境中未设置 `CORS_ALLOWED_ORIGINS` 会拒绝所有浏览器跨源请求（curl、SUITE 和手机应用不受影响） | 用页面的来源设置 `CORS_ALLOWED_ORIGINS=https://studio.example.com,...` |
+| WebSocket 立即关闭，或摄像头画面无法加载 | 客户端把令牌放在地址中（`/ws?token=`，默认被拒绝），或不带票据打开画面（默认必需） | 使用 `hydra.bearer` 子协议和 `POST /api/camera/ticket`；退出开关 `HYDRA_UMC_WS_QUERY_TOKEN=allow` 和 `HYDRA_UMC_CAMERA_AUTH=open` 只是临时的 |
+| 访问开关因被锁定而被拒绝，或 MAVLink 密钥文件被拒绝 | 该值由环境变量设置（优先于已保存的值），或密钥文件无法读取，或不是 32 字节或 64 个十六进制字符 | 修改或移除该变量并重启，或修正文件；MAVLink 桥在启动时读取其选项 |
 
-## 📊 监控（可选）
+## 📂 仓库结构
 
-`GET /metrics` 以 Prometheus 格式导出进程运行时长、已连接的 WebSocket 客户端数、`settings.json` 写入延迟、按类型统计的原子机器人指令、身份验证失败次数，以及与 `GET /api/system/metrics` 相同的 CPU/内存/温度数据。一套可直接运行的 Prometheus + Grafana 技术栈（附带一个起始仪表盘）位于 **[`monitoring/`](monitoring/README.md)**：在该目录下执行 `docker compose up -d` 即可运行。完全可选——服务器本身的工作并不依赖此处的任何内容。
+<p align="center">
+  <img src="images/repository-structure.svg" alt="Repository structure of HYDRA-UMC-SERVER" width="100%">
+</p>
+
+<details>
+<summary>目录树的文本版本</summary>
+
+```text
+HYDRA-UMC-SERVER/
+├── src/                       源代码
+│   ├── server.ts              精简的启动文件，把下列模块连接起来；/api 路由在 src/routes/，实时连接在 ws.ts，设置文件在 settingsStore.ts
+│   ├── kinematics.ts          原子点动端点使用的逆运动学辅助工具
+│   ├── metrics.ts             支撑 GET /metrics——Prometheus 文本格式输出（prom-client）
+│   ├── ble/                   蓝牙 LE 服务:帧、网关(命令、确认、状态)与辅助程序传输
+│   ├── users.ts               账户存储（scrypt 密码哈希）
+│   ├── routes/                按领域划分的 /api 路由: 认证、设置、机器人预约、命令、安全限值、摄像头、蓝牙、管理、系统、到同级服务的中继、本地 AI、助手、工作文件、电源、信息和静态文件
+│   ├── auth.ts                令牌校验、管理员关卡和速率限制器;刷新令牌存储;生产环境接受的签名密钥与首个密码;访问选项;向被中继服务出示的令牌
+│   ├── claimPolicy.ts         谁控制哪台机器人;操作员对单台机器人的编辑;所有客户端必须遵守的限值;一次请求完成的 XY 工作台移动;以服务器为准的回放
+│   ├── settingsStore.ts       磁盘上的设置文件、其备份、多个文件的全有或全无写入、审计记录与日志轮转
+│   ├── ws.ts                  实时连接中心 (WebSocket)、通往单元代理的 MQTT 桥及其启动,以及第一个遥测生产者
+│   ├── cameraHealth.ts        摄像头流是否真的在送出画面、IP 摄像头探测与 PTZ、流进程监督器,以及摄像头画面的短时效票据
+│   └── ecosystemStatus.ts     生态系统的发现与存活检测、服务端口注册表、主机指标、进程运行时 (mDNS、端口)、纯策略辅助函数、机密脱敏、蓝牙配对辅助、上游地址以及语音请求的确认
+├── admin-ui/                  为本服务器自身独立提供的 Vite/React 管理面板
+├── data/                      运行时状态——设置、用户、日志、工作文件、已保存的点位
+├── docs/                      项目文档
+├── images/                    媒体与图示
+├── systemd/                   服务单元
+├── tools/                     项目工具和 CI 检查
+├── tests/                     自动测试
+├── monitoring/                可选的 Prometheus + Grafana 技术栈——见 monitoring/README.md
+├── scripts/                   蓝牙 LE 辅助程序（BlueZ）和一个旧版本辅助脚本
+├── .github/                   CI 工作流和 Issue 模板
+├── bump_manifest_version.py   将 hydra-umc.project.json 的版本与原生版本同步（--sync）
+├── build.bat / build.sh       安装依赖 + 生产构建
+├── dev.bat / dev.sh           安装依赖 + 启动开发服务器
+├── package.json               包的元数据和脚本
+├── tsconfig.json              TypeScript 配置
+├── CHANGELOG.md               每个版本的变更
+├── LICENSE
+├── build-test.sh              不修改内容的构建检查
+├── hydra-umc.project.json     清单：版本、成熟度、系列
+└── test.sh                    运行测试
+```
+
+</details>
+
+## 🗺️ 路线图与已知限制
+
+**目前已知的限制**
+
+* 与带 STM32H745 板的真实 CM5 的连接（`spi_bridge`）是真实的代码，但只通过 API 和契约层验证过；从来没有实体板卡来完成最后一跳。
+* 服务器监听所有接口（`0.0.0.0`）；目前还没有监听地址开关，因此限制暴露面的是防火墙或上面的访问开关。
+* 开发环境（`NODE_ENV` 不是 `production`）使用内置签名密钥、`admin`/`admin` 账户和开放的 CORS 策略，各自带警告；生产环境拒绝它们。
+* TLS、蓝牙 LE 和 MQTT 桥是可选的，默认关闭。
+
+**下一步：** 每条新路由都遵循同一份清单（在 `docs/REMOTE_API.md` 中记录，在 `docs/openapi.json` 中命名，在 SDK 的客户端中定义类型）。
+
+## 🌍 语言
+
+本 README 和仓库文档提供八种语言：英语、西班牙语、德语、法语、意大利语、日语、中文和葡萄牙语（葡萄牙）。它们同时编写，并由 CI 检查八个文件拥有相同的章节和相同的链接。 本仓库没有自己的界面或消息目录，因此没有需要翻译的界面文字。
 
 ## 🔗 相关项目
 
@@ -352,27 +435,26 @@ npm start
 - **[HYDRA-UMC-OPS-AGENT](https://github.com/JuanenRac/HYDRA-UMC-OPS-AGENT)** — 维护事件协调器：一个低权限的边缘角色采集经过脱敏的库存/健康快照，一个控制面角色以只读方式渲染它，并请求某个 AI 提供方给出诊断建议——从不应用补丁，也从不部署任何内容。
 - **[HYDRA-UMC-DEV-SERVER](https://github.com/JuanenRac/HYDRA-UMC-DEV-SERVER)** — 可复现的开发主机（Raspberry Pi 5 / CM5），保存整个生态系统的源代码，并在持久队列下运行有界的构建/测试任务；这是专用的开发角色，明确区别于运行中的 CM5。
 
----
+## 📚 文档
 
-## 📚 文档与社区
+更多阅读：
 
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** —— 提交 Pull Request 所需的技术栈和编码规范。
-- **[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)** —— 本社区所期望的行为准则。
-- **[SECURITY.md](SECURITY.md)** —— 如何报告漏洞，以及本项目真实的安全关注重点。
-- **[SUPPORT.md](SUPPORT.md)** —— 在哪里提问和报告缺陷。
-- **[LICENSE.md](LICENSE.md)** —— 本项目自身的许可证。
+* [生态系统的安全基线](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/SECURITY_BASELINE.md)
+* [生态系统的威胁模型](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/THREAT_MODEL.md)
+* [本仓库的更新日志](CHANGELOG.md)
+* [本仓库的许可证](LICENSE.md)
+
+## 🤝 参与贡献与社区
+
+* 提交 pull request 之前，请运行 `HYDRA_UMC_CI=1 py -3 tools/ci_validate.py`（或 `HYDRA_UMC_CI=1 python3 tools/ci_validate.py`）：它必须输出 `CI_VALIDATION=PASS`。此检查不要运行 `build.sh` 或 `build.bat`；构建不是检查。
+* 八个 README 由 HYDRA-UMC-DOCS 中的同一个源生成；请勿手工编辑。修改源文件，再用 `tools/make_readmes.py` 重新生成。
+* 不要在 README 中声称尚未运行过的内容：属实时请写“仅模拟”或“尚未在硬件上试过”。
+* 请参阅 [CONTRIBUTING.md](CONTRIBUTING.md)、[行为准则](CODE_OF_CONDUCT.md)、[SECURITY.md](SECURITY.md) 和 [SUPPORT.md](SUPPORT.md)。
 
 ## 👤 作者
-**JuanenRac** (Electro Hobby 3D)
-📧 electrohobby3d@gmail.com
-📺 [youtube.com/@electrohobby3d](https://youtube.com/@electrohobby3d)
+
+**JuanenRac (Electro Hobby 3D)** · electrohobby3d@gmail.com
 
 ## 📜 许可证
 
-HYDRA-UMC SERVER 版权所有 (c) 2026 JuanenRac（Electro Hobby 3D）。分发本项目或其衍生作品时必须包含此声明。
-
-本应用的源代码依据 **GNU 通用公共许可证 v3.0（GPL-3.0）** 提供。完整文本见
-https://www.gnu.org/licenses/gpl-3.0.html。
-
-文档（本 README 及其自身的翻译版本——`README_spa.md`、`README_ita.md`、`README_fra.md`、`README_deu.md`、`README_zho.md`、`README_jpn.md`）依据 **知识共享 署名-相同方式共享 4.0 国际许可协议（CC BY-SA 4.0）** 提供。完整文本见
-https://creativecommons.org/licenses/by-sa/4.0/。
+GPL-3.0-or-later - [LICENSE](LICENSE).

@@ -1,0 +1,780 @@
+{
+  "repo": "HYDRA-UMC-SERVER",
+  "ecosystem": "hydra",
+  "svg": "en",
+  "exempt": [
+    "CODE_OF_CONDUCT.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "SUPPORT.md",
+    "LICENSE",
+    "LICENSE.md",
+    "build-frontend.bat",
+    "build-frontend.sh",
+    "build-test.bat",
+    "package-lock.json",
+    "test.bat"
+  ],
+  "cards": [
+    {
+      "name": "src/",
+      "span": 3,
+      "accent": "a",
+      "rows": [
+        {
+          "name": "server.ts",
+          "desc": {
+            "en": "Thin startup that wires the modules below",
+            "es": "Arranque delgado que une los módulos de",
+            "de": "Schlanker Start",
+            "fr": "Démarrage léger qui relie les modules",
+            "it": "Avvio leggero che collega i moduli qui sotto",
+            "ja": "以下のモジュールをつなぐ薄い起動部。/api",
+            "zh": "精简的启动文件，把下列模块连接起来；/api",
+            "pt": "Arranque fino que liga os módulos abaixo"
+          },
+          "tree_desc": {
+            "en": "Thin startup that wires the modules below together; the /api routes live in src/routes/, the live connections in ws.ts, the settings files in settingsStore.ts",
+            "es": "Arranque delgado que une los módulos de abajo; las rutas /api están en src/routes/, las conexiones en vivo en ws.ts, los archivos de ajustes en settingsStore.ts",
+            "de": "Schlanker Start, der die folgenden Module verbindet; die /api-Routen liegen in src/routes/, die Live-Verbindungen in ws.ts, die Einstellungsdateien in settingsStore.ts",
+            "fr": "Démarrage léger qui relie les modules ci-dessous ; les routes /api sont dans src/routes/, les connexions en direct dans ws.ts, les fichiers de réglages dans settingsStore.ts",
+            "it": "Avvio leggero che collega i moduli qui sotto; le rotte /api stanno in src/routes/, le connessioni dal vivo in ws.ts, i file delle impostazioni in settingsStore.ts",
+            "ja": "以下のモジュールをつなぐ薄い起動部。/api ルートは src/routes/、ライブ接続は ws.ts、設定ファイルは settingsStore.ts",
+            "zh": "精简的启动文件，把下列模块连接起来；/api 路由在 src/routes/，实时连接在 ws.ts，设置文件在 settingsStore.ts",
+            "pt": "Arranque fino que liga os módulos abaixo; as rotas /api estão em src/routes/, as ligações em direto em ws.ts, os ficheiros de definições em settingsStore.ts"
+          }
+        },
+        {
+          "name": "kinematics.ts",
+          "desc": {
+            "en": "Inverse-kinematics helper for the atomic",
+            "es": "Ayudante de cinemática inversa para el",
+            "de": "Inverse-Kinematik-Hilfsfunktion für den",
+            "fr": "Aide de cinématique inverse pour le point",
+            "it": "Helper di cinematica inversa per l'endpoint",
+            "ja": "原子的ジョグエンドポイント用の逆運動学ヘルパ",
+            "zh": "原子点动端点使用的逆运动学辅助工具",
+            "pt": "Auxiliar de cinemática inversa para o ponto"
+          },
+          "tree_desc": {
+            "en": "Inverse-kinematics helper for the atomic jog endpoint",
+            "es": "Ayudante de cinemática inversa para el endpoint atómico de jog",
+            "de": "Inverse-Kinematik-Hilfsfunktion für den atomaren Jog-Endpunkt",
+            "fr": "Aide de cinématique inverse pour le point de terminaison atomique de jog",
+            "it": "Helper di cinematica inversa per l'endpoint atomico di jog",
+            "ja": "原子的ジョグエンドポイント用の逆運動学ヘルパー",
+            "zh": "原子点动端点使用的逆运动学辅助工具",
+            "pt": "Auxiliar de cinemática inversa para o ponto final atómico de jog"
+          }
+        },
+        {
+          "name": "metrics.ts",
+          "desc": {
+            "en": "Backs GET /metrics",
+            "es": "Respalda GET /metrics",
+            "de": "Bedient GET /metrics",
+            "fr": "Alimente GET /metrics",
+            "it": "Alimenta GET /metrics",
+            "ja": "GET /metrics を支える —— P",
+            "zh": "支撑 GET /metrics——Prome",
+            "pt": "Alimenta GET /metrics"
+          },
+          "tree_desc": {
+            "en": "Backs GET /metrics - Prometheus text exposition (prom-client)",
+            "es": "Respalda GET /metrics - exposición Prometheus en texto (prom-client)",
+            "de": "Bedient GET /metrics - Prometheus-Textexposition (prom-client)",
+            "fr": "Alimente GET /metrics - exposition texte Prometheus (prom-client)",
+            "it": "Alimenta GET /metrics - esposizione testuale Prometheus (prom-client)",
+            "ja": "GET /metrics を支える —— Prometheus テキスト形式（prom-client）",
+            "zh": "支撑 GET /metrics——Prometheus 文本格式输出（prom-client）",
+            "pt": "Alimenta GET /metrics - exposição de texto Prometheus (prom-client)"
+          }
+        },
+        {
+          "name": "ble/",
+          "desc": {
+            "en": "Bluetooth LE service: framing, gateway",
+            "es": "Servicio Bluetooth LE: tramas, pasarela",
+            "de": "Bluetooth-LE-Dienst: Rahmen, Gateway",
+            "fr": "Service Bluetooth LE : trames, passerelle",
+            "it": "Servizio Bluetooth LE: frame, gateway",
+            "ja": "Bluetooth LE サービス:フレーム",
+            "zh": "蓝牙 LE 服务:帧、网关(命令、确认、状态",
+            "pt": "Serviço Bluetooth LE: tramas, gateway"
+          },
+          "tree_desc": {
+            "en": "Bluetooth LE service: framing, gateway (commands, acknowledgements, state) and the helper transport",
+            "es": "Servicio Bluetooth LE: tramas, pasarela (órdenes, acuses, estado) y transporte del ayudante",
+            "de": "Bluetooth-LE-Dienst: Rahmen, Gateway (Befehle, Bestätigungen, Zustand) und Helfer-Transport",
+            "fr": "Service Bluetooth LE : trames, passerelle (commandes, acquittements, état) et transport de l'assistant",
+            "it": "Servizio Bluetooth LE: frame, gateway (comandi, conferme, stato) e trasporto dell'helper",
+            "ja": "Bluetooth LE サービス:フレーム、ゲートウェイ(コマンド、確認応答、状態)、ヘルパー転送",
+            "zh": "蓝牙 LE 服务:帧、网关(命令、确认、状态)与辅助程序传输",
+            "pt": "Serviço Bluetooth LE: tramas, gateway (comandos, confirmações, estado) e transporte do auxiliar"
+          }
+        },
+        {
+          "name": "users.ts",
+          "desc": {
+            "en": "Account store (scrypt password hashing)",
+            "es": "Almacén de cuentas",
+            "de": "Konto-Speicher (scrypt-Passwort-Hashing)",
+            "fr": "Magasin de comptes",
+            "it": "Archivio account (hash password scrypt)",
+            "ja": "アカウントストア（scrypt パスワードハ",
+            "zh": "账户存储（scrypt 密码哈希）",
+            "pt": "Armazém de contas"
+          },
+          "tree_desc": {
+            "en": "Account store (scrypt password hashing)",
+            "es": "Almacén de cuentas (hash de contraseña scrypt)",
+            "de": "Konto-Speicher (scrypt-Passwort-Hashing)",
+            "fr": "Magasin de comptes (hachage de mot de passe scrypt)",
+            "it": "Archivio account (hash password scrypt)",
+            "ja": "アカウントストア（scrypt パスワードハッシュ化）",
+            "zh": "账户存储（scrypt 密码哈希）",
+            "pt": "Armazém de contas (hash de palavras-passe com scrypt)"
+          }
+        },
+        {
+          "name": "routes/",
+          "desc": {
+            "en": "The /api routes by area",
+            "es": "Las rutas /api por áreas",
+            "de": "Die /api-Routen nach Bereichen",
+            "fr": "Les routes /api par domaine",
+            "it": "Le rotte /api per area",
+            "ja": "/api ルートを領域別に: 認証",
+            "zh": "按领域划分的 /api 路由",
+            "pt": "As rotas /api por área"
+          },
+          "tree_desc": {
+            "en": "The /api routes by area: auth, settings, robot claims, commands, safety limits, cameras, Bluetooth, admin, system, relays to the sibling services, local AI, assistant, work files, power, info and static files",
+            "es": "Las rutas /api por áreas: auth, ajustes, reservas de robot, órdenes, límites de seguridad, cámaras, Bluetooth, administración, sistema, relés a los servicios hermanos, IA local, asistente, ficheros de trabajo, energía, información y ficheros estáticos",
+            "de": "Die /api-Routen nach Bereichen: Auth, Einstellungen, Roboter-Reservierungen, Befehle, Sicherheitsgrenzen, Kameras, Bluetooth, Admin, System, Relays zu den Schwesterdiensten, lokale KI, Assistent, Arbeitsdateien, Energie, Info und statische Dateien",
+            "fr": "Les routes /api par domaine : auth, réglages, réservations de robot, commandes, limites de sécurité, caméras, Bluetooth, admin, système, relais vers les services frères, IA locale, assistant, fichiers de travail, alimentation, infos et fichiers statiques",
+            "it": "Le rotte /api per area: auth, impostazioni, prenotazioni dei robot, comandi, limiti di sicurezza, telecamere, Bluetooth, amministrazione, sistema, relay verso i servizi fratelli, IA locale, assistente, file di lavoro, alimentazione, info e file statici",
+            "ja": "/api ルートを領域別に: 認証、設定、ロボットの予約、コマンド、安全上限、カメラ、Bluetooth、管理、システム、兄弟サービスへの中継、ローカル AI、アシスタント、作業ファイル、電源、情報、静的ファイル",
+            "zh": "按领域划分的 /api 路由: 认证、设置、机器人预约、命令、安全限值、摄像头、蓝牙、管理、系统、到同级服务的中继、本地 AI、助手、工作文件、电源、信息和静态文件",
+            "pt": "As rotas /api por área: autenticação, definições, reservas de robô, comandos, limites de segurança, câmaras, Bluetooth, administração, sistema, relés para os serviços irmãos, IA local, assistente, ficheiros de trabalho, energia, informação e ficheiros estáticos"
+          }
+        },
+        {
+          "name": "auth.ts",
+          "desc": {
+            "en": "Token verification",
+            "es": "Verificación de tokens",
+            "de": "Token-Prüfung, das Admin-Tor und die",
+            "fr": "Vérification des jetons",
+            "it": "Verifica dei token",
+            "ja": "トークン検証、管理者ゲート、レート制限、リフ",
+            "zh": "令牌校验、管理员关卡和速率限制器;刷新令牌存",
+            "pt": "Verificação de tokens"
+          },
+          "tree_desc": {
+            "en": "Token verification, the admin gate and the rate limiters; the refresh-token store; what production accepts as its signing secret and first password; the access options; the tokens presented to the relayed services",
+            "es": "Verificación de tokens, la puerta de administrador y los limitadores de tasa; el almacén de tokens de refresco; lo que acepta producción como secreto de firma y primera contraseña; las opciones de acceso; los tokens que se presentan a los servicios retransmitidos",
+            "de": "Token-Prüfung, das Admin-Tor und die Ratenbegrenzer; der Refresh-Token-Speicher; was die Produktion als Signaturgeheimnis und erstes Passwort akzeptiert; die Zugriffsoptionen; die Token für die weitergeleiteten Dienste",
+            "fr": "Vérification des jetons, la porte administrateur et les limiteurs de débit ; le magasin de jetons de rafraîchissement ; ce que la production accepte comme secret de signature et premier mot de passe ; les options d'accès ; les jetons présentés aux services relayés",
+            "it": "Verifica dei token, il cancello amministratore e i limitatori di frequenza; l'archivio dei token di refresh; ciò che la produzione accetta come segreto di firma e prima password; le opzioni di accesso; i token presentati ai servizi in relay",
+            "ja": "トークン検証、管理者ゲート、レート制限、リフレッシュトークンの保管、本番が署名シークレットと初期パスワードとして受け入れるもの、アクセスオプション、中継先サービスに提示するトークン",
+            "zh": "令牌校验、管理员关卡和速率限制器;刷新令牌存储;生产环境接受的签名密钥与首个密码;访问选项;向被中继服务出示的令牌",
+            "pt": "Verificação de tokens, a porta de administrador e os limitadores de taxa; o armazém de tokens de renovação; o que a produção aceita como segredo de assinatura e primeira palavra-passe; as opções de acesso; os tokens apresentados aos serviços retransmitidos"
+          }
+        },
+        {
+          "name": "claimPolicy.ts",
+          "desc": {
+            "en": "Who controls which robot",
+            "es": "Quién controla qué robot",
+            "de": "Wer welchen Roboter steuert",
+            "fr": "Qui contrôle quel robot",
+            "it": "Chi controlla quale robot",
+            "ja": "どのロボットを誰が制御するか",
+            "zh": "谁控制哪台机器人;操作员对单台机器人的编辑",
+            "pt": "Quem controla que robô"
+          },
+          "tree_desc": {
+            "en": "Who controls which robot; the edits an operator makes on one robot; the limits every client is held to; the XY-table move in one request; the server-authoritative playback",
+            "es": "Quién controla qué robot; las ediciones que un operador hace sobre un robot; los límites a los que se sujeta todo cliente; el movimiento de la mesa XY en una petición; la reproducción autoritativa del servidor",
+            "de": "Wer welchen Roboter steuert; die Änderungen, die ein Bediener an einem Roboter vornimmt; die Grenzen, an die sich jeder Client halten muss; die XY-Tisch-Bewegung in einer Anfrage; die serverseitig maßgebliche Wiedergabe",
+            "fr": "Qui contrôle quel robot ; les modifications qu'un opérateur fait sur un robot ; les limites auxquelles tout client est tenu ; le déplacement de la table XY en une requête ; la lecture faisant autorité côté serveur",
+            "it": "Chi controlla quale robot; le modifiche che un operatore fa su un robot; i limiti a cui ogni client è vincolato; lo spostamento del tavolo XY in una richiesta; la riproduzione autorevole lato server",
+            "ja": "どのロボットを誰が制御するか、オペレーターが1台のロボットに行う編集、全クライアントが守る上限、1回のリクエストでの XY テーブル移動、サーバーが正とする再生",
+            "zh": "谁控制哪台机器人;操作员对单台机器人的编辑;所有客户端必须遵守的限值;一次请求完成的 XY 工作台移动;以服务器为准的回放",
+            "pt": "Quem controla que robô; as edições que um operador faz num robô; os limites a que todo o cliente está sujeito; o movimento da mesa XY num só pedido; a reprodução com autoridade no servidor"
+          }
+        },
+        {
+          "name": "settingsStore.ts",
+          "desc": {
+            "en": "The settings files on disk",
+            "es": "Los ficheros de ajustes en disco",
+            "de": "Die Einstellungsdateien auf der Platte",
+            "fr": "Les fichiers de réglages sur disque",
+            "it": "I file di impostazioni su disco",
+            "ja": "ディスク上の設定ファイル、そのバックアップ",
+            "zh": "磁盘上的设置文件、其备份、多个文件的全有或全",
+            "pt": "Os ficheiros de definições em disco"
+          },
+          "tree_desc": {
+            "en": "The settings files on disk, their backups, all-or-nothing writes of several files, the audit record and log rotation",
+            "es": "Los ficheros de ajustes en disco, sus copias de seguridad, escrituras de todo o nada de varios ficheros, el registro de auditoría y la rotación de logs",
+            "de": "Die Einstellungsdateien auf der Platte, ihre Sicherungen, Alles-oder-nichts-Schreibvorgänge mehrerer Dateien, das Audit-Protokoll und die Log-Rotation",
+            "fr": "Les fichiers de réglages sur disque, leurs sauvegardes, les écritures tout-ou-rien de plusieurs fichiers, l'enregistrement d'audit et la rotation des journaux",
+            "it": "I file di impostazioni su disco, i loro backup, le scritture tutto-o-niente di più file, il registro di audit e la rotazione dei log",
+            "ja": "ディスク上の設定ファイル、そのバックアップ、複数ファイルのオール・オア・ナッシング書き込み、監査記録、ログローテーション",
+            "zh": "磁盘上的设置文件、其备份、多个文件的全有或全无写入、审计记录与日志轮转",
+            "pt": "Os ficheiros de definições em disco, as suas cópias de segurança, escritas tudo-ou-nada de vários ficheiros, o registo de auditoria e a rotação de logs"
+          }
+        },
+        {
+          "name": "ws.ts",
+          "desc": {
+            "en": "The live connection hub",
+            "es": "El centro de conexiones en vivo",
+            "de": "Die Live-Verbindungszentrale",
+            "fr": "Le hub des connexions en direct",
+            "it": "L'hub delle connessioni dal vivo",
+            "ja": "ライブ接続のハブ (WebSocket)",
+            "zh": "实时连接中心 (WebSocket)",
+            "pt": "O centro de ligações em direto"
+          },
+          "tree_desc": {
+            "en": "The live connection hub (WebSocket), the MQTT bridge to the broker of the cell and its start-up, and the first telemetry producer",
+            "es": "El centro de conexiones en vivo (WebSocket), el puente MQTT al broker de la celda y su arranque, y el primer productor de telemetría",
+            "de": "Die Live-Verbindungszentrale (WebSocket), die MQTT-Brücke zum Broker der Zelle samt Start und der erste Telemetrie-Erzeuger",
+            "fr": "Le hub des connexions en direct (WebSocket), le pont MQTT vers le broker de la cellule et son démarrage, et le premier producteur de télémétrie",
+            "it": "L'hub delle connessioni dal vivo (WebSocket), il ponte MQTT verso il broker della cella e il suo avvio, e il primo produttore di telemetria",
+            "ja": "ライブ接続のハブ (WebSocket)、セルのブローカーへの MQTT ブリッジとその起動、最初のテレメトリ生成元",
+            "zh": "实时连接中心 (WebSocket)、通往单元代理的 MQTT 桥及其启动,以及第一个遥测生产者",
+            "pt": "O centro de ligações em direto (WebSocket), a ponte MQTT para o broker da célula e o seu arranque, e o primeiro produtor de telemetria"
+          }
+        },
+        {
+          "name": "cameraHealth.ts",
+          "desc": {
+            "en": "Whether a camera stream really delivers",
+            "es": "Si un flujo de cámara entrega fotogramas de",
+            "de": "Ob ein Kamerastrom wirklich Bilder liefert",
+            "fr": "Si un flux de caméra livre vraiment des",
+            "it": "Se un flusso di telecamera consegna davvero",
+            "ja": "カメラのストリームが実際にフレームを届けてい",
+            "zh": "摄像头流是否真的在送出画面、IP 摄像头探测",
+            "pt": "Se um fluxo de câmara entrega mesmo imagens"
+          },
+          "tree_desc": {
+            "en": "Whether a camera stream really delivers frames, IP-camera probing and PTZ, the stream process supervisor, and short-lived tickets for the camera pictures",
+            "es": "Si un flujo de cámara entrega fotogramas de verdad, sondeo de cámaras IP y PTZ, el supervisor de procesos de flujo y tickets de vida corta para las imágenes de cámara",
+            "de": "Ob ein Kamerastrom wirklich Bilder liefert, IP-Kamera-Erkennung und PTZ, der Stream-Prozess-Supervisor und kurzlebige Tickets für die Kamerabilder",
+            "fr": "Si un flux de caméra livre vraiment des images, sondage des caméras IP et PTZ, le superviseur des processus de flux et les tickets de courte durée pour les images de caméra",
+            "it": "Se un flusso di telecamera consegna davvero fotogrammi, sondaggio delle telecamere IP e PTZ, il supervisore dei processi di flusso e ticket di breve durata per le immagini delle telecamere",
+            "ja": "カメラのストリームが実際にフレームを届けているか、IP カメラの探索と PTZ、ストリームプロセスの監督、カメラ画像用の短命チケット",
+            "zh": "摄像头流是否真的在送出画面、IP 摄像头探测与 PTZ、流进程监督器,以及摄像头画面的短时效票据",
+            "pt": "Se um fluxo de câmara entrega mesmo imagens, sondagem de câmaras IP e PTZ, o supervisor dos processos de fluxo e bilhetes de curta duração para as imagens das câmaras"
+          }
+        },
+        {
+          "name": "ecosystemStatus.ts",
+          "desc": {
+            "en": "Ecosystem discovery and liveness",
+            "es": "Descubrimiento y vida del ecosistema",
+            "de": "Entdeckung und Lebendigkeit des Ökosystems",
+            "fr": "Découverte et vivacité de l'écosystème",
+            "it": "Scoperta e vitalità dell'ecosistema",
+            "ja": "エコシステムの検出と稼働確認",
+            "zh": "生态系统的发现与存活检测、服务端口注册表、主",
+            "pt": "Descoberta e vitalidade do ecossistema"
+          },
+          "tree_desc": {
+            "en": "Ecosystem discovery and liveness, the registry of service ports, host metrics, the process runtime (mDNS, port), pure policy helpers, secret redaction, Bluetooth pairing helpers, the upstream addresses and the confirmation of a spoken request",
+            "es": "Descubrimiento y vida del ecosistema, el registro de puertos de servicios, métricas del equipo, el entorno de ejecución del proceso (mDNS, puerto), utilidades de política puras, ocultación de secretos, utilidades de emparejamiento Bluetooth, las direcciones de los servicios relayados y la confirmación de una petición hablada",
+            "de": "Entdeckung und Lebendigkeit des Ökosystems, das Register der Dienstports, Host-Metriken, die Prozess-Laufzeit (mDNS, Port), reine Policy-Helfer, Geheimnis-Schwärzung, Bluetooth-Kopplungshelfer, die Upstream-Adressen und die Bestätigung einer gesprochenen Anfrage",
+            "fr": "Découverte et vivacité de l'écosystème, le registre des ports de services, les métriques de l'hôte, l'environnement d'exécution du processus (mDNS, port), des aides de politique pures, l'expurgation des secrets, des aides d'appairage Bluetooth, les adresses des services en amont et la confirmation d'une demande vocale",
+            "it": "Scoperta e vitalità dell'ecosistema, il registro delle porte dei servizi, metriche dell'host, l'ambiente di esecuzione del processo (mDNS, porta), funzioni di policy pure, redazione dei segreti, utilità di associazione Bluetooth, gli indirizzi dei servizi a monte e la conferma di una richiesta vocale",
+            "ja": "エコシステムの検出と稼働確認、サービスポートの登録簿、ホストのメトリクス、プロセスのランタイム (mDNS、ポート)、純粋なポリシー補助、秘密情報の伏せ字処理、Bluetooth ペアリング補助、上流アドレス、音声リクエストの確認",
+            "zh": "生态系统的发现与存活检测、服务端口注册表、主机指标、进程运行时 (mDNS、端口)、纯策略辅助函数、机密脱敏、蓝牙配对辅助、上游地址以及语音请求的确认",
+            "pt": "Descoberta e vitalidade do ecossistema, o registo das portas dos serviços, métricas do equipamento, o ambiente de execução do processo (mDNS, porta), auxiliares de política puros, ocultação de segredos, auxiliares de emparelhamento Bluetooth, os endereços dos serviços a montante e a confirmação de um pedido falado"
+          }
+        }
+      ],
+      "tree_head": {
+        "en": "source code",
+        "es": "código fuente",
+        "de": "Quellcode",
+        "fr": "code source",
+        "it": "codice sorgente",
+        "ja": "ソースコード",
+        "zh": "源代码",
+        "pt": "código-fonte"
+      },
+      "sub": {
+        "en": "source code",
+        "es": "código fuente",
+        "de": "Quellcode",
+        "fr": "code source",
+        "it": "codice sorgente",
+        "ja": "ソースコード",
+        "zh": "源代码",
+        "pt": "código-fonte"
+      },
+      "columns": 2
+    },
+    {
+      "name": {
+        "en": "folders",
+        "es": "carpetas",
+        "de": "Ordner",
+        "fr": "dossiers",
+        "it": "cartelle",
+        "ja": "フォルダ",
+        "zh": "文件夹",
+        "pt": "pastas"
+      },
+      "kind": "group",
+      "span": 3,
+      "accent": "b",
+      "columns": 2,
+      "rows": [
+        {
+          "name": "admin-ui/",
+          "desc": {
+            "en": "Separate Vite/React admin panel for THIS",
+            "es": "Panel de administración Vite/React",
+            "de": "Eigenständiges Vite/React-Admin-Panel für",
+            "fr": "Panneau d'administration Vite/React séparé",
+            "it": "Pannello di amministrazione Vite/React",
+            "ja": "この本サーバー自身のための独立した Vite",
+            "zh": "为本服务器自身独立提供的 Vite/Reac",
+            "pt": "Painel de administração Vite/React separado"
+          },
+          "tree_desc": {
+            "en": "Separate Vite/React admin panel for THIS server itself",
+            "es": "Panel de administración Vite/React independiente para ESTE servidor",
+            "de": "Eigenständiges Vite/React-Admin-Panel für DIESEN Server selbst",
+            "fr": "Panneau d'administration Vite/React séparé pour CE serveur lui-même",
+            "it": "Pannello di amministrazione Vite/React separato per QUESTO server",
+            "ja": "この本サーバー自身のための独立した Vite/React 管理パネル",
+            "zh": "为本服务器自身独立提供的 Vite/React 管理面板",
+            "pt": "Painel de administração Vite/React separado para ESTE servidor"
+          }
+        },
+        {
+          "name": "data/",
+          "desc": {
+            "en": "Runtime state - settings",
+            "es": "Estado en ejecución",
+            "de": "Laufzeitzustand",
+            "fr": "État d'exécution",
+            "it": "Stato a runtime",
+            "ja": "ランタイム状態 —— 設定、ユーザー、ログ",
+            "zh": "运行时状态——设置、用户、日志、工作文件、已",
+            "pt": "Estado em execução"
+          },
+          "tree_desc": {
+            "en": "Runtime state - settings, users, logs, work files, saved points",
+            "es": "Estado en ejecución - settings, users, logs, archivos de trabajo, puntos guardados",
+            "de": "Laufzeitzustand - Settings, Users, Logs, Arbeitsdateien, gespeicherte Punkte",
+            "fr": "État d'exécution - settings, users, logs, fichiers de travail, points enregistrés",
+            "it": "Stato a runtime - settings, users, log, file di lavoro, punti salvati",
+            "ja": "ランタイム状態 —— 設定、ユーザー、ログ、ワークファイル、保存済みポイント",
+            "zh": "运行时状态——设置、用户、日志、工作文件、已保存的点位",
+            "pt": "Estado em execução - definições, utilizadores, registos, ficheiros de trabalho, pontos guardados"
+          }
+        },
+        {
+          "name": "docs/",
+          "desc": {
+            "en": "documents of the project",
+            "es": "documentos del proyecto",
+            "de": "Dokumente des Projekts",
+            "fr": "documents du projet",
+            "it": "documenti del progetto",
+            "ja": "プロジェクトの文書",
+            "zh": "项目文档",
+            "pt": "documentos do projeto"
+          },
+          "tree_desc": {
+            "en": "documents of the project",
+            "es": "documentos del proyecto",
+            "de": "Dokumente des Projekts",
+            "fr": "documents du projet",
+            "it": "documenti del progetto",
+            "ja": "プロジェクトの文書",
+            "zh": "项目文档",
+            "pt": "documentos do projeto"
+          }
+        },
+        {
+          "name": "images/",
+          "desc": {
+            "en": "Media and diagrams",
+            "es": "Medios y diagramas",
+            "de": "Medien und Diagramme",
+            "fr": "Médias et diagrammes",
+            "it": "Media e diagrammi",
+            "ja": "メディアと図版",
+            "zh": "媒体与图示",
+            "pt": "Multimédia e diagramas"
+          },
+          "tree_desc": {
+            "en": "Media and diagrams",
+            "es": "Medios y diagramas",
+            "de": "Medien und Diagramme",
+            "fr": "Médias et diagrammes",
+            "it": "Media e diagrammi",
+            "ja": "メディアと図版",
+            "zh": "媒体与图示",
+            "pt": "Multimédia e diagramas"
+          }
+        },
+        {
+          "name": "systemd/",
+          "desc": {
+            "en": "service unit",
+            "es": "unidad de servicio",
+            "de": "Dienst-Unit",
+            "fr": "unité de service",
+            "it": "unità di servizio",
+            "ja": "サービスユニット",
+            "zh": "服务单元",
+            "pt": "unidade de serviço"
+          },
+          "tree_desc": {
+            "en": "service unit",
+            "es": "unidad de servicio",
+            "de": "Dienst-Unit",
+            "fr": "unité de service",
+            "it": "unità di servizio",
+            "ja": "サービスユニット",
+            "zh": "服务单元",
+            "pt": "unidade de serviço"
+          }
+        },
+        {
+          "name": "tools/",
+          "desc": {
+            "en": "project tools and CI checks",
+            "es": "herramientas del proyecto y comprobaciones",
+            "de": "Projektwerkzeuge und CI-Prüfungen",
+            "fr": "outils du projet et vérifications de la CI",
+            "it": "strumenti del progetto e controlli della CI",
+            "ja": "プロジェクトのツールと CI の検査",
+            "zh": "项目工具和 CI 检查",
+            "pt": "ferramentas do projeto e verificações da CI"
+          },
+          "tree_desc": {
+            "en": "project tools and CI checks",
+            "es": "herramientas del proyecto y comprobaciones del CI",
+            "de": "Projektwerkzeuge und CI-Prüfungen",
+            "fr": "outils du projet et vérifications de la CI",
+            "it": "strumenti del progetto e controlli della CI",
+            "ja": "プロジェクトのツールと CI の検査",
+            "zh": "项目工具和 CI 检查",
+            "pt": "ferramentas do projeto e verificações da CI"
+          }
+        },
+        {
+          "name": "tests/",
+          "desc": {
+            "en": "automated tests",
+            "es": "pruebas automáticas",
+            "de": "automatische Tests",
+            "fr": "tests automatiques",
+            "it": "test automatici",
+            "ja": "自動テスト",
+            "zh": "自动测试",
+            "pt": "testes automáticos"
+          },
+          "tree_desc": {
+            "en": "automated tests",
+            "es": "pruebas automáticas",
+            "de": "automatische Tests",
+            "fr": "tests automatiques",
+            "it": "test automatici",
+            "ja": "自動テスト",
+            "zh": "自动测试",
+            "pt": "testes automáticos"
+          }
+        },
+        {
+          "name": "monitoring/",
+          "desc": {
+            "en": "Optional Prometheus + Grafana stack",
+            "es": "Stack opcional Prometheus + Grafana",
+            "de": "Optionaler Prometheus + Grafana Stack",
+            "fr": "Stack Prometheus + Grafana optionnel",
+            "it": "Stack opzionale Prometheus + Grafana",
+            "ja": "任意の Prometheus + Grafa",
+            "zh": "可选的 Prometheus + Grafa",
+            "pt": "Pilha opcional Prometheus + Grafana"
+          },
+          "tree_desc": {
+            "en": "Optional Prometheus + Grafana stack - see monitoring/README.md",
+            "es": "Stack opcional Prometheus + Grafana - ver monitoring/README.md",
+            "de": "Optionaler Prometheus + Grafana Stack - siehe monitoring/README.md",
+            "fr": "Stack Prometheus + Grafana optionnel - voir monitoring/README.md",
+            "it": "Stack opzionale Prometheus + Grafana - vedi monitoring/README.md",
+            "ja": "任意の Prometheus + Grafana スタック —— monitoring/README.md 参照",
+            "zh": "可选的 Prometheus + Grafana 技术栈——见 monitoring/README.md",
+            "pt": "Pilha opcional Prometheus + Grafana - ver monitoring/README.md"
+          }
+        },
+        {
+          "name": "scripts/",
+          "desc": {
+            "en": "the Bluetooth LE helper",
+            "es": "el ayudante Bluetooth LE",
+            "de": "der Bluetooth-LE-Helfer",
+            "fr": "l'assistant Bluetooth LE",
+            "it": "l'helper Bluetooth LE",
+            "ja": "Bluetooth LE ヘルパー",
+            "zh": "蓝牙 LE 辅助程序（BlueZ）和一个旧版",
+            "pt": "o auxiliar Bluetooth LE"
+          },
+          "tree_desc": {
+            "en": "the Bluetooth LE helper (BlueZ) and a legacy version helper",
+            "es": "el ayudante Bluetooth LE (BlueZ) y un ayudante de versiones heredado",
+            "de": "der Bluetooth-LE-Helfer (BlueZ) und ein alter Versionshelfer",
+            "fr": "l'assistant Bluetooth LE (BlueZ) et un ancien assistant de versions",
+            "it": "l'helper Bluetooth LE (BlueZ) e un vecchio helper per le versioni",
+            "ja": "Bluetooth LE ヘルパー（BlueZ）と旧式のバージョン用ヘルパー",
+            "zh": "蓝牙 LE 辅助程序（BlueZ）和一个旧版本辅助脚本",
+            "pt": "o auxiliar Bluetooth LE (BlueZ) e um auxiliar de versões antigo"
+          }
+        },
+        {
+          "name": ".github/",
+          "desc": {
+            "en": "CI workflow and issue templates",
+            "es": "flujo de CI y plantillas de incidencias",
+            "de": "CI-Workflow und Issue-Vorlagen",
+            "fr": "workflow de CI et modèles de tickets",
+            "it": "workflow di CI e modelli di segnalazione",
+            "ja": "CI ワークフローと Issue テンプレート",
+            "zh": "CI 工作流和 Issue 模板",
+            "pt": "fluxo de CI e modelos de problemas"
+          }
+        }
+      ]
+    },
+    {
+      "name": {
+        "en": "project files",
+        "es": "ficheros del proyecto",
+        "de": "Projektdateien",
+        "fr": "fichiers du projet",
+        "it": "file del progetto",
+        "ja": "プロジェクトのファイル",
+        "zh": "项目文件",
+        "pt": "ficheiros do projeto"
+      },
+      "kind": "group",
+      "span": 3,
+      "accent": "c",
+      "columns": 2,
+      "rows": [
+        {
+          "name": "bump_manifest_version.py",
+          "desc": {
+            "en": "Syncs hydra-umc.project.json's version",
+            "es": "Sincroniza la versión de",
+            "de": "Synchronisiert die Version von",
+            "fr": "Synchronise la version de",
+            "it": "Sincronizza la versione di",
+            "ja": "hydra-umc.project.json",
+            "zh": "将 hydra-umc.project.js",
+            "pt": "Sincroniza a versão de"
+          },
+          "tree_desc": {
+            "en": "Syncs hydra-umc.project.json's version to the native one (--sync)",
+            "es": "Sincroniza la versión de hydra-umc.project.json con la nativa (--sync)",
+            "de": "Synchronisiert die Version von hydra-umc.project.json mit der nativen (--sync)",
+            "fr": "Synchronise la version de hydra-umc.project.json avec la version native (--sync)",
+            "it": "Sincronizza la versione di hydra-umc.project.json con quella nativa (--sync)",
+            "ja": "hydra-umc.project.json のバージョンをネイティブ側と同期（--sync）",
+            "zh": "将 hydra-umc.project.json 的版本与原生版本同步（--sync）",
+            "pt": "Sincroniza a versão de hydra-umc.project.json com a nativa (--sync)"
+          }
+        },
+        {
+          "name": "build.bat / build.sh",
+          "desc": {
+            "en": "Install deps + production build",
+            "es": "Instala dependencias + build de producción",
+            "de": "Installiert Abhängigkeiten +",
+            "fr": "Installe les dépendances + build de",
+            "it": "Installa dipendenze + build di produzione",
+            "ja": "依存関係のインストール + プロダクションビ",
+            "zh": "安装依赖 + 生产构建",
+            "pt": "Instala dependências + compilação de"
+          },
+          "tree_desc": {
+            "en": "Install deps + production build",
+            "es": "Instala dependencias + build de producción",
+            "de": "Installiert Abhängigkeiten + Produktions-Build",
+            "fr": "Installe les dépendances + build de production",
+            "it": "Installa dipendenze + build di produzione",
+            "ja": "依存関係のインストール + プロダクションビルド",
+            "zh": "安装依赖 + 生产构建",
+            "pt": "Instala dependências + compilação de produção"
+          }
+        },
+        {
+          "name": "dev.bat / dev.sh",
+          "desc": {
+            "en": "Install deps + start the dev server",
+            "es": "Instala dependencias + arranca el servidor",
+            "de": "Installiert Abhängigkeiten + startet den",
+            "fr": "Installe les dépendances + démarre le",
+            "it": "Installa dipendenze + avvia il server di",
+            "ja": "依存関係のインストール + 開発サーバーの起",
+            "zh": "安装依赖 + 启动开发服务器",
+            "pt": "Instala dependências + inicia o servidor de"
+          },
+          "tree_desc": {
+            "en": "Install deps + start the dev server",
+            "es": "Instala dependencias + arranca el servidor de desarrollo",
+            "de": "Installiert Abhängigkeiten + startet den Entwicklungsserver",
+            "fr": "Installe les dépendances + démarre le serveur de dev",
+            "it": "Installa dipendenze + avvia il server di sviluppo",
+            "ja": "依存関係のインストール + 開発サーバーの起動",
+            "zh": "安装依赖 + 启动开发服务器",
+            "pt": "Instala dependências + inicia o servidor de desenvolvimento"
+          }
+        },
+        {
+          "name": "package.json",
+          "desc": {
+            "en": "package metadata and scripts",
+            "es": "metadatos y scripts del paquete",
+            "de": "Paketmetadaten und Skripte",
+            "fr": "métadonnées et scripts du paquet",
+            "it": "metadati e script del pacchetto",
+            "ja": "パッケージのメタデータとスクリプト",
+            "zh": "包的元数据和脚本",
+            "pt": "metadados e scripts do pacote"
+          },
+          "tree_desc": {
+            "en": "package metadata and scripts",
+            "es": "metadatos y scripts del paquete",
+            "de": "Paketmetadaten und Skripte",
+            "fr": "métadonnées et scripts du paquet",
+            "it": "metadati e script del pacchetto",
+            "ja": "パッケージのメタデータとスクリプト",
+            "zh": "包的元数据和脚本",
+            "pt": "metadados e scripts do pacote"
+          }
+        },
+        {
+          "name": "tsconfig.json",
+          "desc": {
+            "en": "TypeScript configuration",
+            "es": "configuración de TypeScript",
+            "de": "TypeScript-Konfiguration",
+            "fr": "configuration TypeScript",
+            "it": "configurazione TypeScript",
+            "ja": "TypeScript 設定",
+            "zh": "TypeScript 配置",
+            "pt": "configuração do TypeScript"
+          },
+          "tree_desc": {
+            "en": "TypeScript configuration",
+            "es": "configuración de TypeScript",
+            "de": "TypeScript-Konfiguration",
+            "fr": "configuration TypeScript",
+            "it": "configurazione TypeScript",
+            "ja": "TypeScript 設定",
+            "zh": "TypeScript 配置",
+            "pt": "configuração do TypeScript"
+          }
+        },
+        {
+          "name": "CHANGELOG.md",
+          "desc": {
+            "en": "what changed in each version",
+            "es": "qué cambió en cada versión",
+            "de": "was sich in jeder Version geändert hat",
+            "fr": "ce qui a changé à chaque version",
+            "it": "cosa è cambiato in ogni versione",
+            "ja": "各バージョンの変更点",
+            "zh": "每个版本的变更",
+            "pt": "o que mudou em cada versão"
+          },
+          "tree_desc": {
+            "en": "what changed in each version",
+            "es": "qué cambió en cada versión",
+            "de": "was sich in jeder Version geändert hat",
+            "fr": "ce qui a changé à chaque version",
+            "it": "cosa è cambiato in ogni versione",
+            "ja": "各バージョンの変更点",
+            "zh": "每个版本的变更",
+            "pt": "o que mudou em cada versão"
+          }
+        },
+        {
+          "name": "LICENSE",
+          "desc": {
+            "en": "",
+            "es": "",
+            "de": "",
+            "fr": "",
+            "it": "",
+            "ja": "",
+            "zh": "",
+            "pt": ""
+          },
+          "tree_desc": {
+            "en": "",
+            "es": "",
+            "de": "",
+            "fr": "",
+            "it": "",
+            "ja": "",
+            "zh": "",
+            "pt": ""
+          }
+        },
+        {
+          "name": "build-test.sh",
+          "desc": {
+            "en": "non-mutating build check",
+            "es": "comprobación de compilación sin cambios",
+            "de": "Build-Prüfung ohne Änderungen",
+            "fr": "vérification de build sans modification",
+            "it": "controllo di build senza modifiche",
+            "ja": "変更を伴わないビルド確認",
+            "zh": "不修改内容的构建检查",
+            "pt": "verificação de compilação sem alterações"
+          }
+        },
+        {
+          "name": "hydra-umc.project.json",
+          "desc": {
+            "en": "manifest: version, maturity, family",
+            "es": "manifiesto: versión, madurez, familia",
+            "de": "Manifest: Version, Reifegrad, Familie",
+            "fr": "manifeste : version, maturité, famille",
+            "it": "manifesto: versione, maturità, famiglia",
+            "ja": "マニフェスト：バージョン、成熟度、ファミリー",
+            "zh": "清单：版本、成熟度、系列",
+            "pt": "manifesto: versão, maturidade, família"
+          }
+        },
+        {
+          "name": "test.sh",
+          "desc": {
+            "en": "runs the tests",
+            "es": "ejecuta las pruebas",
+            "de": "führt die Tests aus",
+            "fr": "lance les tests",
+            "it": "esegue i test",
+            "ja": "テストを実行",
+            "zh": "运行测试",
+            "pt": "executa os testes"
+          }
+        }
+      ]
+    }
+  ]
+}

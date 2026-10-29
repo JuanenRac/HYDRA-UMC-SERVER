@@ -1,0 +1,213 @@
+{
+  "repo": "HYDRA-UMC-SERVER",
+  "ecosystem": "hydra",
+  "tagline": "The one place that decides who may move which robot: every client is just a caller of this server.",
+  "description": "HYDRA-UMC-SERVER authenticates every call, turns commands into state changes under reservations and limits, saves the state as one unit, broadcasts it over the WebSocket, and relays to the ecosystem services under the access switches an administrator sets.",
+  "columns": [
+    "WHO CALLS IT",
+    "THIS REPOSITORY",
+    "WHAT IT TALKS TO"
+  ],
+  "nodes": [
+    {
+      "id": "cli",
+      "column": 0,
+      "level": "tested",
+      "title": "Control clients",
+      "lines": [
+        "STUDIO, SUITE, phones,",
+        "touch screen, watch"
+      ],
+      "code": [
+        "src/server.ts"
+      ]
+    },
+    {
+      "id": "mon",
+      "column": 0,
+      "level": "tested",
+      "title": "CLI and monitoring",
+      "lines": [
+        "TOOL-CLI, Prometheus",
+        "on GET /metrics"
+      ],
+      "code": [
+        "src/metrics.ts"
+      ]
+    },
+    {
+      "id": "svc",
+      "column": 2,
+      "level": "contract",
+      "title": "Ecosystem services",
+      "lines": [
+        "DATALAKE, anomaly, voice,",
+        "vision, cognitive node"
+      ]
+    },
+    {
+      "id": "mqb",
+      "column": 2,
+      "level": "contract",
+      "title": "MQTT and BLE phones",
+      "lines": [
+        "bridges that go through",
+        "the same command route"
+      ]
+    },
+    {
+      "id": "brd",
+      "column": 2,
+      "level": "untested",
+      "title": "CM5 and STM32 boards",
+      "lines": [
+        "the SPI link is real code,",
+        "never closed on hardware"
+      ]
+    },
+    {
+      "id": "auth",
+      "column": 1,
+      "level": "tested",
+      "title": "sign-in",
+      "lines": [
+        "JWT, refresh rotation,",
+        "scrypt, rate limits"
+      ],
+      "code": [
+        "src/auth.ts",
+        "src/users.ts",
+        "src/refresh_tokens.ts"
+      ]
+    },
+    {
+      "id": "cmd",
+      "column": 1,
+      "level": "tested",
+      "title": "commands",
+      "lines": [
+        "reservations, If-Match,",
+        "safety limits, global stop"
+      ],
+      "code": [
+        "src/routes/commandRoutes.ts",
+        "src/claimPolicy.ts",
+        "src/safetyLimits.ts"
+      ]
+    },
+    {
+      "id": "swi",
+      "column": 1,
+      "level": "tested",
+      "title": "access switches",
+      "lines": [
+        "environment, then",
+        "server-config.json"
+      ],
+      "code": [
+        "src/securityConfig.ts",
+        "src/serverPolicy.ts"
+      ]
+    },
+    {
+      "id": "sta",
+      "column": 1,
+      "level": "tested",
+      "title": "state and WebSocket",
+      "lines": [
+        "one all-or-nothing store,",
+        "deltas to every client"
+      ],
+      "code": [
+        "src/settingsStore.ts",
+        "src/transactionalFiles.ts",
+        "src/ws.ts"
+      ]
+    },
+    {
+      "id": "rel",
+      "column": 1,
+      "level": "tested",
+      "title": "relays",
+      "lines": [
+        "voice, local AI, camera",
+        "tickets, connector hub"
+      ],
+      "code": [
+        "src/routes/upstreamRoutes.ts",
+        "src/routes/localAiRoutes.ts",
+        "src/routes/assistantRoutes.ts",
+        "src/voiceConfirm.ts"
+      ]
+    },
+    {
+      "id": "cam",
+      "column": 1,
+      "level": "tested",
+      "title": "cameras",
+      "lines": [
+        "signed 5-minute tickets,",
+        "supervised processes"
+      ],
+      "code": [
+        "src/routes/cameraRoutes.ts",
+        "src/mediaTickets.ts",
+        "src/cameraSupervisor.ts"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from": "cli",
+      "to": "auth",
+      "level": "tested"
+    },
+    {
+      "from": "mon",
+      "to": "sta",
+      "level": "tested"
+    },
+    {
+      "from": "auth",
+      "to": "cmd",
+      "level": "tested"
+    },
+    {
+      "from": "cmd",
+      "to": "sta",
+      "level": "tested"
+    },
+    {
+      "from": "swi",
+      "to": "sta",
+      "level": "tested"
+    },
+    {
+      "from": "swi",
+      "to": "rel",
+      "level": "tested"
+    },
+    {
+      "from": "rel",
+      "to": "cam",
+      "level": "tested"
+    },
+    {
+      "from": "rel",
+      "to": "svc",
+      "level": "contract"
+    },
+    {
+      "from": "sta",
+      "to": "mqb",
+      "level": "contract"
+    },
+    {
+      "from": "sta",
+      "to": "brd",
+      "level": "untested",
+      "label": "SPI"
+    }
+  ],
+  "footer": "Tried against a live instance of itself on a computer; the hop to a real CM5 and STM32 board was never closed."
+}

@@ -1,35 +1,39 @@
+<!-- =============================================================================
+HYDRA-UMC-SERVER - Headless REST and WebSocket backend of the HYDRA-UMC micro-factory
+Copyright (C) JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
+GPL-3.0-or-later - see LICENSE
+============================================================================= -->
+
 <p align="center">
   <img src="images/HYDRA_UMC_BANNER.svg" alt="HYDRA-UMC-SERVER banner" width="100%">
 </p>
-# 🛰️ HYDRA-UMC SERVER
 
-<p align="center">
-  <a href="README.md">🇺🇸 English</a> |
-  🇪🇸 <b>Español</b> |
-  <a href="README_fra.md">🇫🇷 Français</a> |
-  <a href="README_ita.md">🇮🇹 Italiano</a> |
-  <a href="README_deu.md">🇩🇪 Deutsch</a> |
-  <a href="README_zho.md">🇨🇳 简体中文</a> |
-  <a href="README_jpn.md">🇯🇵 日本語</a> |
-  <a href="README_por.md">🇵🇹 Português</a>
-</p>
+# 🤖 HYDRA-UMC-SERVER
 
+<p align="center"><a href="README.md">🇺🇸 English</a> | 🇪🇸 <b>Español</b> | <a href="README_fra.md">🇫🇷 Français</a> | <a href="README_ita.md">🇮🇹 Italiano</a> | <a href="README_deu.md">🇩🇪 Deutsch</a> | <a href="README_zho.md">🇨🇳 简体中文</a> | <a href="README_jpn.md">🇯🇵 日本語</a> | <a href="README_por.md">🇵🇹 Português</a></p>
 
 ### 🤖 Backend headless API/WebSocket para la Micro-Fábrica Multi-Robot HYDRA-UMC
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Licencia-GPL%203.0-blue.svg" alt="GPL 3.0">
-  <img src="https://img.shields.io/badge/Entorno-Node.js-339933.svg" alt="Node.js">
-  <img src="https://img.shields.io/badge/Framework-Express-000000.svg" alt="Express">
-  <img src="https://img.shields.io/badge/Lenguaje-TypeScript-3178C6.svg" alt="TypeScript">
+  <img src="https://img.shields.io/badge/License-GPL%203.0--or--later-blue.svg" alt="GPL 3.0 or later">
+  <img src="https://img.shields.io/badge/Runtime-Node.js-339933.svg" alt="Runtime">
+  <img src="https://img.shields.io/badge/Framework-Express-000000.svg" alt="Framework">
+  <img src="https://img.shields.io/badge/Language-TypeScript-3178C6.svg" alt="Language">
+  <img src="https://img.shields.io/badge/Protocol-WebSocket-lightgrey.svg" alt="Protocol">
+  <img src="https://img.shields.io/badge/Tests-377%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Version-0.8.1.2-0f6cbd.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
 
+---
 
-**Verificación de honestidad - qué funciona de verdad hoy:** el motor Express + WebSocket, su superficie de API REST/WS, la autenticación JWT con rotación de tokens de refresco, el hash de contraseñas con scrypt, el descubrimiento mDNS, el arbitraje de propiedad/reclamo de robots, el playback, y los relés hacia CAN-OTA/telemetría/voz/IA local/connector-hub (`src/server.ts`, `src/users.ts`, `src/kinematics.ts`, `src/metrics.ts`) son reales y están probados - no contra mocks, sino contra una instancia real de este mismo servidor levantada por las propias herramientas de test: 211 tests unitarios (`npm run test:unit`, `node:test` sobre `src/serverPolicy.ts`/`src/kinematics.ts`) más 25 scripts de contrato/auth-negativo de extremo a extremo bajo `tools/` (discovery, auth negativo, bootstrap de producción, comandos/propiedad de robot, tokens de refresco, relé de voz + sus propias rutas de error, playback, la tabla XY persistida, estado/control de servicios del ecosistema, relé de telemetría, test-connection de integraciones, relé CAN-OTA, proxy de IA local, relé de connector-hub, supervisor del sistema, reconexión WS sostenida), todos pasando vía `npm run test`. Lo que es genuinamente adyacente a hardware más que totalmente verificado aquí: el enlace `spi_bridge` a una placa HYDRA-UMC CM5+STM32H745 real y la ruta opcional de servir el frontend estático de STUDIO/admin-ui son código real, ejercitado a través de la capa de API/contrato de arriba, pero este entorno no tiene una CM5/STM32 física para cerrar ese último salto. TLS/HTTPS y el stack Prometheus/Grafana de `monitoring/` son reales y opcionales, desactivados por defecto. Ver `CHANGELOG.md` para lo que ya se ha entregado exactamente.
+> **Comprobación de honestidad - qué funciona realmente hoy:** el motor Express + WebSocket, su superficie REST y WebSocket (63 operaciones en 58 rutas), el inicio de sesión JWT con rotación del token de refresco y scrypt, el descubrimiento mDNS, las reservas y revisiones de robots, la reproducción, y los relés hacia CAN-OTA, telemetría, voz, los servicios de IA locales y el connector hub son reales y se prueban contra una instancia real de este mismo servidor que arrancan las propias pruebas: 377 pruebas unitarias más 28 scripts de contrato de extremo a extremo, todos pasan. Lo que roza el hardware y no se verifica aquí: el enlace con una CM5 HYDRA-UMC real con una placa STM32H745, que es código real ejercitado solo por la capa de API y contratos. TLS, Bluetooth LE, el puente MQTT y la pila Prometheus y Grafana son reales, opcionales y están apagados por defecto.
 
 ---
 
 > **Estado de seguridad física y de ciberseguridad:** este ecosistema no es un sistema de seguridad certificado. Todavía no existe una ruta de E-STOP por hardware, ni límites ni enclavamientos aplicados por el firmware, ni un comando de movimiento verificado; las imágenes de firmware se comprueban con CRC32 y un HMAC-SHA256 de clave compartida, no con una firma asimétrica; TLS y TLS mutuo son opcionales y están desactivados por defecto; aún no se ha poblado ni probado ninguna placa propia. Lee la [línea base de seguridad](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/SECURITY_BASELINE.md) y el [modelo de amenazas](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/THREAT_MODEL.md) antes de fiarte de cualquier afirmación de aquí para la seguridad de una persona.
+
+---
 
 ## 📋 De un vistazo
 
@@ -37,10 +41,12 @@
 |---|---|
 | Versión | `0.8.1.2` |
 | Madurez | Funcional |
-| Tests | 348 (`npm run test:unit`) |
+| Tests | 377 (`npm run test:unit`) |
 | Tecnología | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | Destino | La Raspberry Pi CM5 de una celda HYDRA-UMC |
 | En hardware real | Todavía no: no consta ninguna ejecución en hardware real para esta versión |
+
+**Ir a:** [Resumen](#-resumen) · [Arquitectura](#-arquitectura) · [Funciones](#-funciones) · [Seguridad y protección](#-seguridad-y-protección) · [Interfaces](#-interfaces) · [Configuración](#-configuración) · [Inicio rápido](#-inicio-rápido) · [Pruebas](#-pruebas) · [Resolución de problemas](#-resolución-de-problemas) · [Estructura del repositorio](#-estructura-del-repositorio) · [Proyectos relacionados](#-proyectos-relacionados)
 
 ## 🚦 Estado del proyecto
 
@@ -51,11 +57,11 @@ Cada línea es una parte de este repositorio y la luz dice hasta dónde llega ho
 | Área | Estado | Qué significa aquí |
 |---|---|---|
 | Software | 🟡 | Funciona para su propósito principal; la comprobación de honestidad de arriba lista lo que aún falta |
-| Pruebas | 🟢 | 348 pruebas automáticas, ejecutadas en cada cambio |
+| Pruebas | 🟢 | 377 pruebas automáticas, ejecutadas en cada cambio |
 | Hardware real | 🔴 | Todavía no: no consta ninguna ejecución en hardware real para esta versión |
 | Documentación | 🟢 | README en ocho idiomas, comprobado contra el manifiesto en cada cambio |
 
-## 🎯 Visión General
+## 🎯 Resumen
 
 HYDRA-UMC SERVER es el backend independiente que gobierna una célula de
 micro-fábrica multi-robot HYDRA-UMC: un motor Node.js/Express + WebSocket
@@ -104,7 +110,17 @@ directamente a la misma app Express). Ese proceso se ha dividido en dos:
   un cliente Vite/React puro que habla con este servidor por red,
   exactamente igual que cualquier otro cliente de esta API.
 
-## 🧩 Por Qué Existe
+## 🧩 Papel en HYDRA-UMC
+
+**HYDRA-UMC-SERVER** es el motor de la celda: un backend Node.js y Express sin interfaz que guarda el estado de los robots, lo persiste en disco, exige un rol a cada escritura y envía actualizaciones en vivo a todos los clientes por un único WebSocket. Todos los clientes (STUDIO, SUITE, las aplicaciones de móvil, la pantalla táctil, el reloj, la herramienta de línea de órdenes) pasan por él, y solo él decide quién puede mover qué robot y hasta dónde.
+
+## 🏛️ Arquitectura
+
+<p align="center">
+  <img src="images/architecture.svg" alt="HYDRA-UMC-SERVER architecture" width="100%">
+</p>
+
+### Por Qué Existe
 
 Separar el motor del panel web fue un cambio deliberado, no una
 refactorización porque sí:
@@ -128,7 +144,48 @@ refactorización porque sí:
   alojarse en cualquier otro sitio, alcanzable por red exactamente igual
   que los demás clientes remotos de esta misma API.
 
-## 🔌 Superficie de API y WebSocket
+## ✨ Funciones
+
+### Datos y Persistencia
+
+Todo lo que posee este servidor vive bajo `data/`, creada automáticamente
+en el primer arranque:
+
+- `data/settings.json` - el árbol de estado completo: controladores,
+  robots, configuración de sistema. Nunca servido como archivo estático
+  (404 explícito) - solo alcanzable a través de la ruta autenticada
+  `/api/settings`.
+- `data/users.json` - credenciales de cuenta (hash scrypt, con sal, nunca
+  en texto plano). Tampoco servido nunca de forma estática.
+- `data/logs/server.log` - log industrial de solo-anexado de cada
+  comando.
+- `data/WORKS/` - trayectorias de robot guardadas, una carpeta por robot
+  por defecto, servidas como archivos estáticos planos (índice + archivos
+  de trabajo individuales).
+- `data/model_submissions.json` + las propias carpetas de modelos
+  enviados - el lado servidor del flujo de
+  [HYDRA-UMC-EDITOR-URDF](https://github.com/JuanenRac/HYDRA-UMC-EDITOR-URDF)
+  para "enviar un modelo de robot terminado directamente al catálogo de
+  este servidor".
+
+## 🔒 Seguridad y protección
+
+| Amenaza | Defensa | Dónde |
+|---|---|---|
+| Tokens firmados con una clave conocida | Con `NODE_ENV=production` el servidor se niega a arrancar con un `JWT_SECRET` vacío, de ejemplo o corto y sin administrador inicial; en desarrollo se usa un valor integrado y se imprime un aviso `[SECURITY]` | `src/auth.ts`, `src/secretsPolicy.ts` |
+| Fuerza bruta en el inicio de sesión, o una avalancha de paradas | 5 inicios fallidos cada 15 minutos por dirección (`429`), 120 refrescos y 60 paradas globales por minuto, todo ajustable con `LOGIN_RATE_LIMIT_MAX`, `REFRESH_RATE_LIMIT_MAX` y `STOP_ALL_RATE_LIMIT_MAX`; las contraseñas usan scrypt con sal aleatoria, como mucho 4 a la vez y 20 en cola, así que una avalancha no puede ahogar el servidor | `src/auth.ts`, `src/users.ts` |
+| Un token robado, o un token leído de la dirección | Los tokens de acceso caducan (`JWT_EXPIRES_IN`, 30 días por defecto, 24 h aconsejado fuera de una LAN de confianza) y se renuevan con un token de refresco rotatorio; el WebSocket recibe el token como subprotocolo `hydra.bearer` y rechaza `?token=` salvo que `HYDRA_UMC_WS_QUERY_TOKEN=allow` lo permita, con un aviso en cada arranque | `src/refresh_tokens.ts`, `src/ws.ts` |
+| Dos clientes moviendo el mismo robot, o una orden que el robot no debería recibir | Un robot se reserva para una cuenta y ventana, las escrituras exigen `If-Match` (una revisión caducada recibe `412`), el rol de espectador no puede escribir, y el tamaño de un movimiento y la temperatura máxima de la cama caliente vienen de los límites de seguridad que fija un administrador; la parada global funciona digan lo que digan las reservas | `src/claimPolicy.ts`, `src/safetyLimits.ts`, `src/routes/commandRoutes.ts` |
+| Imágenes de cámara abiertas a cualquiera en la red | Las emisiones en vivo, fotos y grabaciones necesitan un ticket firmado de 5 minutos (o un token de acceso); como mucho 8 cámaras; las contraseñas de cámara no aparecen en la lista de procesos ni en el registro; `HYDRA_UMC_CAMERA_AUTH=open` es la exclusión temporal | `src/mediaTickets.ts`, `src/serverPolicy.ts` |
+| Peticiones enormes u hostiles, y acceso entre orígenes abierto | Los cuerpos JSON se limitan a 1 MB (50 MB solo en la ruta de subida grande); `CORS_ALLOWED_ORIGINS` es una lista permitida y, en producción, una lista sin definir deniega toda petición de navegador entre orígenes (desarrollo permite cualquier origen, con un aviso); `settings.json` y `users.json` nunca se sirven como ficheros | `src/server.ts` |
+| Opciones de acceso débiles activadas: texto de voz, confianza del reconocedor, firma MAVLink, Bluetooth, MQTT, TLS | Cada una tiene un interruptor que un administrador edita con `PUT /api/admin/server-config` (solo admin), con un valor por defecto conservador y con el entorno por encima de lo guardado; la respuesta lista avisos como `voice_heard_text_on`, `voice_confidence_off`, `mavlink_unsigned_allowed` y `mavlink_signing_off`; el relé de voz sustituye cualquier `options` que envíe un cliente por las del administrador, y un fichero de clave MAVLink se comprueba (32 bytes o 64 caracteres hexadecimales) antes de guardar su ruta | `src/securityConfig.ts`, `src/routes/adminRoutes.ts`, `src/routes/assistantRoutes.ts` |
+| Un registro manipulado de quién hizo qué | Un registro de auditoría de solo añadir cuyas entradas están encadenadas por hash (`GET /api/audit`, `?verify=1` comprueba la cadena), un registro del servidor que rota por tamaño y un paso de redacción que elimina secretos antes de escribir nada | `src/auditLog.ts`, `src/logRotation.ts`, `src/redaction.ts` |
+
+**Lo que nunca hace:** actuar como función de seguridad certificada. Los límites y la parada son software en este proceso; todavía no hay detrás una vía de parada de emergencia en hardware, ni límites impuestos por firmware ni una placa controladora real.
+
+## 🔌 Interfaces
+
+### Superficie de API y WebSocket
 
 Cada ruta, el contrato de mensajes WebSocket, la autenticación y el
 modelo de acceso remoto por cliente están documentados en
@@ -166,116 +223,33 @@ hasta que se configure la allowlist - ver el comentario sobre
 `app.use(cors(corsOptions))` en `src/server.ts` para el razonamiento
 completo.
 
-## 💾 Datos y Persistencia
+### Monitorización (Opcional)
 
-Todo lo que posee este servidor vive bajo `data/`, creada automáticamente
-en el primer arranque:
+`GET /metrics` expone el uptime del proceso, los clientes WebSocket
+conectados, la latencia de escritura de `settings.json`, los comandos
+atómicos de robot por tipo, los fallos de autenticación, y las mismas
+cifras de CPU/memoria/temperatura que `GET /api/system/metrics` - todo en
+formato Prometheus. Un stack Prometheus + Grafana listo para usar (con un
+dashboard inicial) vive en **[`monitoring/`](monitoring/README.md)**:
+`docker compose up -d` desde esa carpeta y ya está en marcha. Totalmente
+opcional - nada aquí es necesario para que el servidor en sí funcione.
 
-- `data/settings.json` - el árbol de estado completo: controladores,
-  robots, configuración de sistema. Nunca servido como archivo estático
-  (404 explícito) - solo alcanzable a través de la ruta autenticada
-  `/api/settings`.
-- `data/users.json` - credenciales de cuenta (hash scrypt, con sal, nunca
-  en texto plano). Tampoco servido nunca de forma estática.
-- `data/logs/server.log` - log industrial de solo-anexado de cada
-  comando.
-- `data/WORKS/` - trayectorias de robot guardadas, una carpeta por robot
-  por defecto, servidas como archivos estáticos planos (índice + archivos
-  de trabajo individuales).
-- `data/model_submissions.json` + las propias carpetas de modelos
-  enviados - el lado servidor del flujo de
-  [HYDRA-UMC-EDITOR-URDF](https://github.com/JuanenRac/HYDRA-UMC-EDITOR-URDF)
-  para "enviar un modelo de robot terminado directamente al catálogo de
-  este servidor".
+| Topic o ruta | Qué lleva |
+|---|---|
+| `/api/login`, `/api/refresh`, `/api/logout` | iniciar sesión (con límite de ritmo), rotar el token de refresco, cerrar sesión |
+| `/api/users`, `/api/users/:username` | listar, crear, cambiar y borrar cuentas (`admin`, `operator`, `viewer`); solo administradores |
+| `/api/settings`, `/api/robot/:id`, `/api/robot/:id/command` | el árbol de estado y las órdenes atómicas tipadas (mover, reproducir, pausa, parada, herramienta, válvula, bomba, velocidad, visión, mesa), con `If-Match` |
+| `/api/robot/:id/claim`, `/release`, `/jog-arm`, `/api/claims`, `/api/stop-all`, `/api/safety-limits` | reservas, armar el movimiento, quién tiene qué, la parada global y los límites de seguridad |
+| `/api/admin/server-config`, `/clients`, `/logs`, `/restart`, `/safety-limits` | administración: los interruptores de acceso, las aplicaciones conectadas, el registro del servidor, un reinicio y los límites de seguridad; solo administradores |
+| `/api/camera/*`, `/api/cameras/status` | flujos de cámara, instantáneas, grabaciones, PTZ y `POST /api/camera/ticket` |
+| `/api/system/metrics`, `/api/system/supervisor`, `/api/ecosystem/status`, `/api/system/bluetooth/*` | información del equipo, el supervisor de procesos, el estado y control de los servicios del ecosistema, emparejamiento Bluetooth |
+| `/api/voice/turn`, `/api/voice/confirm`, `/api/watch/system-status`, `/api/ai/*` | relés hacia el servicio de voz, el estado del reloj y los servicios de IA locales |
+| `/ws` | un WebSocket: instantáneas completas de `settings`, actualizaciones ligeras `delta` y un mensaje `claims`; el token viaja como subprotocolo `hydra.bearer` |
+| `GET /api/hydra-info`, `_hydra._tcp` | descubrimiento: la versión del contrato remoto (`remoteApiVersion` 2), la versión de la aplicación y el número de controladores y robots, anunciado por mDNS |
+| `/admin`, `/dashboard-ai`, `/` | páginas estáticas opcionales, servidas solo cuando `build-frontend` las ha compilado junto a este repositorio: el panel de administración, DASHBOARD-AI y STUDIO |
+| `/metrics` | texto Prometheus: tiempo activo, clientes WebSocket, latencia de escritura, órdenes por tipo, fallos de autenticación, cifras del equipo |
 
-## 📂 Estructura del Repositorio
-
-```
-HYDRA-UMC-SERVER/
-├── src/
-│   ├── server.ts       # Arranque delgado que une los módulos de abajo; las rutas /api están en src/routes/, las conexiones en vivo en ws.ts, los archivos de ajustes en settingsStore.ts
-│   ├── kinematics.ts   # Ayudante de cinemática inversa para el endpoint atómico de jog
-│   ├── metrics.ts      # Respalda GET /metrics - exposición Prometheus en texto (prom-client)
-│   ├── ble/            # Servicio Bluetooth LE: tramas, pasarela (órdenes, acuses, estado) y transporte del ayudante
-│   ├── users.ts        # Almacén de cuentas (hash de contraseña scrypt)
-│   ├── routes/         # Las rutas /api por áreas: auth, ajustes, reservas de robot, órdenes, límites de seguridad, cámaras, Bluetooth, administración, sistema, relés a los servicios hermanos, IA local, asistente, ficheros de trabajo, energía, información y ficheros estáticos
-│   ├── auth.ts, refresh_tokens.ts, secretsPolicy.ts, securityConfig.ts, upstreamAuth.ts # Verificación de tokens, la puerta de administrador y los limitadores de tasa; el almacén de tokens de refresco; lo que acepta producción como secreto de firma y primera contraseña; las opciones de acceso; los tokens que se presentan a los servicios retransmitidos
-│   ├── claimPolicy.ts, robotEdit.ts, safetyLimits.ts, tableCommand.ts, playback.ts # Quién controla qué robot; las ediciones que un operador hace sobre un robot; los límites a los que se sujeta todo cliente; el movimiento de la mesa XY en una petición; la reproducción autoritativa del servidor
-│   ├── settingsStore.ts, settingsBackups.ts, transactionalFiles.ts, auditLog.ts, logRotation.ts # Los ficheros de ajustes en disco, sus copias de seguridad, escrituras de todo o nada de varios ficheros, el registro de auditoría y la rotación de logs
-│   ├── ws.ts, mqttBridge.ts, mqttStart.ts, telemetryProducer.ts # El centro de conexiones en vivo (WebSocket), el puente MQTT al broker de la celda y su arranque, y el primer productor de telemetría
-│   ├── cameraHealth.ts, cameraProbe.ts, cameraSupervisor.ts, mediaTickets.ts # Si un flujo de cámara entrega fotogramas de verdad, sondeo de cámaras IP y PTZ, el supervisor de procesos de flujo y tickets de vida corta para las imágenes de cámara
-│   └── ecosystemStatus.ts, portsRegistry.ts, systemMetrics.ts, runtime.ts, serverPolicy.ts, redaction.ts, bluetooth.ts, upstreamConfig.ts, voiceConfirm.ts # Descubrimiento y vida del ecosistema, el registro de puertos de servicios, métricas del equipo, el entorno de ejecución del proceso (mDNS, puerto), utilidades de política puras, ocultación de secretos, utilidades de emparejamiento Bluetooth, las direcciones de los servicios relayados y la confirmación de una petición hablada
-├── admin-ui/            # Panel de administración Vite/React independiente para ESTE servidor
-│   │                      (dispositivos conectados, su propio log, su propia config, sus propios
-│   │                      usuarios - deliberadamente no control de robots, eso sigue siendo solo STUDIO)
-│   ├── src/
-│   │   ├── App.tsx, main.tsx, index.css, api.ts, LoginScreen.tsx
-│   │   └── tabs/AboutTab.tsx, ConfigTab.tsx, DevicesTab.tsx, LogsTab.tsx, UsersTab.tsx
-│   ├── package.json / tsconfig.json / vite.config.ts
-│   └── README.md
-├── data/                # Estado en ejecución - settings, users, logs, archivos de trabajo, puntos guardados
-│   ├── settings.json
-│   ├── users.json
-│   ├── logs/
-│   ├── points/
-│   └── WORKS/
-├── docs/
-│   ├── REMOTE_API.md              # Contrato completo: cada ruta, protocolo WS, auth
-│   ├── CONTRACT_V2.md             # Diseño del segundo contrato, por bloques
-│   ├── PRODUCTION_BOOTSTRAP.md    # JWT y administrador inicial obligatorios
-│   ├── REMOTE_ACCESS_VPN.md       # Guía real de despliegue de acceso remoto/VPN
-│   ├── BLE_GATT.md                # Servicio Bluetooth LE: características, tramas, órdenes y acuses
-│   ├── MQTT_BRIDGE.md             # El puente MQTT al broker de la celda: modos (apagado por defecto), temas y órdenes
-│   └── openapi.json               # La descripción OpenAPI de la API HTTP (generada por tools/generate_openapi.mjs)
-├── images/               # Medios y diagramas
-├── systemd/
-│   └── hydra-umc-server.service # Unidad systemd local en la CM5
-├── tools/
-│   ├── build_test.py            # Comprobación de compilación sin versionado
-│   ├── ci_validate.py                                   # Validación de manifest/CHANGELOG/docs usada por la CI
-│   ├── generate_openapi.mjs, openapi_types.mjs          # Generan docs/openapi.json a partir de las rutas y los tipos TypeScript a partir de él
-│   ├── verify_*_contract.mjs, verify_auth_negative.mjs  # 29 comprobaciones reales de contrato/auth negativo
-│   │                                                       contra un servidor real (discovery, auth negativo,
-│   │                                                       bootstrap de producción, comandos de robot,
-│   │                                                       propiedad de robot, tokens de refresco, relé de
-│   │                                                       voz + sus propias rutas de error, playback, tabla
-│   │                                                       XY persistida, estado/control de servicios del
-│   │                                                       ecosistema, relé de telemetría, test-connection de
-│   │                                                       integraciones, relé CAN-OTA, proxy de IA local,
-│   │                                                       relé de connector-hub)
-│   ├── _doc_policy.py                                   # Reglas de documentación compartidas por la familia (copia de la de HYDRA-UMC-SDK, mantenida en sincronía)
-│   ├── _readme_parity.py                                # Comprobación de que los ocho README comparten estructura (copia de la de HYDRA-UMC-SDK, mantenida en sincronía)
-│   └── hydra_project_tool.py                            # Los mismos comandos en todos los repositorios: validate, test, ci, version, status, bump
-├── tests/
-│   └── *.test.ts        # Pruebas unitarias directas (node:test con tsx --test, `npm run test:unit`) de los módulos puros: política, cinemática, reservas, límites de seguridad, tokens, secretos, tramas y pasarela BLE, salud y sondeo de cámaras, el puente MQTT, telemetría y más - en el mismo proceso, sin lanzar un servidor, como complemento de las comprobaciones de extremo a extremo de tools/ de arriba
-├── monitoring/           # Stack opcional Prometheus + Grafana - ver monitoring/README.md
-├── scripts/
-│   ├── ble_gatt_helper.py # El lado BlueZ del servicio Bluetooth LE (D-Bus), con líneas JSON
-│   └── bump-version.mjs # Incremento de versión tipo cuentakilómetros (solo lo ejecuta el comando `bump` explícito)
-├── bump_manifest_version.py # Sincroniza la versión de hydra-umc.project.json con la nativa (--sync)
-├── build.bat / build.sh # Instala dependencias + build de producción
-├── dev.bat / dev.sh      # Instala dependencias + arranca el servidor de desarrollo
-├── package.json
-├── tsconfig.json
-├── CHANGELOG.md
-└── LICENSE
-```
-
-`public/` (el frontend estático compilado de STUDIO, desplegado junto a
-este servidor en `/`) está en gitignore - se rellena copiando la propia
-salida de build de STUDIO, no forma parte de un clon nuevo.
-
-## 🛠️ Entorno de Desarrollo
-
-### Requisitos
-- [Node.js](https://nodejs.org/) (v18 o superior recomendado)
-- npm
-
-### Instalación
-
-```bash
-npm install
-```
+## ⚙️ Configuración
 
 ### Variables de Entorno
 
@@ -386,6 +360,54 @@ Cómo conseguir un certificado:
   ```
   Luego define `TLS_CERT_PATH=./cert.pem` y `TLS_KEY_PATH=./key.pem`.
 
+Los interruptores de acceso de abajo son los que editan las pantallas Server Admin de STUDIO y SUITE. Cada uno se resuelve en el mismo orden: primero el entorno del despliegue (la pantalla lo muestra bloqueado), luego lo que el administrador guardó en `data/server-config.json` y por último el valor por defecto conservador. Las variables de arriba cubren todo lo demás.
+
+| Variable | Por defecto | Qué fija |
+|---|---|---|
+| `aiAccess`, `HYDRA_UMC_AI_ACCESS` | `open` | quién puede usar el relé de IA local: `open` es cualquier cuenta con sesión, `admin` solo administradores |
+| `infoAuth`, `HYDRA_UMC_INFO_AUTH` | desactivado | pedir inicio de sesión para la información de solo lectura del equipo (métricas, supervisor de procesos, estado del ecosistema) |
+| `tls.enabled`, `TLS_CERT_PATH, TLS_KEY_PATH` | desactivado (HTTP sin cifrar) | HTTPS y WSS con el certificado y la clave que indiques; la pantalla muestra la huella del certificado en uso |
+| `ble.mode`, `HYDRA_UMC_BLE_GATT` | `off` | Bluetooth LE para teléfonos cerca del servidor: `off`, `state` (solo publica el estado) o `commands` (también acepta órdenes); una palabra desconocida significa apagado |
+| `ble.requireEncryption`, `HYDRA_UMC_BLE_ENCRYPTION` | activado | la característica de órdenes se escribe, y el estado se lee, solo por un enlace cifrado; solo `off` en la variable lo desactiva |
+| `mqtt.mode`, `MQTT environment of the deployment` | `off` | el puente MQTT al broker de la celda: `off`, `state` o `commands`, con su URL, prefijo y usuarios |
+| `voice.includeHeardText`, `HYDRA_UMC_VOICE_UI_INCLUDE_HEARD_TEXT` | desactivado | una respuesta de voz repite lo que se dijo; son datos personales, así que está apagado, y en la variable solo la palabra exacta `1` lo activa |
+| `voice.minConfidence`, `HYDRA_UMC_VOICE_UI_MIN_CONFIDENCE` | `0.6` | la confianza mínima del reconocedor de voz, de 0 a 1, para aceptar una petición que inicia un movimiento; 0 desactiva la comprobación, una parada nunca se retiene, y un número erróneo en la variable se ignora |
+| `mavlink.signingKeyFile`, `HYDRA_UMC_BRIDGE_UAV_SIGNING_KEY_FILE` | vacío (sin firma) | firma MAVLink 2 del puente UAV: la ruta de un fichero con la clave de 32 bytes (32 bytes en bruto o 64 caracteres hexadecimales); solo se guarda la ruta, nunca la clave, y el puente la lee al arrancar |
+| `mavlink.signingAllowUnsigned`, `HYDRA_UMC_BRIDGE_UAV_SIGNING_ALLOW_UNSIGNED` | desactivado | seguir aceptando mensajes sin firmar (un vehículo que aún no firma); la pantalla avisa mientras está activo |
+
+## 🚀 Inicio rápido
+
+Requiere Node.js 22 o superior con npm. El servidor funciona sin configuración y con valores por defecto de desarrollo; fija las variables de la sección Configuración antes de que sea accesible fuera de una LAN de confianza.
+
+```bash
+npm install
+./dev.sh                    # runs the server with tsx on port 3000, no frontend (dev.bat on Windows)
+npm run test:unit           # the unit tests
+npm test                    # unit tests, the OpenAPI check and the contract scripts against a live instance
+npm run build && npm start  # one bundled file (build.sh and build.bat make a versioned release build)
+```
+
+El servidor escucha en `0.0.0.0:3000`; todo su estado vive en `data/`. Este repositorio no tiene Dockerfile a propósito: HYDRA-UMC-OS lo instala en la CM5 (`provisioning/install_server.sh`). La versión en ejecución se lee en `GET /api/hydra-info` (`appVersion`); solo los scripts `build*.sh` y `build*.bat` de la raíz hacen una compilación de versión, mientras que `npm run build` solo compila.
+
+## 🧪 Pruebas
+
+377 pruebas automáticas se ejecutan con `npm run test:unit`. Además, `npm test` ejecuta la comprobación de OpenAPI y 28 scripts de contrato de extremo a extremo en `tools/` contra una instancia real de este servidor (descubrimiento, inicio de sesión sin y con credenciales, arranque de producción, órdenes y propiedad de robots, tokens de refresco, relé de voz y sus rutas de error, reproducción, la parada global, puentes Bluetooth y MQTT, medios de cámara, los relés de IA y de connector-hub, rol de espectador y más); todos pasan. Ninguno necesita hardware.
+
+El CI ejecuta `HYDRA_UMC_CI=1 python tools/ci_validate.py`, que comprueba el manifiesto, los documentos, los ocho README y las imágenes.
+
+## 🏗️ Compilación y publicación
+
+### Requisitos
+
+- [Node.js](https://nodejs.org/) (v18 o superior recomendado)
+- npm
+
+### Instalación
+
+```bash
+npm install
+```
+
 ### Modo Desarrollo
 
 Ejecuta el servidor API/WebSocket directamente con `tsx` (sin bundler, sin
@@ -410,29 +432,80 @@ Todo el estado persiste en `data/`.
 
 Este repositorio no tiene Dockerfile a propósito: el servidor lo empaqueta e instala en la CM5 [HYDRA-UMC-OS](https://github.com/JuanenRac/HYDRA-UMC-OS) (`provisioning/install_server.sh`).
 
-### Versionado
+## 🩺 Resolución de problemas
 
-Solo los scripts raíz `build*.bat` y `build*.sh` crean un incremento de
-versión de publicación. Llaman una única vez a `bump_manifest_version.py`,
-manteniendo sincronizados `package.json`, `hydra-umc.project.json` y
-[`CHANGELOG.md`](CHANGELOG.md) con la regla de cuentakilómetros en base 10
-(`0.0.9` -> `0.1.0`, nunca `0.0.10`). `npm run build` compila deliberadamente
-sin versionar, por lo que los builds directos y la validación `build-test` no
-pueden cambiar solo la versión de `package.json`. La versión en ejecución se
-lee en vivo desde `GET /api/hydra-info` (`appVersion`).
+| Ves | Porque | Haz |
+|---|---|---|
+| El servidor se detiene al arrancar en producción | `NODE_ENV=production` exige un `JWT_SECRET` real (al menos 32 caracteres, no de ejemplo) y un administrador inicial en el primer arranque | Define `JWT_SECRET`, `HYDRA_UMC_BOOTSTRAP_ADMIN_USERNAME` y `HYDRA_UMC_BOOTSTRAP_ADMIN_PASSWORD` (véase `docs/PRODUCTION_BOOTSTRAP.md`) |
+| `429` al iniciar sesión | Más de 5 inicios fallidos desde una dirección en 15 minutos | Espera a que pase la ventana; sube `LOGIN_RATE_LIMIT_MAX` solo en una red de confianza |
+| La aplicación del navegador se bloquea por CORS | En producción, un `CORS_ALLOWED_ORIGINS` sin definir deniega toda petición de navegador entre orígenes (curl, SUITE y las aplicaciones de móvil no se ven afectados) | Define `CORS_ALLOWED_ORIGINS=https://studio.example.com,...` con los orígenes de la página |
+| El WebSocket se cierra enseguida, o una imagen de cámara no carga | El cliente envía el token en la dirección (`/ws?token=`, rechazado por defecto) o abre la imagen sin ticket (obligatorio por defecto) | Usa el subprotocolo `hydra.bearer` y `POST /api/camera/ticket`; las exclusiones `HYDRA_UMC_WS_QUERY_TOKEN=allow` y `HYDRA_UMC_CAMERA_AUTH=open` son temporales |
+| Un interruptor de acceso se rechaza porque está bloqueado, o se rechaza un fichero de clave MAVLink | El valor lo fija una variable de entorno (gana sobre el guardado), o el fichero de clave no se puede leer o no tiene 32 bytes ni 64 caracteres hexadecimales | Cambia o quita la variable y reinicia, o corrige el fichero; el puente MAVLink lee sus opciones al arrancar |
 
-## 📊 Monitorización (Opcional)
+## 📂 Estructura del repositorio
 
-`GET /metrics` expone el uptime del proceso, los clientes WebSocket
-conectados, la latencia de escritura de `settings.json`, los comandos
-atómicos de robot por tipo, los fallos de autenticación, y las mismas
-cifras de CPU/memoria/temperatura que `GET /api/system/metrics` - todo en
-formato Prometheus. Un stack Prometheus + Grafana listo para usar (con un
-dashboard inicial) vive en **[`monitoring/`](monitoring/README.md)**:
-`docker compose up -d` desde esa carpeta y ya está en marcha. Totalmente
-opcional - nada aquí es necesario para que el servidor en sí funcione.
+<p align="center">
+  <img src="images/repository-structure.svg" alt="Repository structure of HYDRA-UMC-SERVER" width="100%">
+</p>
 
-## 🔗 Proyectos Relacionados
+<details>
+<summary>Versión en texto del árbol</summary>
+
+```text
+HYDRA-UMC-SERVER/
+├── src/                       código fuente
+│   ├── server.ts              Arranque delgado que une los módulos de abajo; las rutas /api están en src/routes/, las conexiones en vivo en ws.ts, los archivos de ajustes en settingsStore.ts
+│   ├── kinematics.ts          Ayudante de cinemática inversa para el endpoint atómico de jog
+│   ├── metrics.ts             Respalda GET /metrics - exposición Prometheus en texto (prom-client)
+│   ├── ble/                   Servicio Bluetooth LE: tramas, pasarela (órdenes, acuses, estado) y transporte del ayudante
+│   ├── users.ts               Almacén de cuentas (hash de contraseña scrypt)
+│   ├── routes/                Las rutas /api por áreas: auth, ajustes, reservas de robot, órdenes, límites de seguridad, cámaras, Bluetooth, administración, sistema, relés a los servicios hermanos, IA local, asistente, ficheros de trabajo, energía, información y ficheros estáticos
+│   ├── auth.ts                Verificación de tokens, la puerta de administrador y los limitadores de tasa; el almacén de tokens de refresco; lo que acepta producción como secreto de firma y primera contraseña; las opciones de acceso; los tokens que se presentan a los servicios retransmitidos
+│   ├── claimPolicy.ts         Quién controla qué robot; las ediciones que un operador hace sobre un robot; los límites a los que se sujeta todo cliente; el movimiento de la mesa XY en una petición; la reproducción autoritativa del servidor
+│   ├── settingsStore.ts       Los ficheros de ajustes en disco, sus copias de seguridad, escrituras de todo o nada de varios ficheros, el registro de auditoría y la rotación de logs
+│   ├── ws.ts                  El centro de conexiones en vivo (WebSocket), el puente MQTT al broker de la celda y su arranque, y el primer productor de telemetría
+│   ├── cameraHealth.ts        Si un flujo de cámara entrega fotogramas de verdad, sondeo de cámaras IP y PTZ, el supervisor de procesos de flujo y tickets de vida corta para las imágenes de cámara
+│   └── ecosystemStatus.ts     Descubrimiento y vida del ecosistema, el registro de puertos de servicios, métricas del equipo, el entorno de ejecución del proceso (mDNS, puerto), utilidades de política puras, ocultación de secretos, utilidades de emparejamiento Bluetooth, las direcciones de los servicios relayados y la confirmación de una petición hablada
+├── admin-ui/                  Panel de administración Vite/React independiente para ESTE servidor
+├── data/                      Estado en ejecución - settings, users, logs, archivos de trabajo, puntos guardados
+├── docs/                      documentos del proyecto
+├── images/                    Medios y diagramas
+├── systemd/                   unidad de servicio
+├── tools/                     herramientas del proyecto y comprobaciones del CI
+├── tests/                     pruebas automáticas
+├── monitoring/                Stack opcional Prometheus + Grafana - ver monitoring/README.md
+├── scripts/                   el ayudante Bluetooth LE (BlueZ) y un ayudante de versiones heredado
+├── .github/                   flujo de CI y plantillas de incidencias
+├── bump_manifest_version.py   Sincroniza la versión de hydra-umc.project.json con la nativa (--sync)
+├── build.bat / build.sh       Instala dependencias + build de producción
+├── dev.bat / dev.sh           Instala dependencias + arranca el servidor de desarrollo
+├── package.json               metadatos y scripts del paquete
+├── tsconfig.json              configuración de TypeScript
+├── CHANGELOG.md               qué cambió en cada versión
+├── LICENSE
+├── build-test.sh              comprobación de compilación sin cambios
+├── hydra-umc.project.json     manifiesto: versión, madurez, familia
+└── test.sh                    ejecuta las pruebas
+```
+
+</details>
+
+## 🗺️ Hoja de ruta y límites conocidos
+
+**Límites conocidos hoy**
+
+* El enlace con una CM5 real con una placa STM32H745 (`spi_bridge`) es código real que solo se ha ejercitado por la capa de API y de contratos; nunca hubo una placa física para cerrar el último salto.
+* El servidor escucha en todas las interfaces (`0.0.0.0`); todavía no hay interruptor para la dirección de escucha, así que un cortafuegos o los interruptores de acceso de arriba son lo que limita la exposición.
+* En desarrollo (`NODE_ENV` distinto de `production`) se usan una clave de firma integrada, la cuenta `admin`/`admin` y una política CORS abierta, cada una con aviso; producción las rechaza.
+* TLS, Bluetooth LE y el puente MQTT son opcionales y están apagados por defecto.
+
+**Siguiente:** cada ruta nueva sigue la misma lista de comprobación (documentada en `docs/REMOTE_API.md`, nombrada en `docs/openapi.json`, tipada en los clientes del SDK).
+
+## 🌍 Idiomas
+
+Este README y los documentos del repositorio existen en ocho idiomas: inglés, español, alemán, francés, italiano, japonés, chino y portugués (Portugal). Se escriben a la vez y el CI comprueba que los ocho ficheros tengan las mismas secciones y los mismos enlaces. Este repositorio no tiene pantalla ni catálogo de mensajes propios, así que no hay cadenas de interfaz que traducir.
+
+## 🔗 Proyectos relacionados
 
 Este proyecto es parte del ecosistema de robótica HYDRA-UMC del mismo autor (JuanenRac / Electro Hobby 3D). Vale la pena conocerlo, ya que una petición podría en realidad ser sobre alguno de estos en vez de sobre este repositorio.
 
@@ -521,32 +594,26 @@ Este proyecto es parte del ecosistema de robótica HYDRA-UMC del mismo autor (Ju
 - **[HYDRA-UMC-OPS-AGENT](https://github.com/JuanenRac/HYDRA-UMC-OPS-AGENT)** — coordinador de incidencias de mantenimiento: un rol edge de bajo privilegio recopila un snapshot de inventario/salud saneado, un rol control-plane lo renderiza de solo lectura y pide a un proveedor de IA que sugiera un diagnóstico - nunca aplica un parche ni despliega nada.
 - **[HYDRA-UMC-DEV-SERVER](https://github.com/JuanenRac/HYDRA-UMC-DEV-SERVER)** — host de desarrollo reproducible (Raspberry Pi 5 / CM5) que almacena el código del ecosistema y ejecuta tareas acotadas de compilación/pruebas bajo una cola duradera; un rol de desarrollo dedicado, explícitamente distinto de un CM5 operativo.
 
----
+## 📚 Documentación
 
-## 📚 Documentación y Comunidad
+Dónde leer más:
 
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** — stack tecnológico y pautas de codificación para un pull request.
-- **[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)** — los estándares de comportamiento esperados en esta comunidad.
-- **[SECURITY.md](SECURITY.md)** — cómo reportar una vulnerabilidad, y las áreas reales de enfoque en seguridad de este proyecto.
-- **[SUPPORT.md](SUPPORT.md)** — dónde hacer preguntas y reportar errores.
-- **[LICENSE.md](LICENSE.md)** — la licencia propia de este proyecto.
+* [Base de seguridad del ecosistema](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/SECURITY_BASELINE.md)
+* [Modelo de amenazas del ecosistema](https://github.com/JuanenRac/HYDRA-UMC-DOCS/blob/main/docs/THREAT_MODEL.md)
+* [Historial de cambios de este repositorio](CHANGELOG.md)
+* [Licencia de este repositorio](LICENSE.md)
+
+## 🤝 Contribuir y comunidad
+
+* Antes de un pull request ejecuta `HYDRA_UMC_CI=1 py -3 tools/ci_validate.py` (o `HYDRA_UMC_CI=1 python3 tools/ci_validate.py`): debe imprimir `CI_VALIDATION=PASS`. No ejecutes `build.sh` ni `build.bat` para esta comprobación; compilar no es comprobar.
+* Los ocho README se escriben desde una sola fuente en HYDRA-UMC-DOCS; no los edites a mano. Cambia la fuente y vuelve a escribirlos con `tools/make_readmes.py`.
+* No afirmes en un README lo que no se ha ejecutado: di «simulado» o «sin probar en hardware» cuando esa sea la verdad.
+* Mira [CONTRIBUTING.md](CONTRIBUTING.md), el [código de conducta](CODE_OF_CONDUCT.md), [SECURITY.md](SECURITY.md) y [SUPPORT.md](SUPPORT.md).
 
 ## 👤 AUTOR
-**JuanenRac** (Electro Hobby 3D)
-📧 electrohobby3d@gmail.com
-📺 [youtube.com/@electrohobby3d](https://youtube.com/@electrohobby3d)
+
+**JuanenRac (Electro Hobby 3D)** · electrohobby3d@gmail.com
 
 ## 📜 LICENCIA
 
-HYDRA-UMC SERVER es (c) 2026 JuanenRac (Electro Hobby 3D). Este aviso debe
-incluirse en cualquier distribución de este proyecto o trabajos derivados.
-
-El código fuente de esta aplicación está disponible bajo la **GNU General
-Public License v3.0 (GPL-3.0)**. Texto completo en
-https://www.gnu.org/licenses/gpl-3.0.html.
-
-La documentación (este README y sus propias traducciones - `README_spa.md`,
-`README_ita.md`, `README_fra.md`, `README_deu.md`, `README_zho.md`,
-`README_jpn.md`) está disponible bajo
-**Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA
-4.0)**. Texto completo en https://creativecommons.org/licenses/by-sa/4.0/.
+GPL-3.0-or-later - [LICENSE](LICENSE).
