@@ -4,6 +4,7 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **A contract test against the SDK:** `tools/verify_sdk_contract.mjs` (part of `npm test`) reads the route contract the SDK publishes and fails if any operation it promises is not registered here, differs in public or signed-in access, or lists a status code the handler never produces (codes added by a shared middleware are not asked of the handler). The SDK is looked up in `HYDRA_UMC_SDK_DIR` or in a sibling checkout; with none it is skipped, and `HYDRA_UMC_REQUIRE_SDK=1` makes that a failure. 6 tests.
 - **Flash progress goes only to administrators:** the `canota_progress` messages of a firmware flash were sent to every connected WebSocket client, including operators and viewers; they now reach only the connections of an administrator, the same rule as the flash itself. The relay contract check keeps an operator connection open during a flash and fails if it receives any progress.
 - **README in the universal layout:** the README and its seven translations follow the layout that the four families share (22 sections in a fixed order), with an architecture picture and a repository-structure picture drawn from `docs/architecture.json` and `docs/structure.json`; the CI validator checks both pictures and the file tree.
 
