@@ -634,8 +634,8 @@ process" posture as the Voice UI relay above.
   firmware is exactly the kind of action every other bridge in this
   ecosystem gates more tightly than a read). Body: raw firmware bytes,
   `Content-Type: application/octet-stream`. The real, per-page flash
-  progress is **not** returned in this HTTP response - it is broadcast
-  live to every connected WebSocket client as `{ "type":
+  progress is **not** returned in this HTTP response - it is sent
+  live to every connected `admin` WebSocket client as `{ "type":
   "canota_progress", "payload": { "phase", "pages_sent", "pages_total",
   "percent", "error" } }` while the flash is in progress (see section 3).
   This response only reports the final outcome once the cycle ends:
@@ -834,8 +834,9 @@ values today:
   2, "controllerId", "robotId", "patch", "cameraId"?, "cameraPatch"? }`.
 - `"claims"` - who controls which robot, for the clients that opened `/ws` with `?remoteApiVersion=2` (section 2m).
 - `"canota_progress"` - real, live per-page flash progress from `POST
-  /api/hardware/canota/flash` (section 2h), broadcast to every connected
-  client while a real STM32H745 flash cycle is in progress: `{ "type":
+  /api/hardware/canota/flash` (section 2h), sent to every connected
+  `admin` client (operators and viewers do not receive it, the same rule as the
+  flash itself) while a real STM32H745 flash cycle is in progress: `{ "type":
   "canota_progress", "payload": { "phase", "pages_sent", "pages_total",
   "percent", "error" } }`.
 

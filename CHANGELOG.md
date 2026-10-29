@@ -4,6 +4,7 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **Flash progress goes only to administrators:** the `canota_progress` messages of a firmware flash were sent to every connected WebSocket client, including operators and viewers; they now reach only the connections of an administrator, the same rule as the flash itself. The relay contract check keeps an operator connection open during a flash and fails if it receives any progress.
 - **README in the universal layout:** the README and its seven translations follow the layout that the four families share (22 sections in a fixed order), with an architecture picture and a repository-structure picture drawn from `docs/architecture.json` and `docs/structure.json`; the CI validator checks both pictures and the file tree.
 
 - **Three more options in Server Admin:** whether a voice reply repeats what was said, the least confidence of the speech recognizer before a request that starts a movement is accepted, and the MAVLink 2 signing key file with the switch for unsigned messages (`voice` and `mavlink` in `PUT /api/admin/server-config`, validated, with the same environment-wins rule). The voice values travel with every turn to HYDRA-UMC-VOICE-UI (a client cannot set them), the MAVLink values are read from `data/server-config.json` by HYDRA-UMC-BRIDGE-UAV. The defaults are the conservative ones the services already had. Tested, including a real round trip through the voice service.

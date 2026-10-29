@@ -192,7 +192,7 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
       }
 
       // spi_bridge streams real newline-delimited JSON progress - each
-      // line is broadcast to every connected WS client as it arrives
+      // line is sent to every connected admin WS client as it arrives
       // (`type: "canota_progress"`, same envelope shape as every other WS
       // message this server sends) so Flasher.tsx can show real, live
       // progress instead of polling. This HTTP response only reports
@@ -214,8 +214,12 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
             const progress = JSON.parse(line);
             finalPhase = progress.phase ?? finalPhase;
             const msg = JSON.stringify({ type: "canota_progress", payload: progress });
+            // Only admin connections get the flash progress: the flash
+            // itself is admin-only and the progress is not for the rest.
+            // A role change closes the socket (session generation check),
+            // so the role recorded at connect time is the live one.
             for (const client of wsClients) {
-              if (client.readyState === WebSocket.OPEN) client.send(msg);
+              if (client.readyState === WebSocket.OPEN && client.meta?.role === "admin") client.send(msg);
             }
           }
         }

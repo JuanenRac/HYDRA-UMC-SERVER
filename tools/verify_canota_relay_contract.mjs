@@ -105,6 +105,7 @@ async function main() {
   let childNoBridge;
   let childWithBridge;
   let ws;
+  let operatorWs;
   let logs = "";
 
   try {
@@ -226,6 +227,15 @@ async function main() {
       if (msg.type === "canota_progress") canotaMessages.push(msg.payload);
     });
 
+    // An operator connection stays open during the flash and must get none of the progress.
+    operatorWs = new WebSocket(`ws://127.0.0.1:${serverPortWithBridge}/ws`, ["hydra.bearer", operatorLogin.token]);
+    await once(operatorWs, "open");
+    const operatorCanotaMessages = [];
+    operatorWs.on("message", (raw) => {
+      const msg = JSON.parse(raw.toString());
+      if (msg.type === "canota_progress") operatorCanotaMessages.push(msg.payload);
+    });
+
     const realFirmwareBytes = Buffer.from("hydra-umc-real-firmware-fixture-bytes");
     const flashResponse = await fetch(
       `http://127.0.0.1:${serverPortWithBridge}/api/hardware/canota/flash?tier=2&slot=3&hardware_id=0x48374334&version_major=0&version_minor=1`,
@@ -269,12 +279,14 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, 200));
     assert.ok(canotaMessages.length >= 3, `expected the real progress messages over WS, got: ${JSON.stringify(canotaMessages)}`);
     assert.equal(canotaMessages[canotaMessages.length - 1].phase, "done");
+    assert.equal(operatorCanotaMessages.length, 0, `an operator connection received flash progress: ${JSON.stringify(operatorCanotaMessages)}`);
 
-    console.log("SERVER_CANOTA_RELAY_CONTRACT=PASS unconfigured=1 auth=1 admin_gate=1 version=1 flash=1 signing=1 ws_progress=1");
+    console.log("SERVER_CANOTA_RELAY_CONTRACT=PASS unconfigured=1 auth=1 admin_gate=1 version=1 flash=1 signing=1 ws_progress=1 ws_progress_admin_only=1");
   } catch (error) {
     throw new Error(`${error instanceof Error ? error.message : error}\nServer startup output:\n${logs || "<no output>"}`);
   } finally {
     if (ws) ws.close();
+    if (operatorWs) operatorWs.close();
     stub.server.close();
     for (const child of [childNoBridge, childWithBridge]) {
       if (child && child.exitCode === null) {
