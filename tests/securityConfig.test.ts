@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { SecurityConfig, SecurityConfigError, resolveAiAccess, resolveBleEncryption, resolveBleMode, resolveInfoAuth, resolveTls, type SecurityFile } from "../src/securityConfig.ts";
+import { SecurityConfig, SecurityConfigError, resolveAiAccess, resolveBleEncryption, resolveBleMode, resolveInfoAuth, resolveTls, resolveVoiceHeardText, resolveVoiceMinConfidence, type SecurityFile } from "../src/securityConfig.ts";
 
 function makeConfig(env: any = {}, initial: SecurityFile = {}, tlsActive = false) {
   let stored: SecurityFile = { ...initial };
@@ -225,4 +225,86 @@ test("an MQTT setting fixed in the environment cannot be changed from the app, a
   assert.ok(!JSON.stringify(config.snapshot()).includes("secret"));
   assert.throws(() => config.update({ mqtt: { mode: "off" } }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 409 && /HYDRA_UMC_MQTT_BRIDGE/.test(e.message));
   assert.throws(() => config.update({ mqtt: { url: "mqtt://other:1883" } }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 409);
+});
+
+test("the voice options default to the behaviour of the voice service and follow environment, then saved, then default", () => {
+  const { config } = makeConfig();
+  assert.deepEqual(config.voiceOptions(), { includeHeardText: false, minConfidence: 0.6 });
+  assert.deepEqual(config.snapshot().voice, { includeHeardText: { value: false, source: "default" }, minConfidence: { value: 0.6, source: "default" } });
+  assert.deepEqual(resolveVoiceHeardText("1", { voice: { includeHeardText: false } }), { value: true, source: "env" });
+  assert.deepEqual(resolveVoiceHeardText("true", {}), { value: false, source: "env" }, "only the exact word 1 switches it on, as in the voice service");
+  assert.deepEqual(resolveVoiceMinConfidence("0.8", { voice: { minConfidence: 0.2 } }), { value: 0.8, source: "env" });
+  assert.deepEqual(resolveVoiceMinConfidence("banana", { voice: { minConfidence: 0.2 } }), { value: 0.2, source: "config" }, "a typing mistake in the environment is ignored");
+  assert.deepEqual(resolveVoiceMinConfidence("7", {}), { value: 0.6, source: "default" });
+});
+
+test("an administrator changes the voice options, live, with warnings for the risky directions", () => {
+  const { config, logs, stored } = makeConfig();
+  const on = config.update({ voice: { includeHeardText: true, minConfidence: 0.9 } }, "root");
+  assert.deepEqual(on.warnings, ["voice_heard_text_on"]);
+  assert.equal(on.appliesOnRestart, false);
+  assert.deepEqual(config.voiceOptions(), { includeHeardText: true, minConfidence: 0.9 });
+  assert.deepEqual(stored().voice, { includeHeardText: true, minConfidence: 0.9 });
+  assert.match(logs.at(-1)!, /root set the voice options: transcript in replies ON, minimum confidence 0.9/);
+  const off = config.update({ voice: { minConfidence: 0 } }, "root");
+  assert.deepEqual(off.warnings, ["voice_confidence_off"]);
+  assert.deepEqual(config.voiceOptions(), { includeHeardText: true, minConfidence: 0 }, "a patch with one field keeps the other");
+});
+
+test("bad voice values are refused and a value fixed in the environment is locked", () => {
+  const { config } = makeConfig();
+  for (const bad of [{ includeHeardText: "yes" }, { includeHeardText: 1 }, { minConfidence: -0.1 }, { minConfidence: 1.1 }, { minConfidence: "0.5" }, { minConfidence: Number.NaN }, { minConfidence: null }]) {
+    assert.throws(() => config.update({ voice: bad }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 400, JSON.stringify(bad));
+  }
+  assert.throws(() => config.update({ voice: [] }, "root"), SecurityConfigError);
+  assert.deepEqual(config.voiceOptions(), { includeHeardText: false, minConfidence: 0.6 }, "nothing was saved");
+  const locked = makeConfig({ voiceHeardText: "0", voiceMinConfidence: "0.7" }).config;
+  assert.throws(() => locked.update({ voice: { includeHeardText: true } }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 409 && /INCLUDE_HEARD_TEXT/.test(e.message));
+  assert.throws(() => locked.update({ voice: { minConfidence: 0.1 } }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 409 && /MIN_CONFIDENCE/.test(e.message));
+  assert.deepEqual(locked.voiceOptions(), { includeHeardText: false, minConfidence: 0.7 });
+});
+
+test("MAVLink signing is off by default, checks the key file and never shows the key", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hydra-mav-"));
+  try {
+    const hexKey = path.join(dir, "hex.key");
+    const rawKey = path.join(dir, "raw.key");
+    const badKey = path.join(dir, "bad.key");
+    fs.writeFileSync(hexKey, Buffer.alloc(32, 0xab).toString("hex") + "\n");
+    fs.writeFileSync(rawKey, Buffer.alloc(32, 7));
+    fs.writeFileSync(badKey, "secret-looking-text");
+    const { config, logs, stored } = makeConfig();
+    assert.equal(config.snapshot().mavlink.signing, false);
+    assert.equal(config.snapshot().mavlink.signingAllowUnsigned.value, false);
+    assert.equal(config.snapshot().mavlink.appliesOnRestart, false);
+    const on = config.update({ mavlink: { signingKeyFile: hexKey } }, "root");
+    assert.equal(on.appliesOnRestart, true);
+    assert.deepEqual(on.warnings, []);
+    assert.equal(config.snapshot().mavlink.signing, true);
+    assert.equal(config.snapshot().mavlink.appliesOnRestart, true);
+    assert.deepEqual(stored().mavlink, { signingKeyFile: hexKey });
+    assert.ok(!JSON.stringify(config.snapshot()).includes(Buffer.alloc(32, 0xab).toString("hex")), "the key itself is never in the answer");
+    assert.match(logs.at(-1)!, /MAVLink signing on/);
+    config.update({ mavlink: { signingKeyFile: rawKey } }, "root");
+    const unsigned = config.update({ mavlink: { signingAllowUnsigned: true } }, "root");
+    assert.deepEqual(unsigned.warnings, ["mavlink_unsigned_allowed"]);
+    assert.deepEqual(stored().mavlink, { signingKeyFile: rawKey, signingAllowUnsigned: true });
+    for (const bad of [{ signingKeyFile: badKey }, { signingKeyFile: path.join(dir, "missing.key") }, { signingKeyFile: 5 }, { signingKeyFile: "a\nb" }, { signingKeyFile: "x".repeat(2000) }, { signingAllowUnsigned: "yes" }]) {
+      assert.throws(() => config.update({ mavlink: bad }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 400 && !/secret-looking/.test(e.message), JSON.stringify(bad).slice(0, 80));
+    }
+    const off = config.update({ mavlink: { signingKeyFile: "" } }, "root");
+    assert.deepEqual(off.warnings, ["mavlink_signing_off"]);
+    assert.equal(config.snapshot().mavlink.signing, false);
+    assert.match(logs.at(-1)!, /MAVLink signing OFF/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("MAVLink signing fixed in the environment cannot be changed from the app", () => {
+  const { config } = makeConfig({ mavlinkKeyFile: "/etc/uav.key", mavlinkAllowUnsigned: "1" });
+  assert.deepEqual(config.snapshot().mavlink.signingKeyFile, { value: "/etc/uav.key", source: "env" });
+  assert.deepEqual(config.snapshot().mavlink.signingAllowUnsigned, { value: true, source: "env" });
+  assert.throws(() => config.update({ mavlink: { signingKeyFile: "" } }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 409 && /SIGNING_KEY_FILE/.test(e.message));
+  assert.throws(() => config.update({ mavlink: { signingAllowUnsigned: false } }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 409 && /ALLOW_UNSIGNED/.test(e.message));
 });

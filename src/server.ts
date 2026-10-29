@@ -283,8 +283,8 @@ async function startServer() {
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
     save: (file) => {
-      const { aiAccess, infoAuth, tls, ble, mqtt } = file;
-      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt });
+      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink });
     },
     tlsActive: startupTls.enabled,
     bleActiveMode: resolveBleMode(securityEnvFrom(process.env).bleGatt, loadServerConfig()).value,
@@ -299,7 +299,7 @@ async function startServer() {
 
   registerSettingsRoutes(app, { authenticate, requireAdmin, loadFullSettingsFromDisk, applySettingsUpdate });
 
-  registerAssistantRoutes(app, { authenticate, getSettings });
+  registerAssistantRoutes(app, { authenticate, getSettings, security });
 
   registerCommandRoutes(app, {
     authenticate,

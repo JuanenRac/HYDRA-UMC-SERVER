@@ -508,7 +508,21 @@ UI's own Clients/Logs/Config screens, not the main Dashboard.
   by default, and `warnings: ["ble_commands_unencrypted"]` comes back when
   commands are allowed without it). `409` when the
   value is fixed by the environment, `400` for a bad value. `aiAccess` and
-  `infoAuth` apply at once, `tls` and `ble` on the next start. The `port` part saves
+  `infoAuth` apply at once, `tls` and `ble` on the next start. `voice` is
+  `{ "includeHeardText", "minConfidence" }` (the transcript in a voice reply,
+  off by default, and the least confidence, 0 to 1, default 0.6, before a spoken
+  request that starts a movement is accepted; 0 switches the check off) and
+  applies on the next voice turn: `POST /api/voice/turn` sends the saved values
+  to HYDRA-UMC-VOICE-UI as `options` of the turn (an `options` sent by the client
+  is replaced), and the environment of the voice service still wins. `mavlink`
+  is `{ "signingKeyFile", "signingAllowUnsigned" }` (the path of the MAVLink 2
+  signing key file, checked to hold 32 bytes or 64 hexadecimal characters and never
+  returned or logged as a key; empty means no signing; and whether unsigned
+  messages are still accepted, off by default): HYDRA-UMC-BRIDGE-UAV reads it
+  from `data/server-config.json` (`--server-config`) when it starts. The answer
+  carries `voice` and `mavlink` the same way as the other options, with the
+  warnings `voice_heard_text_on`, `voice_confidence_off`, `mavlink_unsigned_allowed`
+  and `mavlink_signing_off`. The `port` part saves
   a new listen port to disk. `400` if `port` isn't an integer in `1-65535`.
   **Does not take effect until the process restarts** (see
   `POST /api/admin/restart` below) - the response is `{ "success": true,
@@ -721,6 +735,7 @@ Environment variables, read once at start (see `docs/PRODUCTION_BOOTSTRAP.md`):
 | `/dashboard-ai` and `/api/ai/datalake/*` | The AI dashboard (HYDRA-UMC-DASHBOARD-AI, copied to `public/dashboard-ai/` by `build-frontend`) is served at `/dashboard-ai`. It reads through `/api/ai/*` with the session of the person signed in to STUDIO. The data lake is reached read-only there: `GET`/`HEAD` of `/health`, `/query`, `/aggregate`, `/stats`, `/stats/range` and `/series`; any other method or path answers 403 and is never forwarded. |
 | `HYDRA_UMC_TELEMETRY_COLLECTOR_URL` (+ `HYDRA_UMC_TELEMETRY_COLLECTOR_TOKEN` or `..._FILE`, `HYDRA_UMC_TELEMETRY_INTERVAL_MS`) | Turns on the telemetry producer: the numbers of every robot delta (`pos_*`, `joints_*`, `playbackState_*`) are posted to the collector's `/ingest/ws` as one `robot_state` sample per robot (`sourceId` `robot-<controllerId>-<robotId>`, a growing `sequence`), at most one per interval (100-60000 ms, 1000 by default), merged. Off without the address. Never delays a command; bounded (256 robots, 32 fields a sample); 30 s pause after a failure. |
 | `HYDRA_UMC_MQTT_BRIDGE` (`off`, `state` or `commands`) (+ `HYDRA_UMC_MQTT_URL`, `HYDRA_UMC_MQTT_PREFIX`, `HYDRA_UMC_MQTT_USERNAME`, `HYDRA_UMC_MQTT_PASSWORD` or `..._PASSWORD_FILE`, `HYDRA_UMC_MQTT_COMMAND_USER`, `HYDRA_UMC_MQTT_COMMAND_PASSWORD` or `..._PASSWORD_FILE`) | The bridge to the MQTT broker of the cell; off by default, also settable by an administrator in `data/server-config.json` (`mqtt`: mode, url, prefix, username, commandUser; `PUT /api/admin/server-config` with `{ "mqtt": { ... } }`, effective on the next start; the passwords only from the environment). See `docs/MQTT_BRIDGE.md`. |
+| `HYDRA_UMC_VOICE_UI_INCLUDE_HEARD_TEXT`, `HYDRA_UMC_VOICE_UI_MIN_CONFIDENCE`, `HYDRA_UMC_BRIDGE_UAV_SIGNING_KEY_FILE`, `HYDRA_UMC_BRIDGE_UAV_SIGNING_ALLOW_UNSIGNED` | The voice and UAV options an administrator also sets from Server Admin (`voice` and `mavlink` in `data/server-config.json`, `PUT /api/admin/server-config`): transcript in voice replies (`1` switches it on; off by default), least recognizer confidence (0 to 1, default 0.6), MAVLink 2 signing key file (none by default) and whether unsigned messages are still accepted (no by default). The environment wins over what is saved (then the answer says `source: "env"` and a change is refused with `409`); the voice service and the UAV bridge read the same variables themselves. |
 | `HYDRA_UMC_LOG_MAX_BYTES`, `HYDRA_UMC_LOG_KEEP` | The size at which the server log rotates (default 10 MB) and how many rotated files are kept (`.1` to `.N`, default 1). |
 
 The page address of the embedded 3D view (`/?hideUI=true&robotId=<id>&token=<JWT>`, which the

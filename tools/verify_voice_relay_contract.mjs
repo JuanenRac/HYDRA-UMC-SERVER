@@ -232,6 +232,27 @@ async function main() {
     assert.equal(foreignConfirm.body.status, "invalid");
     assert.match(foreignConfirm.body.reason, /someone else/);
 
+    // The voice options an administrator sets in Server Admin travel with every turn (the Server's own, never the client's):
+    // by default the reply does not repeat what was said, and the minimum recognizer confidence is the service's 0.6.
+    const turnBody = (requestId, extra = {}) => JSON.stringify({ type: "voice_turn", requestId, transcript: "start mission demo", locale: "en-US", confidence: 0.7, ...extra });
+    const defaults = await request(serverPort, "/api/voice/turn", { method: "POST", headers: authorization, body: turnBody("voice-opt-001") });
+    assert.equal(defaults.body.interpretation.heardText, undefined);
+    assert.equal(defaults.body.requiresConfirmation, true);
+    const forged = await request(serverPort, "/api/voice/turn", { method: "POST", headers: authorization, body: turnBody("voice-opt-002", { options: { includeHeardText: true, minConfidence: 0 } }) });
+    assert.equal(forged.body.interpretation.heardText, undefined, "an options object sent by the client is replaced by the administrator's");
+    const badOptions = await request(serverPort, "/api/admin/server-config", { method: "PUT", headers: authorization, body: JSON.stringify({ voice: { minConfidence: 2 } }) });
+    assert.equal(badOptions.response.status, 400);
+    const saved = await request(serverPort, "/api/admin/server-config", { method: "PUT", headers: authorization, body: JSON.stringify({ voice: { includeHeardText: true, minConfidence: 0.9 } }) });
+    assert.equal(saved.response.status, 200);
+    assert.deepEqual(saved.body.warnings, ["voice_heard_text_on"]);
+    assert.equal(saved.body.voice.minConfidence.value, 0.9);
+    const strict = await request(serverPort, "/api/voice/turn", { method: "POST", headers: authorization, body: turnBody("voice-opt-003") });
+    assert.equal(strict.body.interpretation.heardText, "start mission demo", "the transcript is in the reply once the administrator turns it on");
+    assert.equal(strict.body.requiresConfirmation, false, "0.7 is below the saved minimum of 0.9: nothing is started");
+    assert.equal(strict.body.confirmationToken, undefined);
+    const restored = await request(serverPort, "/api/admin/server-config", { method: "PUT", headers: authorization, body: JSON.stringify({ voice: { includeHeardText: false, minConfidence: 0.6 } }) });
+    assert.equal(restored.response.status, 200);
+
     // Real per-client gate: disabling Config > Remote Access "Watch" must
     // 404 both Watch-relay routes for a request carrying that header,
     // without touching this same admin session's own unrelated access -
@@ -267,7 +288,7 @@ async function main() {
     const statusStillDirect = await request(serverPort, "/api/watch/system-status", { headers: authorization });
     assert.equal(statusStillDirect.response.status, 200);
 
-    console.log("SERVER_VOICE_RELAY_CONTRACT=PASS auth=1 status=1 non_actuating_motion=1 confirm_signed=1 confirm_subject=1 watch_gate=1");
+    console.log("SERVER_VOICE_RELAY_CONTRACT=PASS auth=1 status=1 non_actuating_motion=1 confirm_signed=1 confirm_subject=1 watch_gate=1 admin_options=1");
   } finally {
     await stop(server);
     await stop(voice);

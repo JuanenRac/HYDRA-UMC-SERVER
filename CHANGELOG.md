@@ -4,6 +4,7 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **Three more options in Server Admin:** whether a voice reply repeats what was said, the least confidence of the speech recognizer before a request that starts a movement is accepted, and the MAVLink 2 signing key file with the switch for unsigned messages (`voice` and `mavlink` in `PUT /api/admin/server-config`, validated, with the same environment-wins rule). The voice values travel with every turn to HYDRA-UMC-VOICE-UI (a client cannot set them), the MAVLink values are read from `data/server-config.json` by HYDRA-UMC-BRIDGE-UAV. The defaults are the conservative ones the services already had. Tested, including a real round trip through the voice service.
 - **The layout of the README is checked in the CI:** the validator runs `tools/universal_readme_check.py` and lists, as a warning, what differs from the universal layout of the README.
 
 ## [0.8.1.2] - A read-only role, `viewer` and the edits of one robot are commands, so an operator can make them

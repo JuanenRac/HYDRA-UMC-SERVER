@@ -41,6 +41,25 @@ export interface TlsFile {
   keyPath?: string;
 }
 
+/** What the voice relay asks of the voice service on every turn (src/routes/assistantRoutes.ts). */
+export interface VoiceFile {
+  /** Whether a reply carries the transcript it was made from (default: no; it is personal data). */
+  includeHeardText?: boolean;
+  /** How sure the speech recognizer must be (0 to 1) before a request that starts a movement is accepted; 0 switches the check off (default 0.6). */
+  minConfidence?: number;
+}
+
+/** What the MAVLink bridge to the vehicle reads from this same file when it starts (HYDRA-UMC-BRIDGE-UAV). */
+export interface MavlinkFile {
+  /** The file holding the 32-byte MAVLink 2 signing key (never the key itself); empty or absent: no signing. */
+  signingKeyFile?: string;
+  /** With a key, still accept messages that are not signed (default: no). */
+  signingAllowUnsigned?: boolean;
+}
+
+export const DEFAULT_VOICE_MIN_CONFIDENCE = 0.6;
+export const MAVLINK_SIGNING_KEY_BYTES = 32;
+
 export interface SecurityFile {
   aiAccess?: AiAccess;
   infoAuth?: boolean;
@@ -48,6 +67,8 @@ export interface SecurityFile {
   ble?: BleFile;
   /** The bridge to the MQTT broker (src/mqttBridge.ts). */
   mqtt?: MqttFile;
+  voice?: VoiceFile;
+  mavlink?: MavlinkFile;
 }
 
 export interface SecurityEnv {
@@ -58,6 +79,10 @@ export interface SecurityEnv {
   bleGatt?: string;
   bleEncryption?: string;
   mqtt?: MqttEnv;
+  voiceHeardText?: string;
+  voiceMinConfidence?: string;
+  mavlinkKeyFile?: string;
+  mavlinkAllowUnsigned?: string;
 }
 
 export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
@@ -69,6 +94,10 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     bleGatt: env.HYDRA_UMC_BLE_GATT,
     bleEncryption: env.HYDRA_UMC_BLE_ENCRYPTION,
     mqtt: mqttEnvFrom(env),
+    voiceHeardText: env.HYDRA_UMC_VOICE_UI_INCLUDE_HEARD_TEXT,
+    voiceMinConfidence: env.HYDRA_UMC_VOICE_UI_MIN_CONFIDENCE,
+    mavlinkKeyFile: env.HYDRA_UMC_BRIDGE_UAV_SIGNING_KEY_FILE,
+    mavlinkAllowUnsigned: env.HYDRA_UMC_BRIDGE_UAV_SIGNING_ALLOW_UNSIGNED,
   };
 }
 
@@ -102,6 +131,54 @@ export function resolveBleEncryption(env: string | undefined, file: SecurityFile
   if (isSet(env)) return { value: env.trim().toLowerCase() !== "off", source: "env" };
   if (typeof file.ble?.requireEncryption === "boolean") return { value: file.ble.requireEncryption, source: "config" };
   return { value: true, source: "default" };
+}
+
+/** A confidence is a finite number from 0 to 1. */
+export function validConfidence(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
+}
+
+/** Transcript in the reply: only the exact word "1" in the environment switches it on (same rule as the voice service). */
+export function resolveVoiceHeardText(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.voice?.includeHeardText === "boolean") return { value: file.voice.includeHeardText, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** A typing mistake in the environment never silently opens the check: a bad number is ignored, as the voice service does. */
+export function resolveVoiceMinConfidence(env: string | undefined, file: SecurityFile): { value: number; source: Source } {
+  if (isSet(env)) {
+    const parsed = Number(env.trim());
+    if (validConfidence(parsed)) return { value: parsed, source: "env" };
+  }
+  if (validConfidence(file.voice?.minConfidence)) return { value: file.voice.minConfidence, source: "config" };
+  return { value: DEFAULT_VOICE_MIN_CONFIDENCE, source: "default" };
+}
+
+export function resolveMavlinkKeyFile(env: string | undefined, file: SecurityFile): { value: string; source: Source } {
+  if (isSet(env)) return { value: env.trim(), source: "env" };
+  if (isSet(file.mavlink?.signingKeyFile)) return { value: file.mavlink.signingKeyFile.trim(), source: "config" };
+  return { value: "", source: "default" };
+}
+
+export function resolveMavlinkAllowUnsigned(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.mavlink?.signingAllowUnsigned === "boolean") return { value: file.mavlink.signingAllowUnsigned, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** Why a MAVLink signing key file cannot be used (null when it can): 32 raw bytes or 64 hexadecimal characters, like the bridge reads it. */
+export function mavlinkKeyFileProblem(keyPath: string): string | null {
+  let data: Buffer;
+  try {
+    data = fs.readFileSync(keyPath);
+  } catch (error) {
+    return `cannot read the signing key file: ${(error as NodeJS.ErrnoException).code ?? (error as Error).message}`;
+  }
+  const text = data.toString("latin1").trim();
+  if (text.length === MAVLINK_SIGNING_KEY_BYTES * 2 && /^[0-9a-fA-F]+$/.test(text)) return null;
+  if (data.length === MAVLINK_SIGNING_KEY_BYTES) return null;
+  return `the signing key file must hold ${MAVLINK_SIGNING_KEY_BYTES} bytes or ${MAVLINK_SIGNING_KEY_BYTES * 2} hexadecimal characters`;
 }
 
 export function resolveTls(env: SecurityEnv, file: SecurityFile): { enabled: boolean; certPath: string | null; keyPath: string | null; source: Source } {
@@ -159,6 +236,9 @@ export interface SecuritySnapshot {
   tls: { enabled: boolean; source: Source; certPath: string | null; keyPath: string | null; fingerprint256: string | null; active: boolean; appliesOnRestart: boolean };
   ble: { mode: { value: BleMode; source: Source }; requireEncryption: { value: boolean; source: Source }; activeMode: BleMode; appliesOnRestart: boolean };
   mqtt: { mode: { value: MqttMode; source: Source }; url: string; prefix: string; username: string | null; commandUser: string | null; activeMode: MqttMode; appliesOnRestart: boolean };
+  voice: { includeHeardText: { value: boolean; source: Source }; minConfidence: { value: number; source: Source } };
+  /** The signing key itself is never part of this; only where its file is. */
+  mavlink: { signingKeyFile: { value: string; source: Source }; signingAllowUnsigned: { value: boolean; source: Source }; signing: boolean; appliesOnRestart: boolean };
 }
 
 export interface SecurityConfigOptions {
@@ -177,6 +257,8 @@ export interface SecurityConfigOptions {
 
 export class SecurityConfig {
   private file: SecurityFile;
+  /** A MAVLink signing option was saved since this server started: the bridge picks it up on its next start. */
+  private mavlinkTouched = false;
 
   constructor(private options: SecurityConfigOptions) {
     this.file = options.load();
@@ -206,6 +288,14 @@ export class SecurityConfig {
     return resolveMqttSettings(this.options.env.mqtt ?? {}, this.file);
   }
 
+  /** What the voice relay sends the voice service with every turn. */
+  voiceOptions(): { includeHeardText: boolean; minConfidence: number } {
+    return {
+      includeHeardText: resolveVoiceHeardText(this.options.env.voiceHeardText, this.file).value,
+      minConfidence: resolveVoiceMinConfidence(this.options.env.voiceMinConfidence, this.file).value,
+    };
+  }
+
   snapshot(): SecuritySnapshot {
     const tls = this.tls();
     return {
@@ -226,6 +316,20 @@ export class SecurityConfig {
         activeMode: this.options.bleActiveMode ?? "off",
         appliesOnRestart: resolveBleMode(this.options.env.bleGatt, this.file).value !== (this.options.bleActiveMode ?? "off"),
       },
+      voice: {
+        includeHeardText: resolveVoiceHeardText(this.options.env.voiceHeardText, this.file),
+        minConfidence: resolveVoiceMinConfidence(this.options.env.voiceMinConfidence, this.file),
+      },
+      mavlink: (() => {
+        const keyFile = resolveMavlinkKeyFile(this.options.env.mavlinkKeyFile, this.file);
+        return {
+          signingKeyFile: keyFile,
+          signingAllowUnsigned: resolveMavlinkAllowUnsigned(this.options.env.mavlinkAllowUnsigned, this.file),
+          signing: keyFile.value !== "",
+          // the bridge reads the file once, when it starts
+          appliesOnRestart: this.mavlinkTouched,
+        };
+      })(),
       mqtt: (() => {
         const settings = this.mqtt();
         return {
@@ -244,7 +348,7 @@ export class SecurityConfig {
   /** Applies a change asked for by an administrator; returns the new state and the warnings to show. */
   update(patch: any, actor: string): { snapshot: SecuritySnapshot; warnings: string[]; appliesOnRestart: boolean } {
     const warnings: string[] = [];
-    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined };
+    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined };
     let appliesOnRestart = false;
     const log = this.options.log ?? (() => undefined);
     const lockedBy = (name: string) => new SecurityConfigError(409, `${name} is set in the environment of this server; remove it there to change it here`);
@@ -344,8 +448,57 @@ export class SecurityConfig {
       }
     }
 
+    if (patch.voice !== undefined) {
+      const voicePatch = patch.voice;
+      if (typeof voicePatch !== "object" || voicePatch === null || Array.isArray(voicePatch)) throw new SecurityConfigError(400, "voice must be an object");
+      const merged: VoiceFile = { ...(next.voice ?? {}) };
+      if (voicePatch.includeHeardText !== undefined) {
+        if (typeof voicePatch.includeHeardText !== "boolean") throw new SecurityConfigError(400, "voice.includeHeardText must be true or false");
+        if (resolveVoiceHeardText(this.options.env.voiceHeardText, this.file).source === "env") throw lockedBy("HYDRA_UMC_VOICE_UI_INCLUDE_HEARD_TEXT");
+        merged.includeHeardText = voicePatch.includeHeardText;
+      }
+      if (voicePatch.minConfidence !== undefined) {
+        if (!validConfidence(voicePatch.minConfidence)) throw new SecurityConfigError(400, "voice.minConfidence must be a number from 0 to 1");
+        if (resolveVoiceMinConfidence(this.options.env.voiceMinConfidence, this.file).source === "env") throw lockedBy("HYDRA_UMC_VOICE_UI_MIN_CONFIDENCE");
+        merged.minConfidence = voicePatch.minConfidence;
+      }
+      next.voice = merged;
+      if (voicePatch.includeHeardText === true) warnings.push("voice_heard_text_on");
+      if (voicePatch.minConfidence === 0) warnings.push("voice_confidence_off");
+    }
+
+    if (patch.mavlink !== undefined) {
+      const mavPatch = patch.mavlink;
+      if (typeof mavPatch !== "object" || mavPatch === null || Array.isArray(mavPatch)) throw new SecurityConfigError(400, "mavlink must be an object");
+      const merged: MavlinkFile = { ...(next.mavlink ?? {}) };
+      if (mavPatch.signingKeyFile !== undefined) {
+        if (typeof mavPatch.signingKeyFile !== "string" || mavPatch.signingKeyFile.length > 1024 || /[\u0000-\u001f]/.test(mavPatch.signingKeyFile)) {
+          throw new SecurityConfigError(400, "mavlink.signingKeyFile must be a file path (or empty for no signing)");
+        }
+        if (resolveMavlinkKeyFile(this.options.env.mavlinkKeyFile, this.file).source === "env") throw lockedBy("HYDRA_UMC_BRIDGE_UAV_SIGNING_KEY_FILE");
+        const keyPath = mavPatch.signingKeyFile.trim();
+        if (keyPath !== "") {
+          const problem = mavlinkKeyFileProblem(keyPath);
+          if (problem) throw new SecurityConfigError(400, problem);
+        }
+        merged.signingKeyFile = keyPath;
+      }
+      if (mavPatch.signingAllowUnsigned !== undefined) {
+        if (typeof mavPatch.signingAllowUnsigned !== "boolean") throw new SecurityConfigError(400, "mavlink.signingAllowUnsigned must be true or false");
+        if (resolveMavlinkAllowUnsigned(this.options.env.mavlinkAllowUnsigned, this.file).source === "env") throw lockedBy("HYDRA_UMC_BRIDGE_UAV_SIGNING_ALLOW_UNSIGNED");
+        merged.signingAllowUnsigned = mavPatch.signingAllowUnsigned;
+      }
+      next.mavlink = merged;
+      appliesOnRestart = true;
+      const signing = resolveMavlinkKeyFile(this.options.env.mavlinkKeyFile, { mavlink: merged }).value !== "";
+      const unsigned = resolveMavlinkAllowUnsigned(this.options.env.mavlinkAllowUnsigned, { mavlink: merged }).value;
+      if (signing && unsigned) warnings.push("mavlink_unsigned_allowed");
+      if (!signing) warnings.push("mavlink_signing_off");
+    }
+
     this.options.save(next);
     this.file = next;
+    if (patch.mavlink !== undefined) this.mavlinkTouched = true;
     const snapshot = this.snapshot();
     if (patch.aiAccess !== undefined) log(`[SECURITY] ${actor} set the local AI relay access to ${snapshot.aiAccess.value}.`);
     if (patch.infoAuth !== undefined) {
@@ -360,6 +513,12 @@ export class SecurityConfig {
     }
     if (patch.mqtt !== undefined) {
       log(`[SECURITY] ${actor} set the MQTT bridge to ${snapshot.mqtt.mode.value}${snapshot.mqtt.mode.value === "commands" ? ` (commands carried out as ${snapshot.mqtt.commandUser})` : ""}; it applies on the next start.`);
+    }
+    if (patch.voice !== undefined) {
+      log(`[SECURITY] ${actor} set the voice options: transcript in replies ${snapshot.voice.includeHeardText.value ? "ON" : "off"}, minimum confidence ${snapshot.voice.minConfidence.value}.`);
+    }
+    if (patch.mavlink !== undefined) {
+      log(`[SECURITY] ${actor} set MAVLink signing ${snapshot.mavlink.signing ? "on" : "OFF"}${snapshot.mavlink.signing && snapshot.mavlink.signingAllowUnsigned.value ? " (unsigned messages still accepted)" : ""}; the bridge applies it on its next start.`);
     }
     if (patch.tls !== undefined) log(`[SECURITY] ${actor} set TLS to ${snapshot.tls.enabled ? "enabled" : "disabled"}; it applies on the next start.`);
     return { snapshot, warnings, appliesOnRestart };

@@ -9,12 +9,13 @@ import { realSettings, remoteAccessAllowed } from "../serverPolicy";
 import { getSystemMetrics } from "../systemMetrics";
 import { industrialLog } from "../runtime";
 import { VOICE_UI_URL, VOICE_UI_TOKEN, VOICE_UI_TIMEOUT_MS, validateVoiceTurnPayload, isAssistantReplyForRequest } from "../upstreamConfig";
+import type { SecurityConfig } from "../securityConfig";
 import { judgeConfirmationResult, subjectOf, validateConfirmRequest } from "../voiceConfirm";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
-export function registerAssistantRoutes(app: express.Express, deps: { authenticate: Middleware; getSettings: () => any }): void {
-  const { authenticate, getSettings } = deps;
+export function registerAssistantRoutes(app: express.Express, deps: { authenticate: Middleware; getSettings: () => any; security: SecurityConfig }): void {
+  const { authenticate, getSettings, security } = deps;
   // Real spoken "status" text for the voice assistant's own status intent -
   // see this function's one real call site (POST /api/voice/turn) for why
   // this exists at all. Reuses the exact same real sources
@@ -77,7 +78,11 @@ export function registerAssistantRoutes(app: express.Express, deps: { authentica
     // The confirmation that comes out of this turn is for the signed-in user who asked: the subject is the session's, never the
     // client's (a `subject` in the body of the request is replaced).
     const subject = subjectOf((req as any).user);
-    const forwarded = subject ? { ...req.body, subject } : (() => { const { subject: _ignored, ...rest } = req.body; return rest; })();
+    // The voice options (transcript in the reply, minimum recognizer confidence) are the administrator's, saved in the server
+    // configuration: an `options` in the body of the request is replaced, never believed.
+    const { subject: _clientSubject, ...clientBody } = req.body;
+    delete clientBody.options;
+    const forwarded = { ...clientBody, ...(subject ? { subject } : {}), options: security.voiceOptions() };
     try {
       const upstream = await fetch(`${VOICE_UI_URL}/v1/voice/turn`, {
         method: "POST",
