@@ -450,8 +450,8 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
                   // the same client-authoritative value taking a smaller
                   // door in. Validated as 6 finite numbers, one per real
                   // joint name, before being trusted; anything else (a
-                  // client that doesn't send it - Android/iOS/DSI/SUITE
-                  // never do - or sends something malformed) falls through
+                  // client that doesn't send it, or sends something
+                  // malformed) falls through
                   // to calculateJoints() exactly like before this existed.
                   const j = params?.joints;
                   const hasValidJoints = j && typeof j === "object" && JOINT_KEYS.every((k) => typeof j[k] === "number" && Number.isFinite(j[k]));
