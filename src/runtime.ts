@@ -45,7 +45,7 @@ const SERVER_CONFIG_FILE = path.join(process.cwd(), "data", "server-config.json"
 
 import type { BleFile } from "./securityConfig";
 import type { MqttFile } from "./mqttBridge";
-import type { MavlinkFile, VoiceFile } from "./securityConfig";
+import type { MavlinkFile, RobotsFile, VoiceFile } from "./securityConfig";
 
 export interface ServerConfig {
   port?: number;
@@ -56,6 +56,7 @@ export interface ServerConfig {
   mqtt?: MqttFile;
   voice?: VoiceFile;
   mavlink?: MavlinkFile;
+  robots?: RobotsFile;
 }
 
 export function loadServerConfig(): ServerConfig {

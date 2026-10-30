@@ -365,6 +365,21 @@ a separate one.
   The Bluetooth service and the MQTT bridge never accept these (they stay on the
   network API).
 
+- Safe mode of one robot (`POST /api/robot/{id}/command`, it touches only the robot it is sent to):
+  - `disable` stops the robot, switches its valves and pumps off, drops the arming of its jog and
+    marks it `enabled: false`. Like a stop it is open to every signed-in account, needs no claim and
+    no `If-Match`, and it is recorded in the audit record (`robot-disable`). From then on every
+    command of the robot except `stop`, `disable` and `enable` is refused with `423` and
+    `robot-disabled`, and the robot cannot be armed (`POST /api/robot/{id}/jog-arm`).
+  - `enable` brings it back and restarts nothing: it stays stopped and the jog has to be armed
+    again. It is the risky direction, so it is off by default: it answers `403` with
+    `enable-not-allowed` until an administrator turns on `robots.allowEnable` (Server Admin >
+    Security, or `PUT /api/admin/server-config` with `{ "robots": { "allowEnable": true } }`, or
+    `HYDRA_UMC_ROBOT_ALLOW_ENABLE=1`), and then only an administrator may use it (`403` with
+    `admin-required` for any other role); the claim check applies as for any command but `stop`.
+    Every answer is recorded in the audit record (`robot-enable`). The Bluetooth service and the
+    MQTT bridge accept `disable` but never `enable`.
+
 - `POST /api/stop-all` (no body, no confirmation) is the **global stop**: it stops
   every robot of every controller and switches every valve and pump off, in one call.
   **Any signed-in account that can write, `admin` or `operator`, may call it**; a
@@ -750,6 +765,7 @@ Environment variables, read once at start (see `docs/PRODUCTION_BOOTSTRAP.md`):
 | `HYDRA_UMC_WS_QUERY_TOKEN` | **Refused by default**: `/ws?token=` gets an error message and a close with `1008`; the token travels as the `hydra.bearer` subprotocol. `HYDRA_UMC_WS_QUERY_TOKEN=allow` is the opt-out for clients that have not moved yet (it keeps the token in proxy and server logs); the server warns at every start while it is set. |
 | `STOP_ALL_RATE_LIMIT_MAX`, `STOP_ALL_RATE_LIMIT_WINDOW_MS` | Budget of `POST /api/stop-all` per address (default 60 per 60 000 ms), separate from the login's. |
 | `HYDRA_UMC_INFO_AUTH=required` | `GET /metrics`, `/api/system/metrics`, `/api/system/supervisor`, `/api/ecosystem/status` and `/api/models` demand a signed-in client. Off by default so that a client that does not send its token on those routes yet keeps working. |
+| `HYDRA_UMC_ROBOT_ALLOW_ENABLE=1` | A robot in safe mode (`disable`) may be brought back by the `enable` command, by an administrator. Off by default: `enable` answers `403` (`enable-not-allowed`) and only the settings of an administrator change `enabled`. Also `robots.allowEnable` of `PUT /api/admin/server-config`. |
 | `HYDRA_UMC_AI_ACCESS=admin` | `/api/ai/*` (the relay to the local AI services) answers administrators only. Off by default: an administrator or an operator can use it (any other role is refused), and only an administrator may change the baseline of the anomaly detector (a `POST` other than `/detect`). The services are `cognitive-node`, `detection-hef`, `visual-servoing-api`, `vla-engine`, `vision-node` and `anomaly-detector`. |
 | `HYDRA_UMC_<SERVICE>_TOKEN` (or `..._TOKEN_FILE`) | The Bearer token this server presents to a service that asks for one, never to a client: `HYDRA_UMC_VISUAL_SERVOING_TOKEN`, `HYDRA_UMC_VLA_ENGINE_TOKEN`, `HYDRA_UMC_COGNITIVE_NODE_TOKEN`, `HYDRA_UMC_DETECTION_HEF_TOKEN`, `HYDRA_UMC_VISION_NODE_TOKEN`, `HYDRA_UMC_ANOMALY_TOKEN` (`/api/ai/*`), `HYDRA_UMC_VISION_STREAMER_TOKEN` (the camera streams), `HYDRA_UMC_DATALAKE_READ_TOKEN` else `HYDRA_UMC_DATALAKE_TOKEN` (the telemetry). The names the services read themselves; `..._FILE` names a file whose first line is the token. None configured sends no header, as before. |
 | `/dashboard-ai` and `/api/ai/datalake/*` | The AI dashboard (HYDRA-UMC-DASHBOARD-AI, copied to `public/dashboard-ai/` by `build-frontend`) is served at `/dashboard-ai`. It reads through `/api/ai/*` with the session of the person signed in to STUDIO. The data lake is reached read-only there: `GET`/`HEAD` of `/health`, `/query`, `/aggregate`, `/stats`, `/stats/range` and `/series`; any other method or path answers 403 and is never forwarded. |

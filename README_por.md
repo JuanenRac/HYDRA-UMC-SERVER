@@ -20,14 +20,14 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/Framework-Express-000000.svg" alt="Framework">
   <img src="https://img.shields.io/badge/Language-TypeScript-3178C6.svg" alt="Language">
   <img src="https://img.shields.io/badge/Protocol-WebSocket-lightgrey.svg" alt="Protocol">
-  <img src="https://img.shields.io/badge/Tests-409%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-414%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.8.1.3-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
 
 ---
 
-> **Verificação de honestidade - o que realmente funciona hoje:** o motor Express + WebSocket, a sua superfície REST e WebSocket (63 operações em 58 caminhos), o início de sessão JWT com rotação do token de refresco e scrypt, a descoberta mDNS, as reservas e revisões de robôs, a reprodução, e os reencaminhamentos para CAN-OTA, telemetria, voz, os serviços de IA locais e o connector hub são reais e testados contra uma instância real deste mesmo servidor que os próprios testes arrancam: 409 testes unitários mais 28 scripts de contrato de ponta a ponta, todos a passar. O que toca no hardware e não é verificado aqui: a ligação a uma CM5 HYDRA-UMC real com uma placa STM32H745, código real exercitado só pela camada de API e contratos. TLS, Bluetooth LE, a ponte MQTT e a pilha Prometheus e Grafana são reais, opcionais e estão desligados por defeito.
+> **Verificação de honestidade - o que realmente funciona hoje:** o motor Express + WebSocket, a sua superfície REST e WebSocket (63 operações em 58 caminhos), o início de sessão JWT com rotação do token de refresco e scrypt, a descoberta mDNS, as reservas e revisões de robôs, a reprodução, e os reencaminhamentos para CAN-OTA, telemetria, voz, os serviços de IA locais e o connector hub são reais e testados contra uma instância real deste mesmo servidor que os próprios testes arrancam: 414 testes unitários mais 29 scripts de contrato de ponta a ponta, todos a passar. O que toca no hardware e não é verificado aqui: a ligação a uma CM5 HYDRA-UMC real com uma placa STM32H745, código real exercitado só pela camada de API e contratos. TLS, Bluetooth LE, a ponte MQTT e a pilha Prometheus e Grafana são reais, opcionais e estão desligados por defeito.
 
 ---
 
@@ -41,7 +41,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | Versão | `0.8.1.3` |
 | Maturidade | Funcional |
-| Testes | 409 (`npm run test:unit`) |
+| Testes | 414 (`npm run test:unit`) |
 | Tecnologia | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | Destino | O Raspberry Pi CM5 de uma célula HYDRA-UMC |
 | Em hardware real | Ainda não: não há registo de execução em hardware real para esta versão |
@@ -57,7 +57,7 @@ Cada linha é uma parte deste repositório e a luz diz até onde chega hoje. É 
 | Área | Estado | O que significa aqui |
 |---|---|---|
 | Software | 🟡 | Funciona para o seu propósito principal; a verificação de honestidade acima lista o que ainda falta |
-| Testes | 🟢 | 409 testes automáticos, executados a cada alteração |
+| Testes | 🟢 | 414 testes automáticos, executados a cada alteração |
 | Hardware real | 🔴 | Ainda não: não há registo de execução em hardware real para esta versão |
 | Documentação | 🟢 | README em oito idiomas, verificado contra o manifesto a cada alteração |
 
@@ -236,7 +236,7 @@ O servidor escuta em `0.0.0.0:3000`; todo o seu estado vive em `data/`. Este rep
 
 ## 🧪 Testes
 
-409 testes automáticos correm com `npm run test:unit`. Além disso, `npm test` corre a verificação OpenAPI e 28 scripts de contrato de ponta a ponta em `tools/` contra uma instância real deste servidor (descoberta, início de sessão sem e com credenciais, arranque de produção, comandos e propriedade de robôs, tokens de refresco, reencaminhamento de voz e os seus caminhos de erro, reprodução, a paragem global, pontes Bluetooth e MQTT, multimédia das câmaras, os reencaminhamentos de IA e do connector-hub, papel de espectador e mais); todos passam. Nenhum precisa de hardware.
+414 testes automáticos correm com `npm run test:unit`. Além disso, `npm test` corre a verificação OpenAPI e 29 scripts de contrato de ponta a ponta em `tools/` contra uma instância real deste servidor (descoberta, início de sessão sem e com credenciais, arranque de produção, comandos e propriedade de robôs, tokens de refresco, reencaminhamento de voz e os seus caminhos de erro, reprodução, a paragem global, pontes Bluetooth e MQTT, multimédia das câmaras, os reencaminhamentos de IA e do connector-hub, papel de espectador e mais); todos passam. Nenhum precisa de hardware.
 
 A CI executa `HYDRA_UMC_CI=1 python tools/ci_validate.py`, que verifica o manifesto, os documentos, os oito README e as imagens.
 

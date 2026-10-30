@@ -57,6 +57,12 @@ export interface MavlinkFile {
   signingAllowUnsigned?: boolean;
 }
 
+/** What the robots may be asked to do from a client. */
+export interface RobotsFile {
+  /** Whether a disabled robot may be enabled again by the `enable` command (default: no; only the administrator can then do it from the settings). */
+  allowEnable?: boolean;
+}
+
 export const DEFAULT_VOICE_MIN_CONFIDENCE = 0.6;
 export const MAVLINK_SIGNING_KEY_BYTES = 32;
 
@@ -69,6 +75,7 @@ export interface SecurityFile {
   mqtt?: MqttFile;
   voice?: VoiceFile;
   mavlink?: MavlinkFile;
+  robots?: RobotsFile;
 }
 
 export interface SecurityEnv {
@@ -83,6 +90,7 @@ export interface SecurityEnv {
   voiceMinConfidence?: string;
   mavlinkKeyFile?: string;
   mavlinkAllowUnsigned?: string;
+  robotAllowEnable?: string;
 }
 
 export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
@@ -98,6 +106,7 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     voiceMinConfidence: env.HYDRA_UMC_VOICE_UI_MIN_CONFIDENCE,
     mavlinkKeyFile: env.HYDRA_UMC_BRIDGE_UAV_SIGNING_KEY_FILE,
     mavlinkAllowUnsigned: env.HYDRA_UMC_BRIDGE_UAV_SIGNING_ALLOW_UNSIGNED,
+    robotAllowEnable: env.HYDRA_UMC_ROBOT_ALLOW_ENABLE,
   };
 }
 
@@ -153,6 +162,13 @@ export function resolveVoiceMinConfidence(env: string | undefined, file: Securit
   }
   if (validConfidence(file.voice?.minConfidence)) return { value: file.voice.minConfidence, source: "config" };
   return { value: DEFAULT_VOICE_MIN_CONFIDENCE, source: "default" };
+}
+
+/** Enabling a disabled robot from a client: only the exact word "1" in the environment switches it on; the default is off. */
+export function resolveRobotAllowEnable(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.robots?.allowEnable === "boolean") return { value: file.robots.allowEnable, source: "config" };
+  return { value: false, source: "default" };
 }
 
 export function resolveMavlinkKeyFile(env: string | undefined, file: SecurityFile): { value: string; source: Source } {
@@ -237,6 +253,7 @@ export interface SecuritySnapshot {
   ble: { mode: { value: BleMode; source: Source }; requireEncryption: { value: boolean; source: Source }; activeMode: BleMode; appliesOnRestart: boolean };
   mqtt: { mode: { value: MqttMode; source: Source }; url: string; prefix: string; username: string | null; commandUser: string | null; activeMode: MqttMode; appliesOnRestart: boolean };
   voice: { includeHeardText: { value: boolean; source: Source }; minConfidence: { value: number; source: Source } };
+  robots: { allowEnable: { value: boolean; source: Source } };
   /** The signing key itself is never part of this; only where its file is. */
   mavlink: { signingKeyFile: { value: string; source: Source }; signingAllowUnsigned: { value: boolean; source: Source }; signing: boolean; appliesOnRestart: boolean };
 }
@@ -288,6 +305,11 @@ export class SecurityConfig {
     return resolveMqttSettings(this.options.env.mqtt ?? {}, this.file);
   }
 
+  /** Whether the `enable` command may bring a disabled robot back (off unless an administrator turned it on). */
+  robotEnableAllowed(): boolean {
+    return resolveRobotAllowEnable(this.options.env.robotAllowEnable, this.file).value;
+  }
+
   /** What the voice relay sends the voice service with every turn. */
   voiceOptions(): { includeHeardText: boolean; minConfidence: number } {
     return {
@@ -316,6 +338,7 @@ export class SecurityConfig {
         activeMode: this.options.bleActiveMode ?? "off",
         appliesOnRestart: resolveBleMode(this.options.env.bleGatt, this.file).value !== (this.options.bleActiveMode ?? "off"),
       },
+      robots: { allowEnable: resolveRobotAllowEnable(this.options.env.robotAllowEnable, this.file) },
       voice: {
         includeHeardText: resolveVoiceHeardText(this.options.env.voiceHeardText, this.file),
         minConfidence: resolveVoiceMinConfidence(this.options.env.voiceMinConfidence, this.file),
@@ -348,7 +371,7 @@ export class SecurityConfig {
   /** Applies a change asked for by an administrator; returns the new state and the warnings to show. */
   update(patch: any, actor: string): { snapshot: SecuritySnapshot; warnings: string[]; appliesOnRestart: boolean } {
     const warnings: string[] = [];
-    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined };
+    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined };
     let appliesOnRestart = false;
     const log = this.options.log ?? (() => undefined);
     const lockedBy = (name: string) => new SecurityConfigError(409, `${name} is set in the environment of this server; remove it there to change it here`);
@@ -467,6 +490,19 @@ export class SecurityConfig {
       if (voicePatch.minConfidence === 0) warnings.push("voice_confidence_off");
     }
 
+    if (patch.robots !== undefined) {
+      const robotsPatch = patch.robots;
+      if (typeof robotsPatch !== "object" || robotsPatch === null || Array.isArray(robotsPatch)) throw new SecurityConfigError(400, "robots must be an object");
+      const merged: RobotsFile = { ...(next.robots ?? {}) };
+      if (robotsPatch.allowEnable !== undefined) {
+        if (typeof robotsPatch.allowEnable !== "boolean") throw new SecurityConfigError(400, "robots.allowEnable must be true or false");
+        if (resolveRobotAllowEnable(this.options.env.robotAllowEnable, this.file).source === "env") throw lockedBy("HYDRA_UMC_ROBOT_ALLOW_ENABLE");
+        merged.allowEnable = robotsPatch.allowEnable;
+      }
+      next.robots = merged;
+      if (robotsPatch.allowEnable === true) warnings.push("robot_enable_allowed");
+    }
+
     if (patch.mavlink !== undefined) {
       const mavPatch = patch.mavlink;
       if (typeof mavPatch !== "object" || mavPatch === null || Array.isArray(mavPatch)) throw new SecurityConfigError(400, "mavlink must be an object");
@@ -516,6 +552,9 @@ export class SecurityConfig {
     }
     if (patch.voice !== undefined) {
       log(`[SECURITY] ${actor} set the voice options: transcript in replies ${snapshot.voice.includeHeardText.value ? "ON" : "off"}, minimum confidence ${snapshot.voice.minConfidence.value}.`);
+    }
+    if (patch.robots !== undefined) {
+      log(`[SECURITY] ${actor} ${snapshot.robots.allowEnable.value ? "allowed" : "forbade"} bringing a disabled robot back with the enable command (an administrator only).`);
     }
     if (patch.mavlink !== undefined) {
       log(`[SECURITY] ${actor} set MAVLink signing ${snapshot.mavlink.signing ? "on" : "OFF"}${snapshot.mavlink.signing && snapshot.mavlink.signingAllowUnsigned.value ? " (unsigned messages still accepted)" : ""}; the bridge applies it on its next start.`);

@@ -308,3 +308,35 @@ test("MAVLink signing fixed in the environment cannot be changed from the app", 
   assert.throws(() => config.update({ mavlink: { signingKeyFile: "" } }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 409 && /SIGNING_KEY_FILE/.test(e.message));
   assert.throws(() => config.update({ mavlink: { signingAllowUnsigned: false } }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 409 && /ALLOW_UNSIGNED/.test(e.message));
 });
+
+test("bringing a disabled robot back is off by default and only the exact word 1 switches it on from the environment", () => {
+  const { config } = makeConfig();
+  assert.equal(config.robotEnableAllowed(), false);
+  assert.deepEqual(config.snapshot().robots.allowEnable, { value: false, source: "default" });
+  assert.equal(makeConfig({ robotAllowEnable: "1" }).config.robotEnableAllowed(), true);
+  for (const word of ["true", "yes", "on", "0", ""]) assert.equal(makeConfig({ robotAllowEnable: word }).config.robotEnableAllowed(), false, word);
+});
+
+test("an administrator can allow enabling robots; it warns, is logged and is saved", () => {
+  const { config, logs, stored } = makeConfig();
+  const result = config.update({ robots: { allowEnable: true } }, "root");
+  assert.deepEqual(result.warnings, ["robot_enable_allowed"]);
+  assert.equal(result.appliesOnRestart, false);
+  assert.equal(config.robotEnableAllowed(), true);
+  assert.deepEqual(stored().robots, { allowEnable: true });
+  assert.match(logs.at(-1)!, /allowed bringing a disabled robot back/);
+  const off = config.update({ robots: { allowEnable: false } }, "root");
+  assert.deepEqual(off.warnings, []);
+  assert.equal(config.robotEnableAllowed(), false);
+  assert.match(logs.at(-1)!, /forbade/);
+});
+
+test("the option for enabling robots refuses a value that is not true or false and one fixed by the environment", () => {
+  const { config } = makeConfig();
+  for (const bad of [{ allowEnable: "yes" }, { allowEnable: 1 }]) {
+    assert.throws(() => config.update({ robots: bad }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 400);
+  }
+  assert.throws(() => config.update({ robots: [] }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 400);
+  const fixed = makeConfig({ robotAllowEnable: "1" }).config;
+  assert.throws(() => fixed.update({ robots: { allowEnable: false } }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 409 && /ROBOT_ALLOW_ENABLE/.test(e.message));
+});

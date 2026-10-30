@@ -79,6 +79,7 @@ export function registerSafetyRoutes(app: express.Express, deps: SafetyRouteDeps
       onClaimsChanged?.();
       return res.json({ success: true, armed: false });
     }
+    if (robot.enabled === false) return res.status(423).json({ error: `robot ${robotId} is disabled (safe mode): enable it first`, code: "robot-disabled", robotId });
     const conflict = claimConflict(robot.reservation, user, controllerId, isReservationActive);
     if (conflict) audit?.record({ type: "jog-arm", outcome: "refused", ...who, detail: { reason: conflict.reason } });
     if (conflict) return res.status(409).json({ error: conflict.message, code: conflict.reason, reservation: robot.reservation });

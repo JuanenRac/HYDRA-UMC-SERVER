@@ -43,6 +43,8 @@ export interface CommandRouteDeps {
   audit?: AuditLog;
   /** Called after the arming of a jog was dropped (pushes the `claims` message of the WebSocket). */
   onClaimsChanged?: () => void;
+  /** Whether the `enable` command may bring a disabled robot back (security option; off when absent). */
+  robotEnableAllowed?: () => boolean;
 }
 
 /** The playback state a stopped robot ends in; shared by the single-robot "stop" and the global stop so they can never disagree. */
@@ -63,12 +65,18 @@ function switchAllOff(outputs: unknown): number {
 const KNOWN_COMMANDS = new Set([
   "stop", "play", "pause", "jog", "reset", "jogStep", "reset3D", "tool",
   "valve", "pump", "speed", "trajectory", "vision", "table",
+  // safe mode of one robot: `disable` stops it and refuses its motion commands, `enable` brings it back (a security option, see src/securityConfig.ts)
+  "disable", "enable",
   // the edits an operator makes on one robot (src/robotEdit.ts)
   ...EDIT_COMMANDS,
 ]);
 
 /** The commands a phone may send over Bluetooth: the control commands, not the edits of the robot's data (src/robotEdit.ts), which stay on the network API. */
-export const ROBOT_COMMANDS: ReadonlySet<string> = new Set([...KNOWN_COMMANDS].filter((command) => !EDIT_COMMANDS.has(command)));
+// Bringing a robot back is never done over Bluetooth or MQTT: it stays on the signed-in network API (disabling it is open, as a stop is).
+export const ROBOT_COMMANDS: ReadonlySet<string> = new Set([...KNOWN_COMMANDS].filter((command) => !EDIT_COMMANDS.has(command) && command !== "enable"));
+
+/** The commands that still work on a disabled robot. */
+const WORKS_ON_A_DISABLED_ROBOT = new Set(["stop", "disable", "enable"]);
 
 /**
  * The value of the `command` label of hydra_robot_commands_total: the command itself when it is one of the
@@ -100,6 +108,7 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     arming,
     audit,
     onClaimsChanged,
+    robotEnableAllowed,
   } = deps;
   const jogSequence = deps.jogSequence ?? new JogSequence();
 
@@ -205,7 +214,7 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     // must not overwrite a combined sibling's independently selected Work.
     const affectedIds = EDIT_COMMANDS.has(command)
       ? editAffectedIds(command, targetRobot, params)
-      : command === "trajectory" || command === "table"
+      : command === "trajectory" || command === "table" || command === "enable" || command === "disable"
         ? [robotId]
         : [robotId, ...(targetRobot.combinedWith || [])];
 
@@ -219,7 +228,32 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     }
     const callerController = presentedController;
 
-    if (command !== "stop") {
+    // Enabling is the risky direction. It needs the option to be on (off by default) and an administrator; the claim check below still applies.
+    if (command === "enable") {
+      if (!robotEnableAllowed?.()) {
+        audit?.record({ type: "robot-enable", outcome: "refused", userId: (req as any).user?.id, username: (req as any).user?.username, ip: req.ip, robotId, detail: { reason: "enable-not-allowed" } });
+        return res.status(403).json({ error: "bringing a disabled robot back from a client is switched off on this server (Server Admin > Security: allow enabling robots)", code: "enable-not-allowed" });
+      }
+      if ((req as any).user?.role !== "admin") {
+        audit?.record({ type: "robot-enable", outcome: "refused", userId: (req as any).user?.id, username: (req as any).user?.username, ip: req.ip, robotId, detail: { reason: "admin-required" } });
+        return res.status(403).json({ error: "only an administrator can enable a disabled robot", code: "admin-required" });
+      }
+    }
+
+    // A disabled robot refuses everything except what makes it safer (or brings it back).
+    if (!WORKS_ON_A_DISABLED_ROBOT.has(command)) {
+      const disabledId = affectedIds.find((id) => {
+        let found: any = null;
+        getSettings().controllers.forEach((c: any) => c.robots?.forEach((r: any) => { if (r.id === id) found = r; }));
+        return found?.enabled === false;
+      });
+      if (disabledId !== undefined) {
+        return res.status(423).json({ error: `robot ${disabledId} is disabled (safe mode): enable it first`, code: "robot-disabled", robotId: disabledId });
+      }
+    }
+
+    // Disabling is a safe-mode de-escalation: like a stop it is never held back by someone else's claim or a stale revision.
+    if (command !== "stop" && command !== "disable") {
       let blockingClaim: any = null;
       let blockingConflict: ClaimConflict | null = null;
       getSettings().controllers.forEach((c: any) => {
@@ -242,7 +276,7 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     }
 
     // A conditional command: the robot must still be as the caller read it (If-Match with the revision of GET /api/robot/:id). A stop is never conditional.
-    if (command !== "stop") {
+    if (command !== "stop" && command !== "disable") {
       const revision = robotRevision(targetRobot);
       const header = typeof req.headers?.["if-match"] === "string" ? req.headers["if-match"] : undefined;
       if (!ifMatchAgrees(header, revision)) {
@@ -269,6 +303,10 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
       if (!verdict.ok) {
         return res.status(409).json({ error: "an older motion command: a command with a higher seq was already received for this robot", code: "stale-sequence", lastSeq: verdict.last });
       }
+    }
+    if (command === "disable") {
+      arming?.disarm(robotId);
+      onClaimsChanged?.();
     }
     if (command === "stop") {
       // a stop is never refused for its number; a valid one only raises the mark
@@ -389,6 +427,23 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
               // rather than waiting for its next tick to notice
               // requestStop - a manual stop should feel instant.
               stopServerPlayback(robot.id);
+              break;
+            // Safe mode: the robot is stopped, its valves and pumps are switched off and its motion commands are refused until it is enabled again.
+            case "disable": {
+              robot.enabled = false;
+              robot.playbackState = stoppedPlaybackState(robot.playbackState);
+              patch = { enabled: false, playbackState: robot.playbackState };
+              switchAllOff(robot.valves);
+              switchAllOff(robot.pumps);
+              if (Array.isArray(robot.valves)) patch.valves = robot.valves;
+              if (Array.isArray(robot.pumps)) patch.pumps = robot.pumps;
+              stopServerPlayback(robot.id);
+              break;
+            }
+            // Brings the robot back. Nothing restarts: it stays stopped, and the jog has to be armed again.
+            case "enable":
+              robot.enabled = true;
+              patch = { enabled: true };
               break;
             case "play":
               // See "stop" case's own comment just above - same gap, same fix.
@@ -719,6 +774,10 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     });
 
     industrialLog(`Command: ${command} on Robot ${robotId}`);
+    if (command === "enable" || command === "disable") {
+      const who = (req as any).user;
+      audit?.record({ type: command === "enable" ? "robot-enable" : "robot-disable", outcome: "ok", userId: who?.id, username: who?.username, ip: req.ip, robotId, detail: { enabled: command === "enable" } });
+    }
 
     // Counted once per REQUEST (this endpoint may fan a single command out
     // to several combined robots via affectedIds above, but that's still

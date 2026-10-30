@@ -288,8 +288,8 @@ async function startServer() {
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
     save: (file) => {
-      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink } = file;
-      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink });
+      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots });
     },
     tlsActive: startupTls.enabled,
     bleActiveMode: resolveBleMode(securityEnvFrom(process.env).bleGatt, loadServerConfig()).value,
@@ -320,6 +320,7 @@ async function startServer() {
     arming,
     audit,
     onClaimsChanged,
+    robotEnableAllowed: () => security.robotEnableAllowed(),
   });
 
   registerRobotRoutes(app, {

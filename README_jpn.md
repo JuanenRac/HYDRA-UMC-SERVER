@@ -20,14 +20,14 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/Framework-Express-000000.svg" alt="Framework">
   <img src="https://img.shields.io/badge/Language-TypeScript-3178C6.svg" alt="Language">
   <img src="https://img.shields.io/badge/Protocol-WebSocket-lightgrey.svg" alt="Protocol">
-  <img src="https://img.shields.io/badge/Tests-409%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-414%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.8.1.3-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
 
 ---
 
-> **誠実性チェック - 今日実際に動くもの:** Express + WebSocket のエンジン、その REST と WebSocket の面（58 パスに 63 の操作）、リフレッシュトークンのローテーションと scrypt を使う JWT サインイン、mDNS 探索、ロボットの予約とリビジョン、再生、そして CAN-OTA・テレメトリ・音声・ローカル AI サービス・コネクターハブへのリレーは実在し、テスト自身が起動するこのサーバー自体の実インスタンスに対して試験済みです（ユニットテスト 409 件と、28 本のエンドツーエンド契約スクリプトがすべて合格）。ハードウェアに近く、ここで検証していないもの：STM32H745 ボードを載せた実際の HYDRA-UMC CM5 への接続で、実コードですが API と契約の層でしか試していません。TLS、Bluetooth LE、MQTT ブリッジ、Prometheus と Grafana のスタックは実在し、任意で、既定はオフです。
+> **誠実性チェック - 今日実際に動くもの:** Express + WebSocket のエンジン、その REST と WebSocket の面（58 パスに 63 の操作）、リフレッシュトークンのローテーションと scrypt を使う JWT サインイン、mDNS 探索、ロボットの予約とリビジョン、再生、そして CAN-OTA・テレメトリ・音声・ローカル AI サービス・コネクターハブへのリレーは実在し、テスト自身が起動するこのサーバー自体の実インスタンスに対して試験済みです（ユニットテスト 414 件と、29 本のエンドツーエンド契約スクリプトがすべて合格）。ハードウェアに近く、ここで検証していないもの：STM32H745 ボードを載せた実際の HYDRA-UMC CM5 への接続で、実コードですが API と契約の層でしか試していません。TLS、Bluetooth LE、MQTT ブリッジ、Prometheus と Grafana のスタックは実在し、任意で、既定はオフです。
 
 ---
 
@@ -41,7 +41,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | バージョン | `0.8.1.3` |
 | 成熟度 | 機能する |
-| テスト | 409 (`npm run test:unit`) |
+| テスト | 414 (`npm run test:unit`) |
 | 技術 | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | 対象 | HYDRA-UMC セルの Raspberry Pi CM5 |
 | 実機での確認 | まだです：このバージョンについて実機での動作記録はありません |
@@ -57,7 +57,7 @@ GPL-3.0-or-later - see LICENSE
 | 領域 | 状態 | ここでの意味 |
 |---|---|---|
 | ソフトウェア | 🟡 | 主な目的では動作します。足りない点は上の正直さの確認に書かれています |
-| テスト | 🟢 | 自動テスト 409 件。変更のたびに実行されます |
+| テスト | 🟢 | 自動テスト 414 件。変更のたびに実行されます |
 | 実機 | 🔴 | まだです：このバージョンについて実機での動作記録はありません |
 | ドキュメント | 🟢 | 8 言語の README。変更のたびにマニフェストと照合されます |
 
@@ -237,7 +237,7 @@ npm run build && npm start  # one bundled file (build.sh and build.bat make a ve
 
 ## 🧪 テスト
 
-`npm run test:unit` で自動テスト 409 件を実行します。 さらに `npm test` は OpenAPI の確認と、このサーバーの実インスタンスに対する `tools/` の 28 本のエンドツーエンド契約スクリプトを実行します（探索、認証情報なし／ありのサインイン、本番ブートストラップ、ロボットのコマンドと所有、リフレッシュトークン、音声リレーとそのエラー経路、再生、全体停止、Bluetooth と MQTT のブリッジ、カメラメディア、AI とコネクターハブのリレー、閲覧者ロールなど）。すべて合格しており、ハードウェアは不要です。
+`npm run test:unit` で自動テスト 414 件を実行します。 さらに `npm test` は OpenAPI の確認と、このサーバーの実インスタンスに対する `tools/` の 29 本のエンドツーエンド契約スクリプトを実行します（探索、認証情報なし／ありのサインイン、本番ブートストラップ、ロボットのコマンドと所有、リフレッシュトークン、音声リレーとそのエラー経路、再生、全体停止、Bluetooth と MQTT のブリッジ、カメラメディア、AI とコネクターハブのリレー、閲覧者ロールなど）。すべて合格しており、ハードウェアは不要です。
 
 CI は `HYDRA_UMC_CI=1 python tools/ci_validate.py` を実行し、マニフェスト、文書、8 つの README、図を検査します。
 

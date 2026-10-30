@@ -2665,6 +2665,16 @@
                 }
               }
             }
+          },
+          "423": {
+            "description": "Response. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -2742,6 +2752,16 @@
           },
           "409": {
             "description": "Conflict with the current state. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "423": {
+            "description": "Response. The body is documented in docs/REMOTE_API.md.",
             "content": {
               "application/json": {
                 "schema": {
