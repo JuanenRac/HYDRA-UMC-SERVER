@@ -59,6 +59,58 @@
           }
         }
       },
+      "TotpStatus": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "recoveryLeft"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "recoveryLeft": {
+            "type": "integer"
+          }
+        }
+      },
+      "TotpEnrolment": {
+        "type": "object",
+        "required": [
+          "success",
+          "secret",
+          "uri"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "secret": {
+            "type": "string"
+          },
+          "uri": {
+            "type": "string"
+          }
+        }
+      },
+      "TotpConfirmed": {
+        "type": "object",
+        "required": [
+          "success",
+          "recoveryCodes"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "recoveryCodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "SystemMetrics": {
         "type": "object",
         "required": [
@@ -2131,6 +2183,9 @@
                   },
                   "password": {
                     "type": "string"
+                  },
+                  "totp": {
+                    "type": "string"
                   }
                 }
               }
@@ -3389,7 +3444,14 @@
         "x-access": "user",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpEnrolment"
+                }
+              }
+            }
           },
           "401": {
             "description": "Not signed in or token rejected. The body is documented in docs/REMOTE_API.md.",
@@ -3413,14 +3475,18 @@
           }
         },
         "requestBody": {
-          "required": false,
-          "description": "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "password"
+                ],
                 "properties": {
-                  "password": {}
+                  "password": {
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -3443,7 +3509,14 @@
         "x-access": "user",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpConfirmed"
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
@@ -3457,14 +3530,18 @@
           }
         },
         "requestBody": {
-          "required": false,
-          "description": "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "code"
+                ],
                 "properties": {
-                  "code": {}
+                  "code": {
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -3487,7 +3564,14 @@
         "x-access": "user",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
           },
           "401": {
             "description": "Not signed in or token rejected. The body is documented in docs/REMOTE_API.md.",
@@ -3511,15 +3595,22 @@
           }
         },
         "requestBody": {
-          "required": false,
-          "description": "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "password",
+                  "code"
+                ],
                 "properties": {
-                  "code": {},
-                  "password": {}
+                  "password": {
+                    "type": "string"
+                  },
+                  "code": {
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -3542,7 +3633,14 @@
         "x-access": "user",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpStatus"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3847,7 +3945,14 @@
         "x-access": "admin",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
           },
           "404": {
             "description": "Not found. The body is documented in docs/REMOTE_API.md.",

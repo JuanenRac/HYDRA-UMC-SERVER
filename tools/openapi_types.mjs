@@ -27,6 +27,21 @@ export const SCHEMAS = {
     required: ["success", "token", "refreshToken", "role"],
     properties: { success: bool, token: str, refreshToken: str, role: str },
   },
+  TotpStatus: {
+    type: "object",
+    required: ["enabled", "recoveryLeft"],
+    properties: { enabled: bool, recoveryLeft: int },
+  },
+  TotpEnrolment: {
+    type: "object",
+    required: ["success", "secret", "uri"],
+    properties: { success: bool, secret: str, uri: str },
+  },
+  TotpConfirmed: {
+    type: "object",
+    required: ["success", "recoveryCodes"],
+    properties: { success: bool, recoveryCodes: strings },
+  },
   SystemMetrics: {
     type: "object",
     required: ["cpu_load", "memory_usage", "temp", "temp_is_real", "rp1_temp", "uptime", "network"],
@@ -204,6 +219,11 @@ export const RESPONSES = {
   "POST /api/login": ref("LoginResult"),
   "POST /api/refresh": ref("LoginResult"),
   "POST /api/logout": ref("Success"),
+  "GET /api/totp/status": ref("TotpStatus"),
+  "POST /api/totp/begin": ref("TotpEnrolment"),
+  "POST /api/totp/confirm": ref("TotpConfirmed"),
+  "POST /api/totp/disable": ref("Success"),
+  "DELETE /api/users/{username}/totp": ref("Success"),
   "GET /api/system/metrics": ref("SystemMetrics"),
   "GET /api/users": ref("UserList"),
   "POST /api/ecosystem/service/{unit}/{action}": ref("Success"),
@@ -253,7 +273,10 @@ export const RESPONSES = {
 
 // "METHOD /path" -> { required: [...], fields: { name: schema } } for the request body.
 export const REQUESTS = {
-  "POST /api/login": { required: ["username", "password"], fields: { username: str, password: str } },
+  "POST /api/login": { required: ["username", "password"], fields: { username: str, password: str, totp: str } },
+  "POST /api/totp/begin": { required: ["password"], fields: { password: str } },
+  "POST /api/totp/confirm": { required: ["code"], fields: { code: str } },
+  "POST /api/totp/disable": { required: ["password", "code"], fields: { password: str, code: str } },
   "POST /api/refresh": { required: ["refreshToken"], fields: { refreshToken: str } },
   "POST /api/logout": { required: [], fields: { refreshToken: str } },
   "POST /api/users": { required: ["username", "password", "role"], fields: { username: str, password: str, role: str } },

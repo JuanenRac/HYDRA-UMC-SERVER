@@ -326,6 +326,9 @@ test("camera credentials travel in the environment of the child, not in its argu
 test("viewerMayCall: a read-only account reads and asks for a camera ticket, nothing else", () => {
   for (const method of ["GET", "get", "HEAD", "OPTIONS"]) assert.equal(viewerMayCall(method, "/api/robot/1"), true, method);
   assert.equal(viewerMayCall("POST", "/api/camera/ticket"), true);
+  // The second step of the sign-in is the account's own write: a read-only account cannot turn it on or off.
+  for (const route of ["/api/totp/begin", "/api/totp/confirm", "/api/totp/disable"]) assert.equal(viewerMayCall("POST", route), false, route);
+  assert.equal(viewerMayCall("GET", "/api/totp/status"), true);
   assert.equal(viewerMayCall("POST", "/api/camera/ticket/"), true);
   assert.equal(viewerMayCall("POST", "/api/camera/ticket?x=1"), true);
   for (const [method, path] of [["POST", "/api/robot/1/command"], ["POST", "/api/stop-all"], ["PUT", "/api/users/a"], ["DELETE", "/api/camera/media/1/x/y"], ["PATCH", "/api/camera/ticket"], ["POST", "/api/camera/ticketx"], [undefined, "/api/x"], ["POST", undefined]] as const) {
