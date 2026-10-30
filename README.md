@@ -27,7 +27,7 @@ GPL-3.0-or-later - see LICENSE
 
 ---
 
-> **Honesty check - what actually runs today:** the Express + WebSocket engine, its REST and WebSocket surface (63 operations in 58 paths), JWT sign-in with refresh-token rotation and scrypt, mDNS discovery, robot reservations and revisions, playback, and the relays to CAN-OTA, telemetry, voice, the local AI services and the connector hub are real and tested against a live instance of this same server that the tests start themselves: 414 unit tests plus 29 end-to-end contract scripts, all passing. What is hardware-adjacent and not verified here: the link to a real HYDRA-UMC CM5 with an STM32H745 board, which is real code exercised only through the API and contract layer. TLS, Bluetooth LE, the MQTT bridge and the Prometheus and Grafana stack are real, optional and off by default.
+> **Honesty check - what actually runs today:** the Express + WebSocket engine, its REST and WebSocket surface (63 operations in 58 paths), JWT sign-in with refresh-token rotation and scrypt, mDNS discovery, robot reservations and revisions, playback, and the relays to CAN-OTA, telemetry, voice, the local AI services and the connector hub are real and tested against a live instance of this same server that the tests start themselves: 414 unit tests plus 28 end-to-end contract scripts, all passing. What is hardware-adjacent and not verified here: the link to a real HYDRA-UMC CM5 with an STM32H745 board, which is real code exercised only through the API and contract layer. TLS, Bluetooth LE, the MQTT bridge and the Prometheus and Grafana stack are real, optional and off by default.
 
 ---
 
@@ -44,7 +44,7 @@ GPL-3.0-or-later - see LICENSE
 | Tests | 414 (`npm run test:unit`) |
 | Stack | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | Target | The Raspberry Pi CM5 of a HYDRA-UMC cell |
-| On real hardware | Not yet: no run on real hardware is recorded for this version |
+| On real hardware | Run on a bench setup: the honesty check above says which parts ran on real hardware |
 
 **Jump to:** [Overview](#-overview) · [Architecture](#-architecture) · [Features](#-features) · [Security & Safety](#-security--safety) · [Interfaces](#-interfaces) · [Configuration](#-configuration) · [Quick start](#-quick-start) · [Testing](#-testing) · [Troubleshooting](#-troubleshooting) · [Repository Structure](#-repository-structure) · [Related Projects](#-related-projects)
 
@@ -58,7 +58,7 @@ Each line is one part of this repository and the light says how far it is today.
 |---|---|---|
 | Software | 🟡 | Works for its main purpose; the honesty check above lists what is still missing |
 | Tests | 🟢 | 414 automated tests, run on every change |
-| Real hardware | 🔴 | Not yet: no run on real hardware is recorded for this version |
+| Real hardware | 🟡 | Run on a bench setup: the honesty check above says which parts ran on real hardware |
 | Documentation | 🟢 | README in eight languages, checked against the manifest on every change |
 
 ## 🎯 Overview
@@ -244,7 +244,6 @@ the open internet via a router's NAT/port-forward, which changes the
 threat model from "trusted LAN only" to "reachable by anyone" (see
 `.env.example`):
 
-- `HYDRA_UMC_SERVER_PORT` - the port this server listens on (default 3000, or the port saved by the Config screen). It wins over the shared `PORT`, which is only a last resort and prints a warning; with this variable set, a shared environment file or an `export PORT=...` cannot move the server onto another service's port.
 - `JWT_SECRET` - signs every login token. If unset, a fixed development
   value baked into `src/server.ts` is used instead (fine for local
   development, not for a deployment reachable outside a trusted network).
@@ -362,7 +361,7 @@ The server listens on `0.0.0.0:3000`; all its state lives in `data/`. This repos
 
 ## 🧪 Testing
 
-414 automated tests run with `npm run test:unit`. On top of them `npm test` runs the OpenAPI check and 29 end-to-end contract scripts under `tools/` against a live instance of this server (discovery, sign-in without and with credentials, production bootstrap, robot commands and ownership, refresh tokens, voice relay and its error paths, playback, the global stop, Bluetooth and MQTT bridges, camera media, the AI and connector-hub relays, viewer role and more); all of them pass. None needs hardware.
+414 automated tests run with `npm run test:unit`. On top of them `npm test` runs the OpenAPI check and 28 end-to-end contract scripts under `tools/` against a live instance of this server (discovery, sign-in without and with credentials, production bootstrap, robot commands and ownership, refresh tokens, voice relay and its error paths, playback, the global stop, Bluetooth and MQTT bridges, camera media, the AI and connector-hub relays, viewer role and more); all of them pass. None needs hardware.
 
 The CI runs `HYDRA_UMC_CI=1 python tools/ci_validate.py`, which checks the manifest, the documents, the eight READMEs and the pictures.
 

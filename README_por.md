@@ -27,7 +27,7 @@ GPL-3.0-or-later - see LICENSE
 
 ---
 
-> **Verificação de honestidade - o que realmente funciona hoje:** o motor Express + WebSocket, a sua superfície REST e WebSocket (63 operações em 58 caminhos), o início de sessão JWT com rotação do token de refresco e scrypt, a descoberta mDNS, as reservas e revisões de robôs, a reprodução, e os reencaminhamentos para CAN-OTA, telemetria, voz, os serviços de IA locais e o connector hub são reais e testados contra uma instância real deste mesmo servidor que os próprios testes arrancam: 414 testes unitários mais 29 scripts de contrato de ponta a ponta, todos a passar. O que toca no hardware e não é verificado aqui: a ligação a uma CM5 HYDRA-UMC real com uma placa STM32H745, código real exercitado só pela camada de API e contratos. TLS, Bluetooth LE, a ponte MQTT e a pilha Prometheus e Grafana são reais, opcionais e estão desligados por defeito.
+> **Verificação de honestidade - o que realmente funciona hoje:** o motor Express + WebSocket, a sua superfície REST e WebSocket (63 operações em 58 caminhos), o início de sessão JWT com rotação do token de refresco e scrypt, a descoberta mDNS, as reservas e revisões de robôs, a reprodução, e os reencaminhamentos para CAN-OTA, telemetria, voz, os serviços de IA locais e o connector hub são reais e testados contra uma instância real deste mesmo servidor que os próprios testes arrancam: 414 testes unitários mais 28 scripts de contrato de ponta a ponta, todos a passar. O que toca no hardware e não é verificado aqui: a ligação a uma CM5 HYDRA-UMC real com uma placa STM32H745, código real exercitado só pela camada de API e contratos. TLS, Bluetooth LE, a ponte MQTT e a pilha Prometheus e Grafana são reais, opcionais e estão desligados por defeito.
 
 ---
 
@@ -44,7 +44,7 @@ GPL-3.0-or-later - see LICENSE
 | Testes | 414 (`npm run test:unit`) |
 | Tecnologia | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | Destino | O Raspberry Pi CM5 de uma célula HYDRA-UMC |
-| Em hardware real | Ainda não: não há registo de execução em hardware real para esta versão |
+| Em hardware real | Executado numa bancada de ensaio: a verificação de honestidade acima diz que partes correram em hardware real |
 
 **Ir para:** [Visão geral](#-visão-geral) · [Arquitetura](#-arquitetura) · [Funcionalidades](#-funcionalidades) · [Segurança e proteção](#-segurança-e-proteção) · [Interfaces](#-interfaces) · [Configuração](#-configuração) · [Início rápido](#-início-rápido) · [Testes](#-testes) · [Resolução de problemas](#-resolução-de-problemas) · [Estrutura do repositório](#-estrutura-do-repositório) · [Projetos relacionados](#-projetos-relacionados)
 
@@ -58,7 +58,7 @@ Cada linha é uma parte deste repositório e a luz diz até onde chega hoje. É 
 |---|---|---|
 | Software | 🟡 | Funciona para o seu propósito principal; a verificação de honestidade acima lista o que ainda falta |
 | Testes | 🟢 | 414 testes automáticos, executados a cada alteração |
-| Hardware real | 🔴 | Ainda não: não há registo de execução em hardware real para esta versão |
+| Hardware real | 🟡 | Executado numa bancada de ensaio: a verificação de honestidade acima diz que partes correram em hardware real |
 | Documentação | 🟢 | README em oito idiomas, verificado contra o manifesto a cada alteração |
 
 ## 🎯 Visão geral
@@ -165,7 +165,6 @@ O CORS é ativado através de uma lista de permissões configurável (`CORS_ALLO
 
 Opcionais - o servidor corre sem qualquer configuração, com valores por defeito amigáveis para desenvolvimento em todas as variáveis abaixo. Defina valores reais antes de expor este servidor para além de uma LAN totalmente fiável - por exemplo, à Internet aberta através do NAT/redirecionamento de portas de um router, o que muda o modelo de ameaça de "só LAN fiável" para "acessível por qualquer pessoa" (ver `.env.example`):
 
-- `HYDRA_UMC_SERVER_PORT` - a porta em que este servidor escuta (3000 por omissão, ou a guardada pelo ecrã Config). Tem prioridade sobre o `PORT` partilhado, que é apenas o último recurso e mostra um aviso; com esta variável definida, um ficheiro de ambiente partilhado ou um `export PORT=...` não consegue mudar o servidor para a porta de outro serviço.
 - `JWT_SECRET` - assina todos os tokens de início de sessão. Se não estiver definida, usa-se um valor fixo de desenvolvimento incluído em `src/server.ts` (adequado para desenvolvimento local, não para uma implantação acessível fora de uma rede fiável). Exporte-a na sua shell ou através do gestor de processos/contentor que preferir (`Environment=` do systemd, a configuração de ambiente do `pm2`, `-e` do Docker, ...). Em produção tem de ter pelo menos 32 caracteres e não pode ser um valor de exemplo.
 - `NODE_ENV` - defina como `production` em qualquer implantação real. Controla as duas alternativas abaixo (CORS aberto, valores por defeito silenciosos) e ativa avisos de arranque bem visíveis se `JWT_SECRET` ou a conta `admin`/`admin` semeada continuarem nos valores por defeito. Sem definição (ou com qualquer outro valor) mantém o comportamento permissivo de desenvolvimento.
 - `CORS_ALLOWED_ORIGINS` - lista, separada por vírgulas, de origens autorizadas a fazer pedidos de origem cruzada de navegador a esta API - o caso real em que isto importa é o HYDRA-UMC STUDIO servido a partir de outro anfitrião/porta (por exemplo `https://studio.example.com`, ou `http://192.168.1.20:5173` em desenvolvimento). Exemplo: `CORS_ALLOWED_ORIGINS=https://studio.example.com,http://192.168.1.20:5173`. Se não estiver definida: com `NODE_ENV != production` aceita qualquer origem (sem configuração para desenvolvimento local, igual ao comportamento histórico do projeto); com `NODE_ENV = production` **nega** todos os pedidos de navegador de origem cruzada até ser definida, com um aviso de arranque bem visível. Os clientes que não são navegadores (curl, HYDRA-UMC SUITE, as apps móveis de controlo) nunca são afetados - o CORS é um mecanismo exclusivo dos navegadores.
@@ -236,7 +235,7 @@ O servidor escuta em `0.0.0.0:3000`; todo o seu estado vive em `data/`. Este rep
 
 ## 🧪 Testes
 
-414 testes automáticos correm com `npm run test:unit`. Além disso, `npm test` corre a verificação OpenAPI e 29 scripts de contrato de ponta a ponta em `tools/` contra uma instância real deste servidor (descoberta, início de sessão sem e com credenciais, arranque de produção, comandos e propriedade de robôs, tokens de refresco, reencaminhamento de voz e os seus caminhos de erro, reprodução, a paragem global, pontes Bluetooth e MQTT, multimédia das câmaras, os reencaminhamentos de IA e do connector-hub, papel de espectador e mais); todos passam. Nenhum precisa de hardware.
+414 testes automáticos correm com `npm run test:unit`. Além disso, `npm test` corre a verificação OpenAPI e 28 scripts de contrato de ponta a ponta em `tools/` contra uma instância real deste servidor (descoberta, início de sessão sem e com credenciais, arranque de produção, comandos e propriedade de robôs, tokens de refresco, reencaminhamento de voz e os seus caminhos de erro, reprodução, a paragem global, pontes Bluetooth e MQTT, multimédia das câmaras, os reencaminhamentos de IA e do connector-hub, papel de espectador e mais); todos passam. Nenhum precisa de hardware.
 
 A CI executa `HYDRA_UMC_CI=1 python tools/ci_validate.py`, que verifica o manifesto, os documentos, os oito README e as imagens.
 

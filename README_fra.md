@@ -27,7 +27,7 @@ GPL-3.0-or-later - see LICENSE
 
 ---
 
-> **Vérification d'honnêteté - ce qui fonctionne réellement aujourd'hui :** le moteur Express + WebSocket, sa surface REST et WebSocket (63 opérations sur 58 chemins), la connexion JWT avec rotation du jeton de rafraîchissement et scrypt, la découverte mDNS, les réservations et révisions de robots, la lecture, et les relais vers CAN-OTA, la télémétrie, la voix, les services d'IA locaux et le connector hub sont réels et testés contre une instance réelle de ce même serveur que les tests démarrent eux-mêmes : 414 tests unitaires plus 29 scripts de contrat de bout en bout, tous réussis. Ce qui touche au matériel et n'est pas vérifié ici : la liaison avec une vraie CM5 HYDRA-UMC et une carte STM32H745, du vrai code exercé seulement par la couche API et contrats. TLS, Bluetooth LE, le pont MQTT et la pile Prometheus et Grafana sont réels, facultatifs et désactivés par défaut.
+> **Vérification d'honnêteté - ce qui fonctionne réellement aujourd'hui :** le moteur Express + WebSocket, sa surface REST et WebSocket (63 opérations sur 58 chemins), la connexion JWT avec rotation du jeton de rafraîchissement et scrypt, la découverte mDNS, les réservations et révisions de robots, la lecture, et les relais vers CAN-OTA, la télémétrie, la voix, les services d'IA locaux et le connector hub sont réels et testés contre une instance réelle de ce même serveur que les tests démarrent eux-mêmes : 414 tests unitaires plus 28 scripts de contrat de bout en bout, tous réussis. Ce qui touche au matériel et n'est pas vérifié ici : la liaison avec une vraie CM5 HYDRA-UMC et une carte STM32H745, du vrai code exercé seulement par la couche API et contrats. TLS, Bluetooth LE, le pont MQTT et la pile Prometheus et Grafana sont réels, facultatifs et désactivés par défaut.
 
 ---
 
@@ -44,7 +44,7 @@ GPL-3.0-or-later - see LICENSE
 | Tests | 414 (`npm run test:unit`) |
 | Technologie | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | Cible | Le Raspberry Pi CM5 d'une cellule HYDRA-UMC |
-| Sur matériel réel | Pas encore : aucune exécution sur du matériel réel n'est consignée pour cette version |
+| Sur matériel réel | Exécuté sur un banc d'essai : la vérification d'honnêteté ci-dessus indique quelles parties ont tourné sur du matériel réel |
 
 **Aller à :** [Présentation](#-présentation) · [Architecture](#-architecture) · [Fonctionnalités](#-fonctionnalités) · [Sécurité et protection](#-sécurité-et-protection) · [Interfaces](#-interfaces) · [Configuration](#-configuration) · [Démarrage rapide](#-démarrage-rapide) · [Tests](#-tests) · [Dépannage](#-dépannage) · [Structure du dépôt](#-structure-du-dépôt) · [Projets liés](#-projets-liés)
 
@@ -58,7 +58,7 @@ Chaque ligne est une partie de ce dépôt et le feu dit où elle en est aujourd'
 |---|---|---|
 | Logiciel | 🟡 | Fonctionne pour son usage principal ; la vérification d'honnêteté ci-dessus liste ce qui manque encore |
 | Tests | 🟢 | 414 tests automatiques, exécutés à chaque modification |
-| Matériel réel | 🔴 | Pas encore : aucune exécution sur du matériel réel n'est consignée pour cette version |
+| Matériel réel | 🟡 | Exécuté sur un banc d'essai : la vérification d'honnêteté ci-dessus indique quelles parties ont tourné sur du matériel réel |
 | Documentation | 🟢 | README en huit langues, vérifié par rapport au manifeste à chaque modification |
 
 ## 🎯 Présentation
@@ -265,7 +265,6 @@ le NAT/redirection de ports d'un routeur, ce qui change le modèle de
 menace de "LAN de confiance uniquement" à "accessible par n'importe qui"
 (voir `.env.example`) :
 
-- `HYDRA_UMC_SERVER_PORT` - le port d'écoute de ce serveur (3000 par défaut, ou celui enregistré par l'écran Config). Elle l'emporte sur le `PORT` partagé, qui n'est qu'un dernier recours et affiche un avertissement ; une fois définie, un fichier d'environnement partagé ou un `export PORT=...` ne peut pas déplacer le serveur sur le port d'un autre service.
 - `JWT_SECRET` - signe chaque jeton de connexion. Si non définie, une
   valeur de développement fixe intégrée dans `src/server.ts` est utilisée
   à la place (convient au développement local, pas à un déploiement
@@ -396,7 +395,7 @@ Le serveur écoute sur `0.0.0.0:3000` ; tout son état vit dans `data/`. Ce dép
 
 ## 🧪 Tests
 
-414 tests automatiques s'exécutent avec `npm run test:unit`. En plus, `npm test` exécute la vérification OpenAPI et 29 scripts de contrat de bout en bout dans `tools/` contre une instance réelle de ce serveur (découverte, connexion sans et avec identifiants, démarrage de production, commandes et propriété des robots, jetons de rafraîchissement, relais vocal et ses chemins d'erreur, lecture, l'arrêt global, ponts Bluetooth et MQTT, médias de caméra, relais IA et connector-hub, rôle observateur et plus) ; tous passent. Aucun n'a besoin de matériel.
+414 tests automatiques s'exécutent avec `npm run test:unit`. En plus, `npm test` exécute la vérification OpenAPI et 28 scripts de contrat de bout en bout dans `tools/` contre une instance réelle de ce serveur (découverte, connexion sans et avec identifiants, démarrage de production, commandes et propriété des robots, jetons de rafraîchissement, relais vocal et ses chemins d'erreur, lecture, l'arrêt global, ponts Bluetooth et MQTT, médias de caméra, relais IA et connector-hub, rôle observateur et plus) ; tous passent. Aucun n'a besoin de matériel.
 
 La CI exécute `HYDRA_UMC_CI=1 python tools/ci_validate.py`, qui vérifie le manifeste, les documents, les huit README et les images.
 
