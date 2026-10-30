@@ -10,6 +10,7 @@ import { getSystemMetrics } from "../systemMetrics";
 import { industrialLog } from "../runtime";
 import { VOICE_UI_URL, VOICE_UI_TOKEN, VOICE_UI_TIMEOUT_MS, validateVoiceTurnPayload, isAssistantReplyForRequest } from "../upstreamConfig";
 import type { SecurityConfig } from "../securityConfig";
+import { voiceLanguageOf, voiceStatusText } from "../voiceText";
 import { judgeConfirmationResult, subjectOf, validateConfirmRequest } from "../voiceConfirm";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
@@ -26,7 +27,7 @@ export function registerAssistantRoutes(app: express.Express, deps: { authentica
   // own real registered-robot list - there is no real per-robot LIVE
   // telemetry available at this relay step yet, so this never fabricates
   // an online/offline claim for one, only whether it's actually registered.
-  async function buildVoiceStatusText(entities: unknown): Promise<string> {
+  async function buildVoiceStatusText(entities: unknown, locale: unknown): Promise<string> {
     const s = getSettings();
     const controllers = Array.isArray(s?.controllers) ? s.controllers : [];
     const controllerCount = controllers.length;
@@ -35,12 +36,16 @@ export function registerAssistantRoutes(app: express.Express, deps: { authentica
       0,
     );
     const metrics = await getSystemMetrics();
-    const summary = `${controllerCount} controller${controllerCount === 1 ? "" : "s"}, ` +
-      `${robotCount} robot${robotCount === 1 ? "" : "s"} configured. ` +
-      `CPU load ${metrics.cpu_load}%, memory ${metrics.memory_usage}%, uptime ${metrics.uptime}s.`;
+    const facts = {
+      controllerCount,
+      robotCount,
+      cpuLoad: metrics.cpu_load,
+      memoryUsage: metrics.memory_usage,
+      uptime: metrics.uptime,
+    };
 
     const robotIdRaw = entities && typeof entities === "object" ? (entities as Record<string, unknown>).robot_id : undefined;
-    if (typeof robotIdRaw !== "string") return summary;
+    if (typeof robotIdRaw !== "string") return voiceStatusText(facts, locale);
     const robotId = parseInt(robotIdRaw, 10);
     let found = false;
     for (const c of controllers) {
@@ -49,10 +54,7 @@ export function registerAssistantRoutes(app: express.Express, deps: { authentica
         break;
       }
     }
-    const robotNote = found
-      ? `Robot ${robotId} is registered on this Server. `
-      : `Robot ${robotId} is not registered on this Server. `;
-    return robotNote + summary;
+    return voiceStatusText({ ...facts, robotId, robotRegistered: found }, locale);
   }
 
   // Authenticated, non-actuating relay for a recognised voice turn. The
@@ -115,7 +117,10 @@ export function registerAssistantRoutes(app: express.Express, deps: { authentica
       // place to fill that promise in, without VOICE-UI ever needing
       // outbound network access of its own.
       if (reply.intent && (reply.intent as any).name === "status") {
-        reply.text = await buildVoiceStatusText((reply.intent as any).entities);
+        reply.text = await buildVoiceStatusText((reply.intent as any).entities, req.body.locale);
+        // the text is now written here, in the language of the client
+        reply.messageCode = "status_report";
+        reply.textLanguage = voiceLanguageOf(req.body.locale);
       }
       // Do not log the transcript or reply text: both can contain operator
       // information. The correlation ID and safety fields are sufficient for

@@ -636,6 +636,15 @@
           "interpretation": {
             "type": "object"
           },
+          "messageCode": {
+            "type": "string"
+          },
+          "messageParams": {
+            "type": "object"
+          },
+          "textLanguage": {
+            "type": "string"
+          },
           "confirmationToken": {
             "type": "string"
           },
@@ -4141,6 +4150,7 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "locale": {},
                   "requestId": {},
                   "subject": {}
                 }
