@@ -9,6 +9,7 @@ import jwt from "jsonwebtoken";
 import { findUser, verifyPassword, effectiveTokenVersion, effectiveId } from "../users";
 import { issueRefreshToken, consumeRefreshToken, revokeRefreshToken } from "../refresh_tokens";
 import { authFailuresTotal } from "../metrics";
+import { totpStore } from "../totp";
 import { JWT_SECRET, JWT_EXPIRES_IN, asyncHandler, loginRateLimiter, refreshRateLimiter } from "../auth";
 
 export function registerAuthRoutes(app: express.Express): void {
@@ -27,6 +28,19 @@ export function registerAuthRoutes(app: express.Express): void {
     if (!user || !(await verifyPassword(password, user.passwordHash))) {
       authFailuresTotal.inc({ reason: "invalid_credentials" });
       return res.status(401).json({ error: "Invalid credentials" });
+    }
+    // An account that turned on the second factor needs a current code (or an unused recovery code) as well. Accounts
+    // that did not turn it on sign in exactly as before.
+    const factor = totpStore();
+    if (factor.enabled(effectiveId(user))) {
+      const wait = factor.waitFor(effectiveId(user));
+      if (wait > 0) return res.status(429).set("Retry-After", String(wait)).json({ error: "Too many wrong codes - please wait before trying again.", totpRequired: true });
+      const { totp } = req.body || {};
+      if (typeof totp !== "string" || !totp.trim()) return res.status(401).json({ error: "A second-factor code is required", totpRequired: true });
+      if (!factor.verify(effectiveId(user), totp)) {
+        authFailuresTotal.inc({ reason: "invalid_totp" });
+        return res.status(401).json({ error: "Invalid credentials", totpRequired: true });
+      }
     }
     // See JWT_EXPIRES_IN's own header comment above for why this is
     // configurable instead of a hardcoded '30d' - defaults to 30d so an

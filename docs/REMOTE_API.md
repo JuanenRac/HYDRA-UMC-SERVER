@@ -174,6 +174,18 @@ POST /api/login
 -> { "success": true, "token": "<JWT>", "refreshToken": "<opaque>", "role": "admin" }
 ```
 
+- **Second factor (optional, per account).** Nobody has it until they turn it on, and an
+  account without it signs in exactly as above. `POST /api/totp/begin` `{ "password" }` (signed in; asks for the
+  password again) answers `{ "secret", "uri" }` for an authenticator app (RFC 6238, six digits, thirty seconds);
+  `POST /api/totp/confirm` `{ "code" }` with the first code turns it on and answers ten one-time
+  `recoveryCodes` (shown once, kept only as hashes); `GET /api/totp/status` answers
+  `{ "enabled", "recoveryLeft" }`; `POST /api/totp/disable` `{ "password", "code" }` turns it off (a current code or an
+  unused recovery code). From then on `POST /api/login` also needs `"totp": "<code or recovery code>"`; without it the
+  answer is `401` with `{ "totpRequired": true }`, five wrong codes in a row make the next tries wait (`429` with
+  `Retry-After`), and a code is accepted once. An administrator removes the factor of an account that lost the phone and the
+  codes with `DELETE /api/users/:username/totp`. The secrets are kept encrypted in `data/totp.json` with a key derived
+  from `HYDRA_UMC_TOTP_KEY` (or, when it is not set, from `JWT_SECRET`: changing it means enrolling again). A `viewer`
+  cannot enrol, because the read-only rule refuses every write.
 - Every server seeds exactly one account on its own first-ever start. In
   development and test it is `admin`/`admin`; **in production the account comes from
   `HYDRA_UMC_BOOTSTRAP_ADMIN_USERNAME`/`HYDRA_UMC_BOOTSTRAP_ADMIN_PASSWORD`, and the

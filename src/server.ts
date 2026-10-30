@@ -48,6 +48,7 @@ import { startBle } from "./ble/start";
 import type { BleGateway } from "./ble/bleGateway";
 import { cameraAuthRequiredByDefault, issueMediaTicket, mediaTicketKey, verifyMediaTicket } from "./mediaTickets";
 import { registerAuthRoutes } from "./routes/auth";
+import { registerTotpRoutes } from "./routes/totpRoutes";
 import { registerSettingsRoutes } from "./routes/settings";
 import { registerStaticRoutes } from "./routes/staticRoutes";
 import { registerAssistantRoutes } from "./routes/assistantRoutes";
@@ -275,6 +276,7 @@ async function startServer() {
   registerStaticRoutes(app, { dataPath });
 
   registerAuthRoutes(app);
+  registerTotpRoutes(app);
 
   // Who may use the local AI relay, whether the host information asks for a sign-in, and TLS: the
   // environment of the deployment wins, then what an administrator saved from the control app.
