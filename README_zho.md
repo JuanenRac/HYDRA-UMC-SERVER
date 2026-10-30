@@ -106,6 +106,7 @@ HYDRA-UMC SERVER 是驱动 HYDRA-UMC 多机器人微工厂单元的独立后端�
 - `data/logs/server.log`——每一条指令的仅追加式工业日志。
 - `data/WORKS/`——已保存的机器人轨迹，默认每个机器人一个文件夹，以纯静态文件形式提供（索引及各个工作文件）。
 - `data/model_submissions.json` 及提交的模型文件夹本身——[HYDRA-UMC-EDITOR-URDF](https://github.com/JuanenRac/HYDRA-UMC-EDITOR-URDF) 的“将完成的机器人模型直接推送到本服务器目录”流程在服务端的对应部分。
+- `data/totp.json` - 已开启第二步验证的账户的第二因素(可选，在其所有者开启之前对每个账户都是关闭的):每个密钥使用 `HYDRA_UMC_TOTP_KEY`(或由 `JWT_SECRET` 派生的密钥)通过 AES-GCM 加密，十个恢复码只以哈希形式保存；在有账户开启第二步之前，这个文件并不存在。
 
 ## 🔒 安全与防护
 

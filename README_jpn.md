@@ -106,6 +106,7 @@ HYDRA-UMC SERVER は、HYDRA-UMC マルチロボット・マイクロファク�
 - `data/logs/server.log` —— すべての指令の追記専用の産業用ログ。
 - `data/WORKS/` —— 保存済みのロボット軌道。デフォルトではロボットごとに 1 フォルダで、純粋な静的ファイル（インデックスおよび個々のワークファイル）として配信されます。
 - `data/model_submissions.json` および提出されたモデルフォルダ自体 —— [HYDRA-UMC-EDITOR-URDF](https://github.com/JuanenRac/HYDRA-UMC-EDITOR-URDF) の「完成したロボットモデルを本サーバーのカタログへ直接プッシュする」フローのサーバー側部分です。
+- `data/totp.json` - 2 段階目を有効にしたアカウントの第二要素です(任意で、所有者が有効にするまでどのアカウントでもオフ)。各シークレットは `HYDRA_UMC_TOTP_KEY`(または `JWT_SECRET` から導いた鍵)で AES-GCM により暗号化され、10 個のリカバリーコードはハッシュとしてのみ保存されます。アカウントが 2 段階目を有効にするまで、このファイルは存在しません。
 
 ## 🔒 セキュリティと安全
 

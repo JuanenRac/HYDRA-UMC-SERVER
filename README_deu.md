@@ -172,6 +172,7 @@ Start automatisch erstellt wird:
   [HYDRA-UMC-EDITOR-URDF](https://github.com/JuanenRac/HYDRA-UMC-EDITOR-URDF),
   um "ein fertiges Robotermodell direkt in den Katalog dieses Servers zu
   übertragen".
+- `data/totp.json` - der zweite Faktor der Konten, die ihn eingeschaltet haben (optional, für jedes Konto aus, bis sein Besitzer ihn einschaltet): Jedes Geheimnis ist mit AES-GCM unter `HYDRA_UMC_TOTP_KEY` (oder einem aus `JWT_SECRET` abgeleiteten Schlüssel) verschlüsselt, und die zehn Wiederherstellungscodes werden nur als Hashes gehalten; die Datei existiert nicht, bis ein Konto den zweiten Schritt einschaltet.
 
 ## 🔒 Sicherheit und Schutz
 

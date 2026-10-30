@@ -106,6 +106,7 @@ Tudo o que este servidor possui vive em `data/`, criado automaticamente no prime
 - `data/logs/server.log` - registo industrial só de acrescentar de cada comando.
 - `data/WORKS/` - trajetórias de robô guardadas, uma pasta por robô por defeito, servidas como ficheiros estáticos simples (índice + ficheiros de trabalho individuais).
 - `data/model_submissions.json` + as próprias pastas dos modelos submetidos - o lado servidor do fluxo "enviar um modelo de robô terminado diretamente para o catálogo deste servidor" do [HYDRA-UMC-EDITOR-URDF](https://github.com/JuanenRac/HYDRA-UMC-EDITOR-URDF).
+- `data/totp.json` - o segundo fator das contas que o ativaram (opcional, desativado em cada conta até o seu dono o ativar): cada segredo é cifrado com AES-GCM sob `HYDRA_UMC_TOTP_KEY` (ou uma chave derivada de `JWT_SECRET`) e os dez códigos de recuperação são guardados apenas como hashes; o ficheiro não existe até uma conta ativar o segundo passo.
 
 ## 🔒 Segurança e proteção
 

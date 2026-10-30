@@ -155,6 +155,7 @@ first run:
 - `data/model_submissions.json` + the submitted model folders themselves -
   the server side of [HYDRA-UMC-EDITOR-URDF](https://github.com/JuanenRac/HYDRA-UMC-EDITOR-URDF)'s
   "push a finished robot model straight into this server's catalog" flow.
+- `data/totp.json` - the second factor of the accounts that turned it on (optional, off for every account until its owner turns it on): each secret is encrypted with AES-GCM under `HYDRA_UMC_TOTP_KEY` (or a key derived from `JWT_SECRET`) and the ten recovery codes are kept only as hashes; the file does not exist until an account turns the second step on.
 
 ## 🔒 Security & Safety
 
