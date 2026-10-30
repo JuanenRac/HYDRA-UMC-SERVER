@@ -20,14 +20,14 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/Framework-Express-000000.svg" alt="Framework">
   <img src="https://img.shields.io/badge/Language-TypeScript-3178C6.svg" alt="Language">
   <img src="https://img.shields.io/badge/Protocol-WebSocket-lightgrey.svg" alt="Protocol">
-  <img src="https://img.shields.io/badge/Tests-377%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-409%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.8.1.3-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
 
 ---
 
-> **Comprobación de honestidad - qué funciona realmente hoy:** el motor Express + WebSocket, su superficie REST y WebSocket (63 operaciones en 58 rutas), el inicio de sesión JWT con rotación del token de refresco y scrypt, el descubrimiento mDNS, las reservas y revisiones de robots, la reproducción, y los relés hacia CAN-OTA, telemetría, voz, los servicios de IA locales y el connector hub son reales y se prueban contra una instancia real de este mismo servidor que arrancan las propias pruebas: 377 pruebas unitarias más 28 scripts de contrato de extremo a extremo, todos pasan. Lo que roza el hardware y no se verifica aquí: el enlace con una CM5 HYDRA-UMC real con una placa STM32H745, que es código real ejercitado solo por la capa de API y contratos. TLS, Bluetooth LE, el puente MQTT y la pila Prometheus y Grafana son reales, opcionales y están apagados por defecto.
+> **Comprobación de honestidad - qué funciona realmente hoy:** el motor Express + WebSocket, su superficie REST y WebSocket (63 operaciones en 58 rutas), el inicio de sesión JWT con rotación del token de refresco y scrypt, el descubrimiento mDNS, las reservas y revisiones de robots, la reproducción, y los relés hacia CAN-OTA, telemetría, voz, los servicios de IA locales y el connector hub son reales y se prueban contra una instancia real de este mismo servidor que arrancan las propias pruebas: 409 pruebas unitarias más 28 scripts de contrato de extremo a extremo, todos pasan. Lo que roza el hardware y no se verifica aquí: el enlace con una CM5 HYDRA-UMC real con una placa STM32H745, que es código real ejercitado solo por la capa de API y contratos. TLS, Bluetooth LE, el puente MQTT y la pila Prometheus y Grafana son reales, opcionales y están apagados por defecto.
 
 ---
 
@@ -41,7 +41,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | Versión | `0.8.1.3` |
 | Madurez | Funcional |
-| Tests | 377 (`npm run test:unit`) |
+| Tests | 409 (`npm run test:unit`) |
 | Tecnología | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | Destino | La Raspberry Pi CM5 de una celda HYDRA-UMC |
 | En hardware real | Todavía no: no consta ninguna ejecución en hardware real para esta versión |
@@ -57,7 +57,7 @@ Cada línea es una parte de este repositorio y la luz dice hasta dónde llega ho
 | Área | Estado | Qué significa aquí |
 |---|---|---|
 | Software | 🟡 | Funciona para su propósito principal; la comprobación de honestidad de arriba lista lo que aún falta |
-| Pruebas | 🟢 | 377 pruebas automáticas, ejecutadas en cada cambio |
+| Pruebas | 🟢 | 409 pruebas automáticas, ejecutadas en cada cambio |
 | Hardware real | 🔴 | Todavía no: no consta ninguna ejecución en hardware real para esta versión |
 | Documentación | 🟢 | README en ocho idiomas, comprobado contra el manifiesto en cada cambio |
 
@@ -262,6 +262,7 @@ NAT/redirección de puertos del router, lo que cambia el modelo de amenaza
 de "solo LAN de confianza" a "alcanzable por cualquiera" (ver
 `.env.example`):
 
+- `HYDRA_UMC_SERVER_PORT` - el puerto en el que escucha este servidor (3000 por defecto, o el guardado por la pantalla Config). Tiene prioridad sobre el `PORT` compartido, que es solo el último recurso y muestra un aviso; con esta variable definida, un fichero de entorno compartido o un `export PORT=...` no puede mover el servidor al puerto de otro servicio.
 - `JWT_SECRET` - firma cada token de inicio de sesión. Si no está
   definida, se usa un valor de desarrollo fijo incluido en
   `src/server.ts` (válido para desarrollo local, no para un despliegue
@@ -392,7 +393,7 @@ El servidor escucha en `0.0.0.0:3000`; todo su estado vive en `data/`. Este repo
 
 ## 🧪 Pruebas
 
-377 pruebas automáticas se ejecutan con `npm run test:unit`. Además, `npm test` ejecuta la comprobación de OpenAPI y 28 scripts de contrato de extremo a extremo en `tools/` contra una instancia real de este servidor (descubrimiento, inicio de sesión sin y con credenciales, arranque de producción, órdenes y propiedad de robots, tokens de refresco, relé de voz y sus rutas de error, reproducción, la parada global, puentes Bluetooth y MQTT, medios de cámara, los relés de IA y de connector-hub, rol de espectador y más); todos pasan. Ninguno necesita hardware.
+409 pruebas automáticas se ejecutan con `npm run test:unit`. Además, `npm test` ejecuta la comprobación de OpenAPI y 28 scripts de contrato de extremo a extremo en `tools/` contra una instancia real de este servidor (descubrimiento, inicio de sesión sin y con credenciales, arranque de producción, órdenes y propiedad de robots, tokens de refresco, relé de voz y sus rutas de error, reproducción, la parada global, puentes Bluetooth y MQTT, medios de cámara, los relés de IA y de connector-hub, rol de espectador y más); todos pasan. Ninguno necesita hardware.
 
 El CI ejecuta `HYDRA_UMC_CI=1 python tools/ci_validate.py`, que comprueba el manifiesto, los documentos, los ocho README y las imágenes.
 

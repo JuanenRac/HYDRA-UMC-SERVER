@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **The listen port has a variable of its own:** `HYDRA_UMC_SERVER_PORT` wins; the shared `PORT` is only a last resort (it prints a warning) and is ignored whenever the specific variable is valid, so a shared environment file or an `export PORT=...` can no longer move the server onto the port of the broker or the gateway. The port saved by the Config screen and the default 3000 are unchanged.
+
 - **TLS is the default of a new installation:** on its very first start, when the certificates of the installation's own authority exist, the server saves TLS as on (an ordinary saved choice that the Server Admin screen can switch off). An installation that already ran, or one without those certificates, is not changed; `HYDRA_UMC_NEW_INSTALL_TLS=off` forbids the default. Tested in `tests/newInstallTls.test.ts`.
 
 ## [0.8.1.3] - Two-step sign-in, a contract test against the SDK, flash progress only for administrators and three more switches in Server Admin

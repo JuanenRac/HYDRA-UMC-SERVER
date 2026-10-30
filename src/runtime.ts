@@ -10,6 +10,7 @@ import path from "path";
 import fs from "fs";
 import Bonjour from "bonjour-service";
 import { resolveLogKeep, resolveLogMaxBytes, rotateLogFiles } from "./logRotation";
+import { resolveListenPort } from "./listenPort";
 
 // Bonjour/mDNS service for instant discovery
 export const bonjour = new Bonjour();
@@ -73,9 +74,12 @@ export function saveServerConfig(config: ServerConfig) {
   fs.renameSync(tmp, SERVER_CONFIG_FILE);
 }
 
-// Priority: process.env.PORT (deployment-level override - systemd
+// Priority: HYDRA_UMC_SERVER_PORT (the variable of this service; systemd
 // Environment=, pm2, Docker -e - always wins, same convention as
-// JWT_SECRET/NODE_ENV elsewhere in this file) > data/server-config.json's
+// JWT_SECRET/NODE_ENV elsewhere in this file) > the shared PORT (last
+// resort, with a warning, and ignored whenever the specific variable is
+// valid: a shared EnvironmentFile or an `export PORT=...` must not move
+// this server onto the port of another service) > data/server-config.json's
 // saved port (written by the admin UI's Config screen) > the historical
 // hardcoded default of 3000, unchanged for anyone who never touches this.
 // A port change here (either source) only takes effect on the NEXT
@@ -85,11 +89,9 @@ export function saveServerConfig(config: ServerConfig) {
 // "Restart now" action (POST /api/admin/restart) rather than pretending
 // the change is instant.
 export function resolvePort(): number {
-  const envPort = parseInt(process.env.PORT || "", 10);
-  if (Number.isFinite(envPort) && envPort > 0) return envPort;
-  const configPort = loadServerConfig().port;
-  if (Number.isFinite(configPort) && (configPort as number) > 0) return configPort as number;
-  return 3000;
+  const resolved = resolveListenPort(process.env, loadServerConfig().port);
+  if (resolved.warning) console.warn(`[HYDRA-UMC-SERVER] ${resolved.warning}`);
+  return resolved.port;
 }
 
 // Opened once and kept open for the life of the process instead of the

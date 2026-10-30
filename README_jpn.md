@@ -20,14 +20,14 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/Framework-Express-000000.svg" alt="Framework">
   <img src="https://img.shields.io/badge/Language-TypeScript-3178C6.svg" alt="Language">
   <img src="https://img.shields.io/badge/Protocol-WebSocket-lightgrey.svg" alt="Protocol">
-  <img src="https://img.shields.io/badge/Tests-377%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-409%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.8.1.3-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
 
 ---
 
-> **誠実性チェック - 今日実際に動くもの:** Express + WebSocket のエンジン、その REST と WebSocket の面（58 パスに 63 の操作）、リフレッシュトークンのローテーションと scrypt を使う JWT サインイン、mDNS 探索、ロボットの予約とリビジョン、再生、そして CAN-OTA・テレメトリ・音声・ローカル AI サービス・コネクターハブへのリレーは実在し、テスト自身が起動するこのサーバー自体の実インスタンスに対して試験済みです（ユニットテスト 377 件と、28 本のエンドツーエンド契約スクリプトがすべて合格）。ハードウェアに近く、ここで検証していないもの：STM32H745 ボードを載せた実際の HYDRA-UMC CM5 への接続で、実コードですが API と契約の層でしか試していません。TLS、Bluetooth LE、MQTT ブリッジ、Prometheus と Grafana のスタックは実在し、任意で、既定はオフです。
+> **誠実性チェック - 今日実際に動くもの:** Express + WebSocket のエンジン、その REST と WebSocket の面（58 パスに 63 の操作）、リフレッシュトークンのローテーションと scrypt を使う JWT サインイン、mDNS 探索、ロボットの予約とリビジョン、再生、そして CAN-OTA・テレメトリ・音声・ローカル AI サービス・コネクターハブへのリレーは実在し、テスト自身が起動するこのサーバー自体の実インスタンスに対して試験済みです（ユニットテスト 409 件と、28 本のエンドツーエンド契約スクリプトがすべて合格）。ハードウェアに近く、ここで検証していないもの：STM32H745 ボードを載せた実際の HYDRA-UMC CM5 への接続で、実コードですが API と契約の層でしか試していません。TLS、Bluetooth LE、MQTT ブリッジ、Prometheus と Grafana のスタックは実在し、任意で、既定はオフです。
 
 ---
 
@@ -41,7 +41,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | バージョン | `0.8.1.3` |
 | 成熟度 | 機能する |
-| テスト | 377 (`npm run test:unit`) |
+| テスト | 409 (`npm run test:unit`) |
 | 技術 | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | 対象 | HYDRA-UMC セルの Raspberry Pi CM5 |
 | 実機での確認 | まだです：このバージョンについて実機での動作記録はありません |
@@ -57,7 +57,7 @@ GPL-3.0-or-later - see LICENSE
 | 領域 | 状態 | ここでの意味 |
 |---|---|---|
 | ソフトウェア | 🟡 | 主な目的では動作します。足りない点は上の正直さの確認に書かれています |
-| テスト | 🟢 | 自動テスト 377 件。変更のたびに実行されます |
+| テスト | 🟢 | 自動テスト 409 件。変更のたびに実行されます |
 | 実機 | 🔴 | まだです：このバージョンについて実機での動作記録はありません |
 | ドキュメント | 🟢 | 8 言語の README。変更のたびにマニフェストと照合されます |
 
@@ -164,6 +164,7 @@ CORS は、設定可能な許可リスト（`CORS_ALLOWED_ORIGINS`、下記「�
 
 いずれも任意です——本サーバーは、以下の各変数について組み込みの開発向けデフォルト値を用いることで、ゼロコンフィグでも動作します。完全に信頼されたローカルネットワークの外へ本サーバーを公開する前に（例えばルーターの NAT／ポートフォワード経由でインターネットへ公開する場合、脅威モデルが「信頼済み LAN のみ」から「誰でも到達可能」へと変わります）、実際の値を設定してください（`.env.example` 参照）：
 
+- `HYDRA_UMC_SERVER_PORT` —— このサーバーが待ち受けるポートです(既定は 3000、または Config 画面で保存したポート)。共有の `PORT` より優先されます。`PORT` は最後の予備にすぎず、使うと警告を出します。この変数を設定しておけば、共有の環境ファイルや `export PORT=...` でサーバーが別のサービスのポートに移されることはありません。
 - `JWT_SECRET` —— すべてのログイントークンに署名します。未設定の場合、`src/server.ts` に組み込まれた固定の開発用値が代わりに使用されます（ローカル開発には問題ありませんが、信頼されたネットワークの外から到達可能なデプロイには適しません）。シェルでエクスポートするか、お使いのプロセスマネージャー／コンテナ（systemd の `Environment=`、`pm2` 自身の環境設定、Docker の `-e` など）を通じて設定してください。
 - `NODE_ENV` —— 実運用のデプロイでは `production` に設定してください。以下 2 つのフォールバック（開放的な CORS、静かなデフォルト値の使用）を制御し、`JWT_SECRET` や初期投入された `admin`/`admin` アカウントがまだデフォルトのままである場合に、目立つ起動時警告を有効化します。未設定（またはそれ以外の値）の場合は、現在の寛容な開発向け動作を維持します。
 - `CORS_ALLOWED_ORIGINS` —— 本 API へのクロスオリジンブラウザリクエストを許可するオリジンのカンマ区切りリスト —— 実際に関係してくるのは、HYDRA-UMC STUDIO が本サーバーとは異なるホスト／ポートから配信される場合です（例：`https://studio.example.com`、開発時であれば `http://192.168.1.20:5173`）。例：
@@ -236,7 +237,7 @@ npm run build && npm start  # one bundled file (build.sh and build.bat make a ve
 
 ## 🧪 テスト
 
-`npm run test:unit` で自動テスト 377 件を実行します。 さらに `npm test` は OpenAPI の確認と、このサーバーの実インスタンスに対する `tools/` の 28 本のエンドツーエンド契約スクリプトを実行します（探索、認証情報なし／ありのサインイン、本番ブートストラップ、ロボットのコマンドと所有、リフレッシュトークン、音声リレーとそのエラー経路、再生、全体停止、Bluetooth と MQTT のブリッジ、カメラメディア、AI とコネクターハブのリレー、閲覧者ロールなど）。すべて合格しており、ハードウェアは不要です。
+`npm run test:unit` で自動テスト 409 件を実行します。 さらに `npm test` は OpenAPI の確認と、このサーバーの実インスタンスに対する `tools/` の 28 本のエンドツーエンド契約スクリプトを実行します（探索、認証情報なし／ありのサインイン、本番ブートストラップ、ロボットのコマンドと所有、リフレッシュトークン、音声リレーとそのエラー経路、再生、全体停止、Bluetooth と MQTT のブリッジ、カメラメディア、AI とコネクターハブのリレー、閲覧者ロールなど）。すべて合格しており、ハードウェアは不要です。
 
 CI は `HYDRA_UMC_CI=1 python tools/ci_validate.py` を実行し、マニフェスト、文書、8 つの README、図を検査します。
 
