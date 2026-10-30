@@ -34,6 +34,14 @@ by default (the temporary opt-outs are `HYDRA_UMC_CAMERA_AUTH=open` and
 information (see `docs/REMOTE_API.md` section 2k); the server warns at every start while an
 opt-out is set or `HYDRA_UMC_INFO_AUTH` is off in production.
 
+TLS is the default of a **new** installation only: on the very first start (no `data/server-config.json`,
+`settings.json` or `users.json`), when the certificates of the installation's own authority exist
+(`server.pem` and `server.key` in `HYDRA_TLS_DIR`, default `/etc/hydra-umc/tls`, made by the OS provisioning
+script `hydra_mqtt_tls.sh init`), the server saves TLS as on, exactly as an administrator would from the Server
+Admin screen, and logs it. Clients then have to trust that authority (`hydra_mqtt_tls.sh export-ca`). The Admin
+screen can switch it off; `HYDRA_UMC_NEW_INSTALL_TLS=off` forbids the default; an installation that already has
+any of those files, or none of those certificates, is left exactly as it is.
+
 ## Development and test
 
 Development and test mode preserve their isolated convenience fallback so a

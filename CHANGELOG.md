@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **TLS is the default of a new installation:** on its very first start, when the certificates of the installation's own authority exist, the server saves TLS as on (an ordinary saved choice that the Server Admin screen can switch off). An installation that already ran, or one without those certificates, is not changed; `HYDRA_UMC_NEW_INSTALL_TLS=off` forbids the default. Tested in `tests/newInstallTls.test.ts`.
+
 ## [0.8.1.3] - Two-step sign-in, a contract test against the SDK, flash progress only for administrators and three more switches in Server Admin
 
 - **Optional second factor for the sign-in (TOTP, RFC 6238):** an account can turn on a six-digit authenticator code (`/api/totp/begin`, `confirm`, `disable`, `status`) and gets ten one-time recovery codes; once on, `POST /api/login` needs `totp` and answers `401` with `totpRequired` without it. Codes are accepted once, five wrong ones in a row make the next tries wait, the secrets are encrypted in `data/totp.json`, and an administrator can reset an account with `DELETE /api/users/:username/totp`. Accounts that did not turn it on sign in exactly as before. The routes and the sign-in `totp` field have named request and response schemas in the OpenAPI document (also in the typed contract of the SDK), and STUDIO and SUITE have the screens to turn the second step on and off.

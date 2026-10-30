@@ -42,6 +42,7 @@ import { registerSafetyRoutes } from "./routes/safetyRoutes";
 import { listClaims } from "./claimPolicy";
 import { AuditLog, auditOptionsFromEnv } from "./auditLog";
 import { SecurityConfig, certFingerprint, resolveBleMode, resolveTls, securityEnvFrom } from "./securityConfig";
+import { applyNewInstallTlsDefault } from "./newInstallTls";
 import { resolveMqttMode, type MqttBridge } from "./mqttBridge";
 import { startMqttBridge } from "./mqttStart";
 import { startBle } from "./ble/start";
@@ -81,6 +82,8 @@ import { LOG_FILE, bonjour, setupDiscovery, loadServerConfig, saveServerConfig, 
 const REMOTE_API_VERSION = 2;
 
 async function startServer() {
+  // TLS is the default of a new installation only (src/newInstallTls.ts); an existing one is left as it is.
+  applyNewInstallTlsDefault({ env: process.env, dataDir: path.join(process.cwd(), "data"), load: loadServerConfig, save: saveServerConfig, log: industrialLog });
   sweepOrphanedTmpFiles(path.join(process.cwd(), "data"), industrialLog);
 
   const app = express();
