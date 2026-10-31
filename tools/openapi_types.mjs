@@ -284,6 +284,39 @@ export const SCHEMAS = {
       },
     },
   },
+  EcosystemHealth: {
+    type: "object",
+    required: ["schema_version", "generated_at_utc", "available", "summary", "services", "certificate", "warnings"],
+    description: "The health of the services of the ecosystem. Only on a server where ecosystemHealth.enabled is on (404 otherwise); for an operator or an administrator. The port, health path, unit and active state of a service are only in the answer to an administrator.",
+    properties: {
+      schema_version: str,
+      generated_at_utc: str,
+      available: { type: "boolean", description: "False when the sibling checkouts could not be scanned (no services then)." },
+      summary: { type: "object", required: ["total", "ok", "degraded", "down", "unknown", "drift"], properties: { total: int, ok: int, degraded: int, down: int, unknown: int, drift: int } },
+      services: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["name", "family", "role", "state", "reason", "version_expected", "version_reported", "drift", "last_seen_utc", "latency_ms"],
+          description: "state is ok, degraded, down or unknown; reason is a short code the clients translate. version_expected comes from the manifest, version_reported from the HealthReport of the service; drift is true only when both are known and differ.",
+          properties: {
+            name: str, family: { type: "string", nullable: true }, role: { type: "string", nullable: true }, state: str, reason: str,
+            version_expected: { type: "string", nullable: true }, version_reported: { type: "string", nullable: true }, drift: { type: "boolean" },
+            last_seen_utc: { type: "string", nullable: true }, latency_ms: { type: "integer", nullable: true },
+            port: { type: "integer", nullable: true, description: "Administrators only." }, health_path: { type: "string", nullable: true, description: "Administrators only." },
+            systemd_unit: { type: "string", nullable: true, description: "Administrators only." }, active_state: { type: "string", nullable: true, description: "Administrators only." },
+          },
+        },
+      },
+      certificate: {
+        type: "object",
+        nullable: true,
+        description: "The TLS certificate of this server; null when it runs without TLS. state is ok, expiring (fewer days left than warn_days), expired or unreadable.",
+        properties: { state: str, not_after_utc: { type: "string", nullable: true }, days_left: { type: "integer", nullable: true }, warn_days: int },
+      },
+      warnings: { type: "array", items: { type: "object", required: ["code"], properties: { code: str, service: str } } },
+    },
+  },
   ConnectionClientList: {
     type: "object",
     required: ["clients"],
@@ -330,6 +363,7 @@ export const RESPONSES = {
   "POST /api/stop-all/release": ref("GlobalStopReleased"),
   "GET /health": ref("HealthReport"),
   "GET /api/robots/liveness": ref("RobotLiveness"),
+  "GET /api/ecosystem/health": ref("EcosystemHealth"),
   "POST /api/robot/{id}/heartbeat": ref("Success"),
   "POST /api/robot/{id}/claim": ref("Reservation"),
   "POST /api/robot/{id}/release": ref("Reservation"),

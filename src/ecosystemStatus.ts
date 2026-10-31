@@ -63,13 +63,13 @@ const execFileAsync = promisify(execFile);
 export const SERVICE_PROBE_TIMEOUT_MS = 800;
 export const SERVICE_PROBE_HOST = "127.0.0.1";
 
-export function probeTcp(port: number, host: string = SERVICE_PROBE_HOST): Promise<boolean> {
+export function probeTcp(port: number, host: string = SERVICE_PROBE_HOST, timeoutMs: number = SERVICE_PROBE_TIMEOUT_MS): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = net.createConnection({ host, port });
     const timer = setTimeout(() => {
       socket.destroy();
       resolve(false);
-    }, SERVICE_PROBE_TIMEOUT_MS);
+    }, timeoutMs);
     socket.once("connect", () => {
       clearTimeout(timer);
       socket.destroy();

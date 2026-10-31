@@ -51,6 +51,8 @@ import { issueMediaTicket, mediaTicketKey, verifyMediaTicket } from "./mediaTick
 import { registerAuthRoutes } from "./routes/auth";
 import { registerConnectionRoutes } from "./routes/connectionRoutes";
 import { registerLivenessRoutes } from "./routes/livenessRoutes";
+import { makeEcosystemHealthGate, registerEcosystemHealthRoutes } from "./routes/ecosystemHealthRoutes";
+import { LastSeenMemory, collectEcosystemHealth } from "./ecosystemHealth";
 import { RobotLivenessTracker } from "./robotLiveness";
 import { connectionTracker, setRecordAddress } from "./connections";
 import { registerTotpRoutes } from "./routes/totpRoutes";
@@ -300,8 +302,8 @@ async function startServer() {
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
     save: (file) => {
-      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, safety, camera, install, websocket, logging } = file;
-      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, safety, camera, install, websocket, logging });
+      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, safety, camera, install, websocket, logging } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, safety, camera, install, websocket, logging });
     },
     tlsActive: startupTls.enabled,
     bleActiveMode: resolveBleMode(securityEnvFrom(process.env).bleGatt, loadServerConfig()).value,
@@ -399,6 +401,20 @@ async function startServer() {
   registerLocalAiRoutes(app, { authenticate, requireAdmin, requireOperator, adminOnly: () => security.aiAdminOnly() });
 
   registerSystemRoutes(app, { authenticate, requireAdmin, industrialLog, infoAccess });
+
+  // The health of the services of the ecosystem in one answer, behind a switch of Server Admin (off by default: 404).
+  const ecosystemHealthMemory = new LastSeenMemory();
+  const ecosystemHealthConfig = () => (loadServerConfig() as { ecosystemHealth?: { certWarnDays?: unknown; probeTimeoutMs?: unknown } }).ecosystemHealth;
+  registerEcosystemHealthRoutes(app, {
+    authenticate, requireOperator,
+    ecosystemHealthGate: makeEcosystemHealthGate(() => security.ecosystemHealthEnabled()),
+    collect: (admin) => collectEcosystemHealth({
+      memory: ecosystemHealthMemory,
+      certificatePath: () => (startupTls.enabled ? startupTls.certPath : null),
+      certWarnDays: () => ecosystemHealthConfig()?.certWarnDays,
+      probeTimeoutMs: () => ecosystemHealthConfig()?.probeTimeoutMs,
+    }, admin),
+  });
 
   registerBluetoothRoutes(app, { authenticate, requireAdmin, industrialLog });
 
