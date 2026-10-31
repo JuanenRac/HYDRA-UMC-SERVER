@@ -34,7 +34,7 @@ import { registerCameraRoutes } from "./routes/cameraRoutes";
 import { registerRobotRoutes } from "./routes/robotRoutes";
 import { registerCommandRoutes, ROBOT_COMMANDS } from "./routes/commandRoutes";
 import { registerUpstreamRoutes } from "./routes/upstreamRoutes";
-import { realSettings, redactSettingsSecrets, wsQueryTokenAllowed } from "./serverPolicy";
+import { realSettings, redactSettingsSecrets } from "./serverPolicy";
 import { ensureSeedUser, findUser, verifyPassword } from "./users";
 import { pruneExpiredRefreshTokens } from "./refresh_tokens";
 import { SafetyLimits, JogArming } from "./safetyLimits";
@@ -47,7 +47,7 @@ import { resolveMqttMode, type MqttBridge } from "./mqttBridge";
 import { startMqttBridge } from "./mqttStart";
 import { startBle } from "./ble/start";
 import type { BleGateway } from "./ble/bleGateway";
-import { cameraAuthRequiredByDefault, issueMediaTicket, mediaTicketKey, verifyMediaTicket } from "./mediaTickets";
+import { issueMediaTicket, mediaTicketKey, verifyMediaTicket } from "./mediaTickets";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerConnectionRoutes } from "./routes/connectionRoutes";
 import { registerLivenessRoutes } from "./routes/livenessRoutes";
@@ -68,7 +68,8 @@ import { createWsHub, attachWebSocketServer } from "./ws";
 import { createTelemetryProducer } from "./telemetryProducer";
 import { NODE_ENV, JWT_SECRET, authenticate, asyncHandler, requireAdmin, requireOperator, stopAllRateLimiter } from "./auth";
 import { DATALAKE_URL, DATALAKE_TIMEOUT_MS, CONNECTOR_HUB_URL, CONNECTOR_HUB_TIMEOUT_MS, SPI_BRIDGE_URL, SPI_BRIDGE_VERSION_TIMEOUT_MS, SPI_BRIDGE_FLASH_TIMEOUT_MS } from "./upstreamConfig";
-import { LOG_FILE, bonjour, setupDiscovery, loadServerConfig, saveServerConfig, resolvePort, industrialLog, setCurrentPort, getCurrentPort, closeLog } from "./runtime";
+import { LOG_FILE, bonjour, setupDiscovery, loadServerConfig, saveServerConfig, resolvePort, industrialLog, setCurrentPort, getCurrentPort, closeLog, setLogRedaction } from "./runtime";
+import { setSignatureRequirement } from "./voiceConfirm";
 
 // Bumped whenever the /api/hydra-info or /ws message contract changes in a
 // way a remote client (HYDRA-UMC SUITE, the mobile control apps) might need
@@ -299,8 +300,8 @@ async function startServer() {
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
     save: (file) => {
-      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, safety } = file;
-      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, safety });
+      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, safety, camera, websocket, logging } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, safety, camera, websocket, logging });
     },
     tlsActive: startupTls.enabled,
     bleActiveMode: resolveBleMode(securityEnvFrom(process.env).bleGatt, loadServerConfig()).value,
@@ -373,16 +374,18 @@ async function startServer() {
   }
   const infoAccess = (req: express.Request, res: express.Response, next: express.NextFunction) => (security.infoAuthRequired() ? authenticate(req, res, next) : next());
   const MEDIA_KEY = mediaTicketKey(JWT_SECRET);
-  const CAMERA_AUTH_REQUIRED = cameraAuthRequiredByDefault(process.env.HYDRA_UMC_CAMERA_AUTH);
-  if (!CAMERA_AUTH_REQUIRED) {
-    console.warn("[SECURITY] HYDRA_UMC_CAMERA_AUTH=open: the camera pictures are open to the whole LAN. Remove the opt-out once every client asks for a ticket (POST /api/camera/ticket).");
+  // Each of the three options below comes from the environment of the deployment first, then from what an administrator saved in Server Admin; read on every request.
+  if (security.cameraOpen()) {
+    console.warn("[SECURITY] The camera pictures are open to the whole LAN (HYDRA_UMC_CAMERA_AUTH=open or Server Admin). Close them once every client asks for a ticket (POST /api/camera/ticket).");
   }
-  const WS_QUERY_TOKEN_ALLOWED = wsQueryTokenAllowed(process.env.HYDRA_UMC_WS_QUERY_TOKEN);
-  if (WS_QUERY_TOKEN_ALLOWED) {
-    console.warn("[SECURITY] HYDRA_UMC_WS_QUERY_TOKEN=allow: /ws?token= is accepted, so the token is recorded in proxy and server logs. Remove the opt-out once every client sends the hydra.bearer subprotocol.");
+  const WS_QUERY_TOKEN_ALLOWED = () => security.wsQueryTokenAllowed();
+  if (WS_QUERY_TOKEN_ALLOWED()) {
+    console.warn("[SECURITY] /ws?token= is accepted (HYDRA_UMC_WS_QUERY_TOKEN=allow or Server Admin), so the token is recorded in proxy and server logs. Forbid it once every client sends the hydra.bearer subprotocol.");
   }
+  setLogRedaction(() => security.logRedactionOn());
+  setSignatureRequirement(() => security.voiceSignatureRequired());
   const mediaAccess = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    if (!CAMERA_AUTH_REQUIRED) return next();
+    if (security.cameraOpen()) return next();
     if (verifyMediaTicket(MEDIA_KEY, req.query.ticket, Date.now()) !== null) return next();
     return authenticate(req, res, next);
   };

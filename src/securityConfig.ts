@@ -47,6 +47,8 @@ export interface VoiceFile {
   includeHeardText?: boolean;
   /** How sure the speech recognizer must be (0 to 1) before a request that starts a movement is accepted; 0 switches the check off (default 0.6). */
   minConfidence?: number;
+  /** Whether a confirmed spoken request must carry a verified signature; with no key shared with the voice service it is then refused (default: no). */
+  requireSignature?: boolean;
 }
 
 /** What the MAVLink bridge to the vehicle reads from this same file when it starts (HYDRA-UMC-BRIDGE-UAV). */
@@ -75,6 +77,24 @@ export interface HealthFile {
   open?: boolean;
 }
 
+/** The live pictures and saved photos and recordings of the cameras (src/mediaTickets.ts). */
+export interface CameraFile {
+  /** Whether the pictures answer without a ticket or a signed-in client (default: no; they then need one). */
+  open?: boolean;
+}
+
+/** The live WebSocket of the control apps (src/ws.ts). */
+export interface WebsocketFile {
+  /** Whether a token in the address (/ws?token=) is accepted; it is then written in the logs of proxies and servers (default: no). */
+  allowQueryToken?: boolean;
+}
+
+/** The log of the server (src/runtime.ts). */
+export interface LoggingFile {
+  /** Whether secrets are blanked out of every log line (default: yes). Turning it off is for a bench only. */
+  redactSecrets?: boolean;
+}
+
 /** What the global stop does beyond stopping the robots of this server. */
 export interface SafetyFile {
   /** Whether a global stop is also announced on the MQTT bridge as a retained SafetyState (default: no). */
@@ -97,6 +117,9 @@ export interface SecurityFile {
   connections?: ConnectionsFile;
   health?: HealthFile;
   safety?: SafetyFile;
+  camera?: CameraFile;
+  websocket?: WebsocketFile;
+  logging?: LoggingFile;
 }
 
 export interface SecurityEnv {
@@ -115,6 +138,10 @@ export interface SecurityEnv {
   connectionRecordAddress?: string;
   healthOpen?: string;
   safetyPublishStop?: string;
+  cameraAuth?: string;
+  wsQueryToken?: string;
+  logRedaction?: string;
+  voiceRequireSignature?: string;
 }
 
 export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
@@ -134,6 +161,10 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     connectionRecordAddress: env.HYDRA_UMC_CONNECTION_RECORD_ADDRESS,
     healthOpen: env.HYDRA_UMC_HEALTH_OPEN,
     safetyPublishStop: env.HYDRA_UMC_SAFETY_PUBLISH_STOP,
+    cameraAuth: env.HYDRA_UMC_CAMERA_AUTH,
+    wsQueryToken: env.HYDRA_UMC_WS_QUERY_TOKEN,
+    logRedaction: env.HYDRA_UMC_LOG_REDACTION,
+    voiceRequireSignature: env.HYDRA_UMC_VOICE_CONFIRM_REQUIRE_SIGNATURE,
   };
 }
 
@@ -219,6 +250,34 @@ export function resolveSafetyPublishStop(env: string | undefined, file: Security
   return { value: false, source: "default" };
 }
 
+/** Do the camera pictures need a ticket or a signed-in client? Yes, unless the environment says open/off/false/0/no/allow or an administrator opened them. */
+export function resolveCameraOpen(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: ["open", "off", "false", "0", "no", "allow"].includes(env.trim().toLowerCase()), source: "env" };
+  if (typeof file.camera?.open === "boolean") return { value: file.camera.open, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** Is /ws?token= accepted? No, unless the environment says allow/true/1/yes/on or an administrator allowed it. */
+export function resolveWsQueryToken(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: ["allow", "true", "1", "yes", "on"].includes(env.trim().toLowerCase()), source: "env" };
+  if (typeof file.websocket?.allowQueryToken === "boolean") return { value: file.websocket.allowQueryToken, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** Are secrets blanked out of the log? Yes, unless the environment says "off" or an administrator turned it off. */
+export function resolveLogRedaction(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim().toLowerCase() !== "off", source: "env" };
+  if (typeof file.logging?.redactSecrets === "boolean") return { value: file.logging.redactSecrets, source: "config" };
+  return { value: true, source: "default" };
+}
+
+/** Must a confirmed spoken request be signed? Only the exact word "1" in the environment, or an administrator, switches it on; the default is off. */
+export function resolveVoiceRequireSignature(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.voice?.requireSignature === "boolean") return { value: file.voice.requireSignature, source: "config" };
+  return { value: false, source: "default" };
+}
+
 export function resolveMavlinkKeyFile(env: string | undefined, file: SecurityFile): { value: string; source: Source } {
   if (isSet(env)) return { value: env.trim(), source: "env" };
   if (isSet(file.mavlink?.signingKeyFile)) return { value: file.mavlink.signingKeyFile.trim(), source: "config" };
@@ -300,11 +359,14 @@ export interface SecuritySnapshot {
   tls: { enabled: boolean; source: Source; certPath: string | null; keyPath: string | null; fingerprint256: string | null; active: boolean; appliesOnRestart: boolean };
   ble: { mode: { value: BleMode; source: Source }; requireEncryption: { value: boolean; source: Source }; activeMode: BleMode; appliesOnRestart: boolean };
   mqtt: { mode: { value: MqttMode; source: Source }; url: string; prefix: string; username: string | null; commandUser: string | null; activeMode: MqttMode; appliesOnRestart: boolean };
-  voice: { includeHeardText: { value: boolean; source: Source }; minConfidence: { value: number; source: Source } };
+  voice: { includeHeardText: { value: boolean; source: Source }; minConfidence: { value: number; source: Source }; requireSignature: { value: boolean; source: Source } };
   robots: { allowEnable: { value: boolean; source: Source } };
   connections: { recordAddress: { value: boolean; source: Source } };
   health: { open: { value: boolean; source: Source } };
   safety: { publishGlobalStop: { value: boolean; source: Source } };
+  camera: { open: { value: boolean; source: Source } };
+  websocket: { allowQueryToken: { value: boolean; source: Source } };
+  logging: { redactSecrets: { value: boolean; source: Source } };
   /** The signing key itself is never part of this; only where its file is. */
   mavlink: { signingKeyFile: { value: string; source: Source }; signingAllowUnsigned: { value: boolean; source: Source }; signing: boolean; appliesOnRestart: boolean };
 }
@@ -366,6 +428,26 @@ export class SecurityConfig {
     return resolveHealthOpen(this.options.env.healthOpen, this.file).value;
   }
 
+  /** Whether the camera pictures answer without a ticket (off unless an administrator opened them). */
+  cameraOpen(): boolean {
+    return resolveCameraOpen(this.options.env.cameraAuth, this.file).value;
+  }
+
+  /** Whether /ws?token= is accepted (off unless an administrator allowed it). */
+  wsQueryTokenAllowed(): boolean {
+    return resolveWsQueryToken(this.options.env.wsQueryToken, this.file).value;
+  }
+
+  /** Whether secrets are blanked out of the log (on unless an administrator turned it off). */
+  logRedactionOn(): boolean {
+    return resolveLogRedaction(this.options.env.logRedaction, this.file).value;
+  }
+
+  /** Whether a confirmed spoken request must be signed (off unless an administrator turned it on). */
+  voiceSignatureRequired(): boolean {
+    return resolveVoiceRequireSignature(this.options.env.voiceRequireSignature, this.file).value;
+  }
+
   /** Whether a global stop is also announced on the MQTT bridge (off unless an administrator turned it on). */
   globalStopPublished(): boolean {
     return resolveSafetyPublishStop(this.options.env.safetyPublishStop, this.file).value;
@@ -408,9 +490,13 @@ export class SecurityConfig {
       connections: { recordAddress: resolveConnectionRecordAddress(this.options.env.connectionRecordAddress, this.file) },
       health: { open: resolveHealthOpen(this.options.env.healthOpen, this.file) },
       safety: { publishGlobalStop: resolveSafetyPublishStop(this.options.env.safetyPublishStop, this.file) },
+      camera: { open: resolveCameraOpen(this.options.env.cameraAuth, this.file) },
+      websocket: { allowQueryToken: resolveWsQueryToken(this.options.env.wsQueryToken, this.file) },
+      logging: { redactSecrets: resolveLogRedaction(this.options.env.logRedaction, this.file) },
       voice: {
         includeHeardText: resolveVoiceHeardText(this.options.env.voiceHeardText, this.file),
         minConfidence: resolveVoiceMinConfidence(this.options.env.voiceMinConfidence, this.file),
+        requireSignature: resolveVoiceRequireSignature(this.options.env.voiceRequireSignature, this.file),
       },
       mavlink: (() => {
         const keyFile = resolveMavlinkKeyFile(this.options.env.mavlinkKeyFile, this.file);
@@ -554,6 +640,11 @@ export class SecurityConfig {
         if (resolveVoiceMinConfidence(this.options.env.voiceMinConfidence, this.file).source === "env") throw lockedBy("HYDRA_UMC_VOICE_UI_MIN_CONFIDENCE");
         merged.minConfidence = voicePatch.minConfidence;
       }
+      if (voicePatch.requireSignature !== undefined) {
+        if (typeof voicePatch.requireSignature !== "boolean") throw new SecurityConfigError(400, "voice.requireSignature must be true or false");
+        if (resolveVoiceRequireSignature(this.options.env.voiceRequireSignature, this.file).source === "env") throw lockedBy("HYDRA_UMC_VOICE_CONFIRM_REQUIRE_SIGNATURE");
+        merged.requireSignature = voicePatch.requireSignature;
+      }
       next.voice = merged;
       if (voicePatch.includeHeardText === true) warnings.push("voice_heard_text_on");
       if (voicePatch.minConfidence === 0) warnings.push("voice_confidence_off");
@@ -596,6 +687,45 @@ export class SecurityConfig {
       }
       next.health = merged;
       if (healthPatch.open === true) warnings.push("health_open");
+    }
+
+    if (patch.camera !== undefined) {
+      const cameraPatch = patch.camera;
+      if (typeof cameraPatch !== "object" || cameraPatch === null || Array.isArray(cameraPatch)) throw new SecurityConfigError(400, "camera must be an object");
+      const merged: CameraFile = { ...(next.camera ?? {}) };
+      if (cameraPatch.open !== undefined) {
+        if (typeof cameraPatch.open !== "boolean") throw new SecurityConfigError(400, "camera.open must be true or false");
+        if (resolveCameraOpen(this.options.env.cameraAuth, this.file).source === "env") throw lockedBy("HYDRA_UMC_CAMERA_AUTH");
+        merged.open = cameraPatch.open;
+      }
+      next.camera = merged;
+      if (cameraPatch.open === true) warnings.push("camera_open");
+    }
+
+    if (patch.websocket !== undefined) {
+      const websocketPatch = patch.websocket;
+      if (typeof websocketPatch !== "object" || websocketPatch === null || Array.isArray(websocketPatch)) throw new SecurityConfigError(400, "websocket must be an object");
+      const merged: WebsocketFile = { ...(next.websocket ?? {}) };
+      if (websocketPatch.allowQueryToken !== undefined) {
+        if (typeof websocketPatch.allowQueryToken !== "boolean") throw new SecurityConfigError(400, "websocket.allowQueryToken must be true or false");
+        if (resolveWsQueryToken(this.options.env.wsQueryToken, this.file).source === "env") throw lockedBy("HYDRA_UMC_WS_QUERY_TOKEN");
+        merged.allowQueryToken = websocketPatch.allowQueryToken;
+      }
+      next.websocket = merged;
+      if (websocketPatch.allowQueryToken === true) warnings.push("ws_query_token_allowed");
+    }
+
+    if (patch.logging !== undefined) {
+      const loggingPatch = patch.logging;
+      if (typeof loggingPatch !== "object" || loggingPatch === null || Array.isArray(loggingPatch)) throw new SecurityConfigError(400, "logging must be an object");
+      const merged: LoggingFile = { ...(next.logging ?? {}) };
+      if (loggingPatch.redactSecrets !== undefined) {
+        if (typeof loggingPatch.redactSecrets !== "boolean") throw new SecurityConfigError(400, "logging.redactSecrets must be true or false");
+        if (resolveLogRedaction(this.options.env.logRedaction, this.file).source === "env") throw lockedBy("HYDRA_UMC_LOG_REDACTION");
+        merged.redactSecrets = loggingPatch.redactSecrets;
+      }
+      next.logging = merged;
+      if (loggingPatch.redactSecrets === false) warnings.push("log_redaction_off");
     }
 
     if (patch.safety !== undefined) {
@@ -659,13 +789,22 @@ export class SecurityConfig {
       log(`[SECURITY] ${actor} set the MQTT bridge to ${snapshot.mqtt.mode.value}${snapshot.mqtt.mode.value === "commands" ? ` (commands carried out as ${snapshot.mqtt.commandUser})` : ""}; it applies on the next start.`);
     }
     if (patch.voice !== undefined) {
-      log(`[SECURITY] ${actor} set the voice options: transcript in replies ${snapshot.voice.includeHeardText.value ? "ON" : "off"}, minimum confidence ${snapshot.voice.minConfidence.value}.`);
+      log(`[SECURITY] ${actor} set the voice options: transcript in replies ${snapshot.voice.includeHeardText.value ? "ON" : "off"}, minimum confidence ${snapshot.voice.minConfidence.value}, signature of a confirmed request ${snapshot.voice.requireSignature.value ? "required" : "not required"}.`);
     }
     if (patch.robots !== undefined) {
       log(`[SECURITY] ${actor} ${snapshot.robots.allowEnable.value ? "allowed" : "forbade"} bringing a disabled robot back with the enable command (an administrator only).`);
     }
     if (patch.connections !== undefined) {
       log(`[SECURITY] ${actor} ${snapshot.connections.recordAddress.value ? "allowed" : "forbade"} keeping the address and user agent of the clients in the history of connections.`);
+    }
+    if (patch.camera !== undefined) {
+      log(`[SECURITY] ${actor} ${snapshot.camera.open.value ? "OPENED the camera pictures to the whole network (no ticket needed)" : "made the camera pictures ask for a ticket or a signed-in client"}.`);
+    }
+    if (patch.websocket !== undefined) {
+      log(`[SECURITY] ${actor} ${snapshot.websocket.allowQueryToken.value ? "allowed a token in the address of the WebSocket (it is recorded in proxy and server logs)" : "forbade a token in the address of the WebSocket"}.`);
+    }
+    if (patch.logging !== undefined) {
+      log(`[SECURITY] ${actor} turned the blanking of secrets in the log ${snapshot.logging.redactSecrets.value ? "on" : "OFF"}.`);
     }
     if (patch.health !== undefined) {
       log(`[SECURITY] ${actor} ${snapshot.health.open.value ? "opened" : "closed"} GET /health to clients that are not signed in.`);

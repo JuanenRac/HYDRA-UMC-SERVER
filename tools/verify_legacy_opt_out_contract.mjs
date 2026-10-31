@@ -108,7 +108,22 @@ async function main() {
     assert.match(logs(), /HYDRA_UMC_WS_QUERY_TOKEN=allow/);
   });
 
-  console.log("SERVER_LEGACY_OPT_OUT_CONTRACT=PASS defaults=8 camera_opt_out=3 ws_query_opt_out=4");
+  // --- the same two options saved from Server Admin (no variable), applied on the next request and closed again
+  await withServer({}, async (port, token) => {
+    const put = (patch) => fetch(`http://127.0.0.1:${port}/api/admin/server-config`, { method: "PUT", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify(patch) });
+    assert.equal(await status(port, "/api/camera/media/1/snapshots/none.jpg"), 401);
+    assert.equal((await put({ camera: { open: true } })).status, 200);
+    assert.notEqual(await status(port, "/api/camera/media/1/snapshots/none.jpg"), 401, "an administrator can open the pictures from Server Admin");
+    assert.equal((await put({ camera: { open: false } })).status, 200);
+    assert.equal(await status(port, "/api/camera/media/1/snapshots/none.jpg"), 401, "and close them again without a restart");
+    assert.equal(gotSettings(await openSocket(port, `?token=${encodeURIComponent(token)}`, undefined)), false);
+    assert.equal((await put({ websocket: { allowQueryToken: true } })).status, 200);
+    assert.equal(gotSettings(await openSocket(port, `?token=${encodeURIComponent(token)}`, undefined)), true, "an administrator can allow /ws?token= from Server Admin");
+    assert.equal((await put({ websocket: { allowQueryToken: false } })).status, 200);
+    assert.equal(gotSettings(await openSocket(port, `?token=${encodeURIComponent(token)}`, undefined)), false);
+  });
+
+  console.log("SERVER_LEGACY_OPT_OUT_CONTRACT=PASS defaults=8 camera_opt_out=3 ws_query_opt_out=4 saved_options=6");
 }
 
 main().catch((error) => { console.error(error); process.exitCode = 1; });

@@ -230,7 +230,7 @@ test("an MQTT setting fixed in the environment cannot be changed from the app, a
 test("the voice options default to the behaviour of the voice service and follow environment, then saved, then default", () => {
   const { config } = makeConfig();
   assert.deepEqual(config.voiceOptions(), { includeHeardText: false, minConfidence: 0.6 });
-  assert.deepEqual(config.snapshot().voice, { includeHeardText: { value: false, source: "default" }, minConfidence: { value: 0.6, source: "default" } });
+  assert.deepEqual(config.snapshot().voice, { includeHeardText: { value: false, source: "default" }, minConfidence: { value: 0.6, source: "default" }, requireSignature: { value: false, source: "default" } });
   assert.deepEqual(resolveVoiceHeardText("1", { voice: { includeHeardText: false } }), { value: true, source: "env" });
   assert.deepEqual(resolveVoiceHeardText("true", {}), { value: false, source: "env" }, "only the exact word 1 switches it on, as in the voice service");
   assert.deepEqual(resolveVoiceMinConfidence("0.8", { voice: { minConfidence: 0.2 } }), { value: 0.8, source: "env" });

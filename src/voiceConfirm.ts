@@ -30,7 +30,15 @@ export function voiceResultKey(env: Env = process.env): string {
 
 /** Must a confirmed result be signed even when no key is configured (then it is refused)? Off unless the variable is exactly "1". */
 export function requireSignature(env: Env = process.env): boolean {
-  return (env[VOICE_REQUIRE_SIGNATURE_VARIABLE] ?? "").trim() === "1";
+  const fromEnv = (env[VOICE_REQUIRE_SIGNATURE_VARIABLE] ?? "").trim();
+  if (fromEnv !== "") return fromEnv === "1";
+  return signatureOption?.() ?? false;
+}
+
+let signatureOption: (() => boolean) | null = null;
+/** Lets the saved server configuration (Server Admin) decide when the environment does not. */
+export function setSignatureRequirement(source: (() => boolean) | null): void {
+  signatureOption = source;
 }
 
 /** The username to use as the subject of a session, or empty when it is not a safe subject. */

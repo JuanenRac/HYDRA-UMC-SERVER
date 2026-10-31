@@ -146,10 +146,11 @@ export function attachWebSocketServer(
     wsClients: Set<WebSocket>;
     getSettings: () => any;
     applySettingsUpdate: (payload: any, originatorWs?: WebSocket) => Promise<unknown>;
-    WS_QUERY_TOKEN_ALLOWED: boolean;
+    WS_QUERY_TOKEN_ALLOWED: boolean | (() => boolean);
   },
 ) {
-  const { wsClients, getSettings, applySettingsUpdate, WS_QUERY_TOKEN_ALLOWED } = deps;
+  const { wsClients, getSettings, applySettingsUpdate } = deps;
+  const queryTokenAllowed = (): boolean => (typeof deps.WS_QUERY_TOKEN_ALLOWED === "function" ? deps.WS_QUERY_TOKEN_ALLOWED() : deps.WS_QUERY_TOKEN_ALLOWED);
   // A client may send its token as a subprotocol (`Sec-WebSocket-Protocol: hydra.bearer, <token>`), which keeps it out of the address that proxies and logs record; the server
   // answers with the `hydra.bearer` subprotocol only. `/ws?token=` is refused unless the installation opts back in with HYDRA_UMC_WS_QUERY_TOKEN=allow.
   const wss = new WebSocketServer({ server: httpServer, path: "/ws", handleProtocols: protocols => (protocols.has(WS_TOKEN_SUBPROTOCOL) ? WS_TOKEN_SUBPROTOCOL : false) });
@@ -158,13 +159,13 @@ export function attachWebSocketServer(
     // The token: the subprotocol; the query string (?token=...) only when the installation opted back in for the clients that have not moved yet
     const url = new URL(req.url || "", "http://localhost");
     const subprotocolToken = wsTokenFromSubprotocol(req.headers["sec-websocket-protocol"]);
-    if (!subprotocolToken && url.searchParams.has("token") && !WS_QUERY_TOKEN_ALLOWED) {
+    if (!subprotocolToken && url.searchParams.has("token") && !queryTokenAllowed()) {
       authFailuresTotal.inc({ reason: "ws_query_token_refused" });
       ws.send(JSON.stringify({ error: "Access denied: a token in the address is not accepted, send it as the hydra.bearer subprotocol" }));
       setTimeout(() => ws.close(1008, "Access denied: token in the address"), 100);
       return;
     }
-    const token = subprotocolToken ?? (WS_QUERY_TOKEN_ALLOWED ? url.searchParams.get("token") : null);
+    const token = subprotocolToken ?? (queryTokenAllowed() ? url.searchParams.get("token") : null);
 
     if (!token) {
       authFailuresTotal.inc({ reason: "ws_no_token" });

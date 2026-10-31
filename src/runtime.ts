@@ -45,7 +45,7 @@ const SERVER_CONFIG_FILE = path.join(process.cwd(), "data", "server-config.json"
 
 import type { BleFile } from "./securityConfig";
 import type { MqttFile } from "./mqttBridge";
-import type { ConnectionsFile, HealthFile, MavlinkFile, RobotsFile, SafetyFile, VoiceFile } from "./securityConfig";
+import type { ConnectionsFile, HealthFile, MavlinkFile, RobotsFile, SafetyFile, CameraFile, WebsocketFile, LoggingFile, VoiceFile } from "./securityConfig";
 
 export interface ServerConfig {
   port?: number;
@@ -60,6 +60,9 @@ export interface ServerConfig {
   connections?: ConnectionsFile;
   health?: HealthFile;
   safety?: SafetyFile;
+  camera?: CameraFile;
+  websocket?: WebsocketFile;
+  logging?: LoggingFile;
   /** How old the last news of a robot may be before it is called stale, in seconds (src/robotLiveness.ts; 30 by default). */
   liveness?: { staleAfterS?: number };
 }
@@ -150,10 +153,14 @@ function rotateLogIfNeeded() {
 
 // Every log line goes through the shared secret redaction; the option exists
 // for debugging on a bench only (HYDRA_UMC_LOG_REDACTION=off).
-const LOG_REDACTION_ON = (process.env.HYDRA_UMC_LOG_REDACTION ?? "").trim().toLowerCase() !== "off";
+let logRedactionOn: () => boolean = () => (process.env.HYDRA_UMC_LOG_REDACTION ?? "").trim().toLowerCase() !== "off";
+/** Lets the server configuration (environment, then what an administrator saved) decide whether secrets are blanked out of the log. */
+export function setLogRedaction(source: () => boolean): void {
+  logRedactionOn = source;
+}
 
 export function industrialLog(rawMsg: string) {
-  const msg = LOG_REDACTION_ON ? redactSecrets(rawMsg) : rawMsg;
+  const msg = logRedactionOn() ? redactSecrets(rawMsg) : rawMsg;
   const entry = `[${new Date().toISOString()}] ${msg}\n`;
   console.log(msg);
   rotateLogIfNeeded();
