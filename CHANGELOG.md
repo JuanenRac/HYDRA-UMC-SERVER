@@ -4,6 +4,7 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **Dependencies with known vulnerabilities are updated:** the request-body parser, the query-string parser, the proxy-address check and the address library move to their patched releases inside the same major version (a spoofing fix for trusted proxies and denial-of-service fixes); only the lock file changes and `npm audit` now reports nothing.
 - **The four remaining security opt-outs can be set from Server Admin:** the camera pictures without a ticket (`camera.open`), a token in the WebSocket address (`websocket.allowQueryToken`), secrets in the log (`logging.redactSecrets`) and the signature of a confirmed spoken request (`voice.requireSignature`) are now options of `PUT /api/admin/server-config` and of the security snapshot, next to the environment variables they always had (which still win and lock the option with `409`). They apply on the next request, with no restart; each one starts on the safe side and loosening one returns a warning and is written to the log. New `tests/legacyOptOutOptions.test.ts` and a check of the saved options in `tools/verify_legacy_opt_out_contract.mjs`.
 
 ## [0.8.1.4] - The global stop announced to the rest of the ecosystem, a signal of life per robot, the health route behind a switch, the history of the clients that connect, the enable and disable commands of a robot, TLS by default and a variable for the listen port
