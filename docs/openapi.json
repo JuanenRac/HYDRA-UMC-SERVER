@@ -826,7 +826,8 @@
             "type": "string"
           },
           "app_version": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^[0-9A-Za-z._-]{1,24}$"
           },
           "origin": {
             "type": "string",
@@ -937,7 +938,8 @@
             "type": "boolean"
           },
           "app_version": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^[0-9A-Za-z._-]{1,24}$"
           },
           "ip": {
             "type": "string",

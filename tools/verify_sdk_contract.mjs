@@ -63,6 +63,63 @@ export function compareContracts(sdk, server) {
   return problems;
 }
 
+// The documents the SDK generates from its own route sources (contracts/sources/*.routes.json). Optional: an
+// older SDK checkout has none.
+export function findGeneratedDocuments(env = process.env, root = ROOT) {
+  const sdkFile = findSdkContract(env, root);
+  if (!sdkFile) return [];
+  const dir = path.dirname(sdkFile);
+  return fs.readdirSync(dir).filter((name) => name.endsWith(".openapi.json") && name !== "server.openapi.json" && name !== "server.full.openapi.json").sort().map((name) => path.join(dir, name));
+}
+
+// The query parameters a handler reads are exactly the ones the SDK source declares.
+export function compareQueryParameters(sdk, server) {
+  const problems = [];
+  for (const [route, item] of Object.entries(sdk.paths ?? {})) {
+    for (const method of METHODS) {
+      if (!item[method] || !server.paths?.[route]?.[method]) continue;
+      const names = (op) => new Set((op.parameters ?? []).filter((p) => p.in === "query").map((p) => p.name));
+      const promised = names(item[method]);
+      const offered = names(server.paths[route][method]);
+      const label = `${method.toUpperCase()} ${route}`;
+      for (const name of promised) if (!offered.has(name)) problems.push(`${label}: the SDK declares the query parameter ${name} and the handler never reads it`);
+      for (const name of offered) if (!promised.has(name)) problems.push(`${label}: the handler reads the query parameter ${name} and the SDK does not declare it`);
+    }
+  }
+  return problems;
+}
+
+// What must not drift between a closed schema of the SDK and the copy in an OpenAPI document: whether it is closed, the
+// required fields, and for every property its enum (or const), pattern and format.
+function closedShape(schema) {
+  const properties = {};
+  for (const [name, def] of Object.entries(schema.properties ?? {}).sort(([a], [b]) => (a < b ? -1 : 1))) {
+    const shape = {};
+    if (def.enum) shape.enum = def.enum;
+    else if ("const" in def) shape.enum = [def.const];
+    if (def.pattern) shape.pattern = def.pattern;
+    if (def.format) shape.format = def.format;
+    properties[name] = shape;
+  }
+  return { additionalProperties: schema.additionalProperties ?? null, required: [...(schema.required ?? [])].sort(), properties };
+}
+
+export function compareClosedSchemas(name, sdkSchema, serverSchema) {
+  if (!serverSchema) return [`schema ${name}: the server document does not carry it`];
+  return JSON.stringify(closedShape(sdkSchema)) === JSON.stringify(closedShape(serverSchema)) ? [] : [`schema ${name}: the server copy differs from the closed schema of the SDK`];
+}
+
+function generatedDocumentProblems(file, server) {
+  const sdk = JSON.parse(fs.readFileSync(file, "utf8"));
+  const problems = [...compareContracts(sdk, server), ...compareQueryParameters(sdk, server)];
+  const schemaDir = path.join(path.dirname(file), "..", "..", "json-schema", "v1");
+  for (const name of Object.keys(sdk.components?.schemas ?? {})) {
+    const schemaFile = path.join(schemaDir, `${name.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase()}.schema.json`);
+    if (!fs.existsSync(schemaFile)) continue;
+    problems.push(...compareClosedSchemas(name, JSON.parse(fs.readFileSync(schemaFile, "utf8")), server.components?.schemas?.[name]));
+  }
+  return problems.map((p) => `${path.basename(file)}: ${p}`);
+}
 function main() {
   const sdkFile = findSdkContract();
   if (!sdkFile) {
@@ -76,6 +133,7 @@ function main() {
   const sdk = JSON.parse(fs.readFileSync(sdkFile, "utf8"));
   const server = JSON.parse(fs.readFileSync(path.join(ROOT, "docs", "openapi.json"), "utf8"));
   const problems = compareContracts(sdk, server);
+  for (const file of findGeneratedDocuments()) problems.push(...generatedDocumentProblems(file, server));
   if (problems.length) {
     for (const p of problems) console.error(`  - ${p}`);
     console.error(`SDK_CONTRACT=FAIL ${problems.length} difference(s)`);
