@@ -222,7 +222,7 @@ CORS 通过一个可配置的白名单（`CORS_ALLOWED_ORIGINS`，见下文“�
 
 - **谁在连接：** `GET /api/connections/clients` 和 `GET /api/connections/events` 以 HYDRA-UMC-SDK 的封闭契约 `ConnectionClient` 和 `ConnectionEvent` 作答（首次见到、成功或失败的登录、第二因素、登出、已结束的会话）。管理员能看到全部条目，其他账号只能看到自己的；不保存密码、令牌或机密。
 - **生存信号：** `GET /api/robots/liveness` 说明服务器是否收到名册中每个机器人的消息（`live`、`stale` 或 `unknown`，并带最后一条消息的时长），而不是重复只记录操作员所开关内容的 `online` 标志；`data/server-config.json` 的 `liveness.staleAfterS` 设定上限（默认 30 秒）。
-- **生态系统健康：** `GET /api/ecosystem/health`（操作员或管理员；在管理员开启 `ecosystemHealth.enabled` 之前返回 `404`）会把声明了端口或 systemd 单元的服务列为 `ok`、`degraded`、`down` 或 `unknown`，并给出原因代码、各服务上报的版本与其清单版本的对比（偏差）、服务器最后一次收到其响应的时间、服务器自身 TLS 证书的剩余天数以及警告列表。每个服务都以较短的超时且无副作用地查询，因此一个宕机的服务不会遮住其他服务，只有管理员能看到端口、健康路径和单元。`data/server-config.json` 中的 `ecosystemHealth.certWarnDays` 与 `ecosystemHealth.probeTimeoutMs` 设置警告窗口（30 天）和每个服务的等待时间（1500 毫秒）。
+- **生态系统健康：** `GET /api/ecosystem/health`（操作员或管理员；在管理员开启 `ecosystemHealth.enabled` 之前返回 `404`）会把声明了端口或 systemd 单元的服务列为 `ok`、`degraded`、`down` 或 `unknown`，并给出原因代码、各服务上报的版本与其清单版本的对比（偏差）、服务器最后一次收到其响应的时间、服务器自身 TLS 证书的剩余天数以及警告列表。每个服务都以较短的超时且无副作用地查询，因此一个宕机的服务不会遮住其他服务，只有管理员能看到端口、健康路径和单元。`data/server-config.json` 中的 `ecosystemHealth.certWarnDays` 与 `ecosystemHealth.probeTimeoutMs` 设置警告窗口（30 天）和每个服务的等待时间（1500 毫秒）。每个服务的最后一次联系时间保存在 `data/ecosystem-health-last-seen.json` 中（原子写入，并由 `ecosystemHealth.lastSeenMaxEntries` 和 `ecosystemHealth.lastSeenSaveIntervalS` 设定上限），因此重启后仍然保留。
 - `HYDRA_UMC_SERVER_PORT` - 监听端口；优先于共享的 `PORT`。`HYDRA_UMC_PORTS_REGISTRY` 以及 `HYDRA_UMC_SDK_DIR` / `HYDRA_UMC_REQUIRE_SDK=1` 在同一张表中说明。
 
 以下访问开关就是 STUDIO 和 SUITE 的 Server Admin 画面所编辑的那些。每一项都按相同顺序决定：先是部署环境变量（画面中显示为锁定），然后是管理员保存在 `data/server-config.json` 中的值，最后是保守的默认值。其余一切由上面列出的变量涵盖。

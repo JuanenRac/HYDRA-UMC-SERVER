@@ -18,6 +18,7 @@
 // is allowed in (operator) gets none of them, nor any path or fingerprint of the certificate.
 import fs from "node:fs";
 import http from "node:http";
+import path from "node:path";
 import { X509Certificate } from "node:crypto";
 import { getEcosystemStatus, probeTcp, SERVICE_PROBE_HOST, type EcosystemProjectStatus } from "./ecosystemStatus";
 
@@ -100,14 +101,98 @@ export interface EcosystemHealthReport {
   warnings: HealthWarning[];
 }
 
-/** Remembers when each service last answered, so "last heard from" survives from one request to the next. */
+export const DEFAULT_LAST_SEEN_MAX_ENTRIES = 256;
+export const DEFAULT_LAST_SEEN_SAVE_INTERVAL_S = 30;
+const MAX_LAST_SEEN_FILE_BYTES = 256 * 1024;
+const MAX_SERVICE_NAME_LENGTH = 120;
+/** A stored time this far ahead of the clock is a damaged or foreign value, not news. */
+const MAX_FUTURE_SKEW_MS = 5 * 60_000;
+
+export interface LastSeenOptions {
+  /** Where the times are kept between runs (data/ecosystem-health-last-seen.json); without it they live in memory only. */
+  file?: string;
+  now?: () => number;
+}
+
+export interface LastSeenLimits {
+  maxEntries: number;
+  saveIntervalMs: number;
+}
+
+/**
+ * Remembers when each service last answered, so "last heard from" survives from one request to the next and, with a file, from one run of
+ * the server to the next. The file is small and capped (a bounded number of services, a bounded size); it is written atomically (a
+ * temporary file in the same folder, then a rename) and at most once per interval; one that is missing, damaged, too big or from the
+ * future is ignored, never an error.
+ */
 export class LastSeenMemory {
   readonly #seen = new Map<string, number>();
-  mark(name: string, at: number): void {
-    this.#seen.set(name, at);
+  readonly #file: string | undefined;
+  readonly #now: () => number;
+  #dirty = false;
+  #lastSave = Number.NEGATIVE_INFINITY;
+
+  constructor(options: LastSeenOptions = {}) {
+    this.#file = options.file;
+    this.#now = options.now ?? Date.now;
+    this.#load();
   }
+
+  mark(name: string, at: number): void {
+    if (this.#seen.get(name) === at) return;
+    this.#seen.set(name, at);
+    this.#dirty = true;
+  }
+
   get(name: string): number | undefined {
     return this.#seen.get(name);
+  }
+
+  get size(): number {
+    return this.#seen.size;
+  }
+
+  /** Writes the times when something changed and the last write was long enough ago; never throws. Returns whether it wrote. */
+  persist(now: number, limits: LastSeenLimits): boolean {
+    this.#trim(limits.maxEntries);
+    if (!this.#file || !this.#dirty || now - this.#lastSave < limits.saveIntervalMs) return false;
+    this.#lastSave = now;
+    try {
+      fs.mkdirSync(path.dirname(this.#file), { recursive: true });
+      const temporary = `${this.#file}.${process.pid}.tmp`;
+      fs.writeFileSync(temporary, JSON.stringify({ schema: 1, seen: Object.fromEntries(this.#seen) }), { encoding: "utf8", mode: 0o600 });
+      fs.renameSync(temporary, this.#file);
+      this.#dirty = false;
+      return true;
+    } catch {
+      return false; // a convenience: it never breaks the request it belongs to; tried again at the next interval
+    }
+  }
+
+  /** Keeps the most recently heard services when there are more than the cap. */
+  #trim(maxEntries: number): void {
+    if (this.#seen.size <= maxEntries) return;
+    const newest = [...this.#seen.entries()].sort((a, b) => b[1] - a[1]).slice(0, maxEntries);
+    this.#seen.clear();
+    for (const [name, at] of newest) this.#seen.set(name, at);
+    this.#dirty = true;
+  }
+
+  #load(): void {
+    if (!this.#file) return;
+    try {
+      if (fs.statSync(this.#file).size > MAX_LAST_SEEN_FILE_BYTES) return;
+      const parsed = JSON.parse(fs.readFileSync(this.#file, "utf-8"));
+      const seen = parsed && typeof parsed === "object" && parsed.schema === 1 ? parsed.seen : undefined;
+      if (!seen || typeof seen !== "object" || Array.isArray(seen)) return;
+      const limit = this.#now() + MAX_FUTURE_SKEW_MS;
+      for (const [name, at] of Object.entries(seen)) {
+        if (this.#seen.size >= DEFAULT_LAST_SEEN_MAX_ENTRIES * 4) break;
+        if (name.length > 0 && name.length <= MAX_SERVICE_NAME_LENGTH && typeof at === "number" && Number.isFinite(at) && at > 0 && at <= limit) this.#seen.set(name, at);
+      }
+    } catch {
+      /* no file, or one that is not ours: start empty */
+    }
   }
 }
 
@@ -167,6 +252,7 @@ export interface BuildInput {
   certificateNotAfterMs: number | null | undefined;
   certWarnDays: number;
   admin: boolean;
+  lastSeenLimits?: LastSeenLimits;
 }
 
 /** The pure part: the report from the facts. Only services that declare a port or a unit are listed (the rest are libraries, tools or firmware). */
@@ -202,6 +288,7 @@ export function buildEcosystemHealth(input: BuildInput): EcosystemHealthReport {
     }
     services.push(entry);
   }
+  memory.persist(now, input.lastSeenLimits ?? { maxEntries: DEFAULT_LAST_SEEN_MAX_ENTRIES, saveIntervalMs: DEFAULT_LAST_SEEN_SAVE_INTERVAL_S * 1000 });
   services.sort((a, b) => (a.family ?? "").localeCompare(b.family ?? "") || a.name.localeCompare(b.name));
 
   const certificate = input.certificateNotAfterMs === undefined ? null : certificateHealth(input.certificateNotAfterMs, now, input.certWarnDays);
@@ -291,6 +378,9 @@ export interface CollectDeps {
   /** The configured values (server-config.json, ecosystemHealth); anything invalid gives the default. */
   certWarnDays: () => unknown;
   probeTimeoutMs: () => unknown;
+  /** The configured caps of the stored times (ecosystemHealth.lastSeenMaxEntries, lastSeenSaveIntervalS); anything invalid gives the default. */
+  lastSeenMaxEntries?: () => unknown;
+  lastSeenSaveIntervalS?: () => unknown;
 }
 
 export function certWarnDaysFrom(value: unknown): number {
@@ -299,6 +389,14 @@ export function certWarnDaysFrom(value: unknown): number {
 
 export function probeTimeoutFrom(value: unknown): number {
   return typeof value === "number" && Number.isInteger(value) && value >= 100 && value <= 10_000 ? value : DEFAULT_PROBE_TIMEOUT_MS;
+}
+
+export function lastSeenMaxEntriesFrom(value: unknown): number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 1024 ? value : DEFAULT_LAST_SEEN_MAX_ENTRIES;
+}
+
+export function lastSeenSaveIntervalFrom(value: unknown): number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 3600 ? value : DEFAULT_LAST_SEEN_SAVE_INTERVAL_S;
 }
 
 /** Asks every declared service at once (one timeout window in all) and builds the report. Fail-soft: a probe that throws makes that one service unknown. */
@@ -346,5 +444,6 @@ export async function collectEcosystemHealth(deps: CollectDeps, admin: boolean):
     certificateNotAfterMs,
     certWarnDays: certWarnDaysFrom(deps.certWarnDays()),
     admin,
+    lastSeenLimits: { maxEntries: lastSeenMaxEntriesFrom(deps.lastSeenMaxEntries?.()), saveIntervalMs: lastSeenSaveIntervalFrom(deps.lastSeenSaveIntervalS?.()) * 1000 },
   });
 }

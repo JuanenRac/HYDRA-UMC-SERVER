@@ -8,7 +8,7 @@ import { test } from "node:test";
 import type { EcosystemProjectStatus } from "../src/ecosystemStatus.ts";
 import {
   DEFAULT_CERT_WARN_DAYS, DEFAULT_PROBE_TIMEOUT_MS, LastSeenMemory, buildEcosystemHealth, certWarnDaysFrom, certificateHealth, collectEcosystemHealth,
-  fetchHealthDetail, probeTimeoutFrom, readCertificateNotAfter, type ProbeDetail,
+  fetchHealthDetail, lastSeenMaxEntriesFrom, lastSeenSaveIntervalFrom, probeTimeoutFrom, readCertificateNotAfter, type ProbeDetail,
 } from "../src/ecosystemHealth.ts";
 import { makeEcosystemHealthGate, registerEcosystemHealthRoutes } from "../src/routes/ecosystemHealthRoutes.ts";
 import { SecurityConfig, SecurityConfigError, resolveEcosystemHealth, type SecurityFile } from "../src/securityConfig.ts";
@@ -334,4 +334,106 @@ test("an administrator can turn the health route on and off from the saved optio
   for (const value of ["yes", 1, null]) assert.throws(() => config.update({ ecosystemHealth: { enabled: value } }, "root"), bad400);
   assert.throws(() => config.update({ ecosystemHealth: [] }, "root"), bad400);
   assert.throws(() => makeConfig({ ecosystemHealth: "1" }).config.update({ ecosystemHealth: { enabled: false } }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 409 && /ECOSYSTEM_HEALTH/.test(e.message));
+});
+
+// ---- the stored last contact ----------------------------------------------------------------------------------------------------------------
+
+const LIMITS = { maxEntries: 256, saveIntervalMs: 30_000 };
+
+function tempFile(): { dir: string; file: string } {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hydra-lastseen-"));
+  return { dir, file: path.join(dir, "data", "ecosystem-health-last-seen.json") };
+}
+
+test("without a file the memory behaves as it always did: it keeps what it is told and never writes", () => {
+  const memory = new LastSeenMemory();
+  assert.equal(memory.get("A"), undefined);
+  memory.mark("A", T0);
+  assert.equal(memory.get("A"), T0);
+  assert.equal(memory.persist(T0 + 999_999, LIMITS), false);
+});
+
+test("the last contact survives a restart: a service that does not answer after it keeps the time it last did", () => {
+  const { dir, file } = tempFile();
+  try {
+    const first = new LastSeenMemory({ file, now: () => T0 });
+    const projects = [project("A", { servicePort: 1, serviceHealthPath: "/h" })];
+    build(projects, { A: { reachable: true, httpStatus: 200, reportedState: "READY" } }, { memory: first });
+    assert.equal(fs.existsSync(file), true);
+    const second = new LastSeenMemory({ file, now: () => T0 + 1000 });
+    const report = build(projects, { A: { reachable: false } }, { memory: second, now: T0 + 1000 });
+    assert.equal(report.services[0].state, "down");
+    assert.equal(report.services[0].last_seen_utc, new Date(T0).toISOString());
+    assert.deepEqual(fs.readdirSync(path.dirname(file)), ["ecosystem-health-last-seen.json"], "no temporary file is left behind");
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("it writes at most once per interval and only when something changed", () => {
+  const { dir, file } = tempFile();
+  try {
+    const memory = new LastSeenMemory({ file, now: () => T0 });
+    memory.mark("A", T0);
+    assert.equal(memory.persist(T0, LIMITS), true);
+    assert.equal(memory.persist(T0 + 1000, LIMITS), false, "nothing changed");
+    memory.mark("A", T0 + 2000);
+    assert.equal(memory.persist(T0 + 2000, LIMITS), false, "too soon");
+    assert.equal(memory.persist(T0 + 30_000, LIMITS), true);
+    assert.equal(JSON.parse(fs.readFileSync(file, "utf-8")).seen.A, T0 + 2000);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("the number of stored services is capped and the most recently heard stay", () => {
+  const { dir, file } = tempFile();
+  try {
+    const memory = new LastSeenMemory({ file, now: () => T0 });
+    for (let i = 0; i < 10; i += 1) memory.mark(`S${i}`, T0 + i);
+    memory.persist(T0, { maxEntries: 3, saveIntervalMs: 1000 });
+    assert.equal(memory.size, 3);
+    assert.deepEqual(Object.keys(JSON.parse(fs.readFileSync(file, "utf-8")).seen).sort(), ["S7", "S8", "S9"]);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("a file that is missing, damaged, too big, of another shape or from the future is ignored; bad entries are dropped", () => {
+  const { dir, file } = tempFile();
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const load = () => new LastSeenMemory({ file, now: () => T0 });
+    assert.equal(load().size, 0);
+    fs.writeFileSync(file, "{not json");
+    assert.equal(load().size, 0);
+    fs.writeFileSync(file, JSON.stringify({ schema: 2, seen: { A: T0 } }));
+    assert.equal(load().size, 0);
+    fs.writeFileSync(file, JSON.stringify({ schema: 1, seen: [T0] }));
+    assert.equal(load().size, 0);
+    fs.writeFileSync(file, " ".repeat(300 * 1024));
+    assert.equal(load().size, 0);
+    fs.writeFileSync(file, JSON.stringify({ schema: 1, seen: { Good: T0 - 5, Future: T0 + 10 * 60_000, Text: "x", Zero: 0, [`L${"x".repeat(200)}`]: T0 } }));
+    const memory = load();
+    assert.deepEqual([memory.size, memory.get("Good")], [1, T0 - 5]);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("a file that cannot be written does not break the report", () => {
+  const { dir } = tempFile();
+  try {
+    const blocker = path.join(dir, "blocker");
+    fs.writeFileSync(blocker, "x");
+    const memory = new LastSeenMemory({ file: path.join(blocker, "sub", "seen.json"), now: () => T0 });
+    const report = build([project("A", { servicePort: 1 })], { A: { reachable: true } }, { memory });
+    assert.equal(report.services[0].last_seen_utc, new Date(T0).toISOString());
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("the caps read from the configuration fall back to the defaults when invalid", () => {
+  assert.deepEqual([lastSeenMaxEntriesFrom(5), lastSeenMaxEntriesFrom(0), lastSeenMaxEntriesFrom("9"), lastSeenMaxEntriesFrom(5000), lastSeenMaxEntriesFrom(undefined)], [5, 256, 256, 256, 256]);
+  assert.deepEqual([lastSeenSaveIntervalFrom(60), lastSeenSaveIntervalFrom(0), lastSeenSaveIntervalFrom(1.5), lastSeenSaveIntervalFrom(99999)], [60, 30, 30, 30]);
+});
+
+test("the route inventory says what the route answers while the switch is off and that the robot id is a number", () => {
+  const document = JSON.parse(fs.readFileSync(new URL("../docs/openapi.json", import.meta.url), "utf-8"));
+  const health = document.paths["/api/ecosystem/health"].get;
+  for (const code of ["200", "403", "404", "503"]) assert.ok(health.responses[code], `health lists ${code}`);
+  const heartbeat = document.paths["/api/robot/{id}/heartbeat"].post;
+  assert.equal(heartbeat.parameters.find((p: any) => p.name === "id").schema.type, "integer");
+  assert.equal(document.paths["/api/robots/liveness"].get.parameters, undefined);
 });

@@ -403,8 +403,8 @@ async function startServer() {
   registerSystemRoutes(app, { authenticate, requireAdmin, industrialLog, infoAccess });
 
   // The health of the services of the ecosystem in one answer, behind a switch of Server Admin (off by default: 404).
-  const ecosystemHealthMemory = new LastSeenMemory();
-  const ecosystemHealthConfig = () => (loadServerConfig() as { ecosystemHealth?: { certWarnDays?: unknown; probeTimeoutMs?: unknown } }).ecosystemHealth;
+  const ecosystemHealthMemory = new LastSeenMemory({ file: path.join(process.cwd(), "data", "ecosystem-health-last-seen.json") });
+  const ecosystemHealthConfig = () => (loadServerConfig() as { ecosystemHealth?: { certWarnDays?: unknown; probeTimeoutMs?: unknown; lastSeenMaxEntries?: unknown; lastSeenSaveIntervalS?: unknown } }).ecosystemHealth;
   registerEcosystemHealthRoutes(app, {
     authenticate, requireOperator,
     ecosystemHealthGate: makeEcosystemHealthGate(() => security.ecosystemHealthEnabled()),
@@ -413,6 +413,8 @@ async function startServer() {
       certificatePath: () => (startupTls.enabled ? startupTls.certPath : null),
       certWarnDays: () => ecosystemHealthConfig()?.certWarnDays,
       probeTimeoutMs: () => ecosystemHealthConfig()?.probeTimeoutMs,
+      lastSeenMaxEntries: () => ecosystemHealthConfig()?.lastSeenMaxEntries,
+      lastSeenSaveIntervalS: () => ecosystemHealthConfig()?.lastSeenSaveIntervalS,
     }, admin),
   });
 

@@ -85,6 +85,10 @@ export interface EcosystemHealthFile {
   certWarnDays?: number;
   /** How long to wait for each service, in milliseconds (100 to 10000; 1500 by default). Read from the file only. */
   probeTimeoutMs?: number;
+  /** How many services the stored last-contact times may hold (1 to 1024; 256 by default). Read from the file only. */
+  lastSeenMaxEntries?: number;
+  /** At most one write of the stored last-contact times per this many seconds (1 to 3600; 30 by default). Read from the file only. */
+  lastSeenSaveIntervalS?: number;
 }
 
 /** The remaining-useful-life relay (POST /api/ai/anomaly-detector/rul, src/routes/localAiRoutes.ts). */

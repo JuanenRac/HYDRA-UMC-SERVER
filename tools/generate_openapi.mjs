@@ -13,7 +13,7 @@
 //   node tools/generate_openapi.mjs           rewrite docs/openapi.json
 //   node tools/generate_openapi.mjs --check   fail if the file is out of date
 // =============================================================================
-import { SCHEMAS, RESPONSES, REQUESTS, errorResponse, jsonContent } from "./openapi_types.mjs";
+import { SCHEMAS, RESPONSES, REQUESTS, EXTRA_STATUSES, EMPTY_BODY_STATUSES, errorResponse, jsonContent } from "./openapi_types.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -73,9 +73,12 @@ function inspectHandler(text) {
       if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) body.add(name);
     }
   }
+  // A path parameter the handler turns into a number (Number(req.params.id), parseInt(req.params.id)) is an integer, not free text.
+  const integerParams = new Set();
+  for (const m of text.matchAll(/(?:Number|parseInt|parseFloat)\(\s*req\.params\.([A-Za-z_][A-Za-z0-9_]*)/g)) integerParams.add(m[1]);
   const query = new Set();
   for (const m of text.matchAll(/req\.query\??\.([A-Za-z_][A-Za-z0-9_]*)/g)) query.add(m[1]);
-  return { statuses: [...statuses].sort((a, b) => a - b), body: [...body].sort(compare), query: [...query].sort(compare) };
+  return { statuses: [...statuses].sort((a, b) => a - b), body: [...body].sort(compare), query: [...query].sort(compare), integerParams };
 }
 
 function collectRoutes() {
@@ -120,7 +123,7 @@ function buildDocument() {
   const paths = {};
   const routes = collectRoutes();
   const known = new Set(routes.map((r) => `${r.method.toUpperCase()} ${r.path}`));
-  for (const key of [...Object.keys(RESPONSES), ...Object.keys(REQUESTS)]) {
+  for (const key of [...Object.keys(RESPONSES), ...Object.keys(REQUESTS), ...Object.keys(EXTRA_STATUSES), ...Object.keys(EMPTY_BODY_STATUSES)]) {
     if (!known.has(key)) throw new Error(`tools/openapi_types.mjs describes ${key}, which is not a registered route`);
   }
   for (const r of routes) {
@@ -128,8 +131,11 @@ function buildDocument() {
       name: p[1],
       in: "path",
       required: true,
-      schema: { type: "string" },
+      schema: { type: r.integerParams.has(p[1]) ? "integer" : "string" },
     }));
+    const key = `${r.method.toUpperCase()} ${r.path}`;
+    // Codes a shared middleware answers before the handler runs (a switch that is off, a refused role) are not in the handler's own source.
+    const codes = [...new Set([...(r.statuses.length ? r.statuses : [200]), ...(EXTRA_STATUSES[key] ?? [])])].sort((a, b) => a - b);
     const operation = {
       tags: [r.path.startsWith("/api/") ? r.path.split("/")[2] : r.path.split("/")[1]],
       summary: `${r.method.toUpperCase()} ${r.path}`,
@@ -141,15 +147,15 @@ function buildDocument() {
             : "No authentication required by the route itself.",
       "x-access": r.access,
       responses: Object.fromEntries(
-        (r.statuses.length ? r.statuses : [200]).map((code) => [
+        codes.map((code) => [
           String(code),
           { description: `${STATUS_TEXT[code] ?? "Response"}. The body is documented in docs/REMOTE_API.md.` },
         ]),
       ),
     };
-    const key = `${r.method.toUpperCase()} ${r.path}`;
     for (const [code, response] of Object.entries(operation.responses)) {
-      if (Number(code) >= 400) response.content = jsonContent(errorResponse);
+      if (Number(code) >= 400 && (EMPTY_BODY_STATUSES[key] ?? []).includes(Number(code))) response.description = `${STATUS_TEXT[Number(code)] ?? "Response"}. No body.`;
+      else if (Number(code) >= 400) response.content = jsonContent(errorResponse);
       else if (code === "200" && RESPONSES[key]) response.content = jsonContent(RESPONSES[key]);
     }
     for (const name of r.query) params.push({ name, in: "query", required: false, schema: { type: "string" } });

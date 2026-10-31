@@ -4,6 +4,9 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **The last contact of each service survives a restart:** the time the health of the ecosystem last heard from each service is kept in `data/ecosystem-health-last-seen.json`, written atomically (temporary file, then rename) at most once per `ecosystemHealth.lastSeenSaveIntervalS` seconds (30 by default) and capped to `ecosystemHealth.lastSeenMaxEntries` services (256 by default, the most recently heard are kept). A file that is missing, damaged, over 256 KiB or with times in the future is ignored.
+- **The route inventory is more exact:** `docs/openapi.json` now lists the `404` a signed-in client gets from `GET /api/ecosystem/health` while `ecosystemHealth.enabled` is off (and the `403` for a viewer), and the `{id}` of the robot and camera routes is an integer, as the handlers read it.
+
 ## [0.8.1.7] - A relay of the remaining useful life for operators behind a switch, an ecosystem health route, a frontend build that brings the 3D models first and a gate of remote access by the type of the client
 
 - **The remaining-useful-life card of the AI dashboard can use the relay:** `POST /api/ai/anomaly-detector/rul` is a write to the detector, so until now only an administrator could send it and the card failed for an operator. The new option `rul.enabled` (Server Admin, `PUT /api/admin/server-config`, or `HYDRA_UMC_RUL=1`; off by default, which keeps today's behaviour exactly) opens only that exact request to operators, with the same session, the same token held only by this server and the same destination (the anomaly detector on loopback); a body above `rul.maxBodyBytes`, more than `rul.maxPoints` points or a body of another shape is refused before it is forwarded, and the detector gets `rul.timeoutMs` for the whole exchange, answer included. New `tests/rulRelay.test.ts`.

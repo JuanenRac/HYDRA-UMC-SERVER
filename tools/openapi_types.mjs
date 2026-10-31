@@ -418,5 +418,16 @@ export const REQUESTS = {
   "POST /api/robot/{id}/command": { required: ["command"], fields: { command: str, params: { type: "object" }, seq: int } },
 };
 
+// "METHOD /path" -> status codes that a shared middleware answers before the handler runs, so the handler's own source does not show them.
+export const EXTRA_STATUSES = {
+  // 404 while ecosystemHealth.enabled is off (as if the route did not exist), 403 for a viewer.
+  "GET /api/ecosystem/health": [403, 404],
+};
+
+// "METHOD /path" -> status codes whose answer has no body at all (a switch that is off answers a bare 404).
+export const EMPTY_BODY_STATUSES = {
+  "GET /api/ecosystem/health": [404],
+};
+
 export const errorResponse = ref("Error");
 export const jsonContent = (schema) => ({ "application/json": { schema } });
