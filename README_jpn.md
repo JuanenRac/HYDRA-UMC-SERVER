@@ -205,6 +205,22 @@ CORS は、設定可能な許可リスト（`CORS_ALLOWED_ORIGINS`、下記「�
   ```
   その後、`TLS_CERT_PATH=./cert.pem` および `TLS_KEY_PATH=./key.pem` を設定してください。
 
+### アクセススイッチ、接続履歴、生存信号
+
+サーバーが応答または記録する範囲を広げる 7 つのオプションがあります。すべて保守的な値で始まり、それぞれ環境変数と管理者用スイッチ（`PUT /api/admin/server-config`、STUDIO の Server Admin に表示。環境変数はスイッチをロックします）を持ちます。完全な表は [`docs/REMOTE_API.md`](docs/REMOTE_API.md) の 2k 節にあります。
+
+- `HYDRA_UMC_HEALTH_OPEN=1`（`health.open`）- `GET /health` がサインインなしで最小限のヘルスレポート（バージョン、ホスト、件数なし）を返します。オフのときは `404` を返します。
+- `HYDRA_UMC_SAFETY_PUBLISH_STOP=1`（`safety.publishGlobalStop`）- グローバル停止を MQTT ブリッジの `<プレフィックス>/safety/estop` にも保持付きの `SAFE_STOP` として通知します（`docs/GLOBAL_STOP.md` を参照）。
+- `HYDRA_UMC_CONNECTION_RECORD_ADDRESS=1`（`connections.recordAddress`）- 接続履歴に各クライアントのアドレスとユーザーエージェントも残し、管理者だけに表示します。
+- `HYDRA_UMC_CAMERA_AUTH=open`（`camera.open`）- チケットなしのカメラ映像。既定ではチケットが必要です。
+- `HYDRA_UMC_WS_QUERY_TOKEN=allow`（`websocket.allowQueryToken`）- WebSocket アドレス内のトークン。既定では拒否されます。
+- `HYDRA_UMC_LOG_REDACTION=off`（`logging.redactSecrets`）- ログの秘密情報の伏せ字をやめます。既定では伏せ字にします。
+- `HYDRA_UMC_VOICE_CONFIRM_REQUIRE_SIGNATURE=1`（`voice.requireSignature`）- 確認済みの音声リクエストに検証済みの署名を要求します。
+
+- **接続者：** `GET /api/connections/clients` と `GET /api/connections/events` は、HYDRA-UMC-SDK の閉じた契約 `ConnectionClient` と `ConnectionEvent` で応答します（初回確認、成功または失敗したサインイン、第 2 要素、サインアウト、終了したセッション）。管理者はすべての項目を、その他のアカウントは自分の分だけを見ます。パスワード、トークン、秘密情報は保存されません。
+- **生存信号：** `GET /api/robots/liveness` は、名簿の各ロボットについてサーバーに便りがあったか（`live`、`stale`、`unknown`、最後の便りからの経過時間付き）を返します。オペレーターが入れた内容しか記録しない `online` フラグを繰り返すものではありません。`data/server-config.json` の `liveness.staleAfterS` で上限を設定します（既定は 30 秒）。
+- `HYDRA_UMC_SERVER_PORT` - 待ち受けポート。共有の `PORT` より優先されます。`HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV=off`、`HYDRA_UMC_PORTS_REGISTRY`、`HYDRA_UMC_SDK_DIR` / `HYDRA_UMC_REQUIRE_SDK=1` は同じ表に記載されています。
+
 以下のアクセススイッチは、STUDIO と SUITE の Server Admin 画面が編集するものです。どれも同じ順序で決まります。まずデプロイの環境変数（画面ではロック表示）、次に管理者が `data/server-config.json` に保存した値、最後に保守的な既定値です。ほかのすべては上に挙げた変数が扱います。
 
 | 変数 | 既定値 | 設定する内容 |

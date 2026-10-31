@@ -330,6 +330,22 @@ Getting a certificate:
   ```
   Then set `TLS_CERT_PATH=./cert.pem` and `TLS_KEY_PATH=./key.pem`.
 
+### Access Switches, Connection History and Signal of Life
+
+Seven options widen what the server answers or records; all start on the conservative value and each has an environment variable and an administrator switch (`PUT /api/admin/server-config`, shown in Server Admin of STUDIO; an environment variable locks the switch). The full table is in section 2k of [`docs/REMOTE_API.md`](docs/REMOTE_API.md).
+
+- `HYDRA_UMC_HEALTH_OPEN=1` (`health.open`) - `GET /health` answers without a sign-in with a bare health report (no version, host or counts); off, it answers `404`.
+- `HYDRA_UMC_SAFETY_PUBLISH_STOP=1` (`safety.publishGlobalStop`) - a global stop is also announced on the MQTT bridge as a retained `SAFE_STOP` on `<prefix>/safety/estop` (see `docs/GLOBAL_STOP.md`).
+- `HYDRA_UMC_CONNECTION_RECORD_ADDRESS=1` (`connections.recordAddress`) - the history of connections also keeps the address and user agent of each client, shown to administrators only.
+- `HYDRA_UMC_CAMERA_AUTH=open` (`camera.open`) - camera pictures without a ticket; by default they demand one.
+- `HYDRA_UMC_WS_QUERY_TOKEN=allow` (`websocket.allowQueryToken`) - a token in the WebSocket address; by default it is refused.
+- `HYDRA_UMC_LOG_REDACTION=off` (`logging.redactSecrets`) - stops blanking secrets in the log; by default they are blanked.
+- `HYDRA_UMC_VOICE_CONFIRM_REQUIRE_SIGNATURE=1` (`voice.requireSignature`) - a confirmed spoken request needs a verified signature.
+
+- **Who connects:** `GET /api/connections/clients` and `GET /api/connections/events` answer in the closed `ConnectionClient` and `ConnectionEvent` contracts of HYDRA-UMC-SDK (first seen, sign-ins that worked or failed, second factor, sign-outs, ended sessions). An administrator sees every entry, any other account only its own; no password, token or secret is stored.
+- **Signal of life:** `GET /api/robots/liveness` says whether the server had news of each robot of the roster (`live`, `stale` or `unknown`, with the age of the last news), instead of repeating the `online` flag that only records what an operator switched on; `liveness.staleAfterS` of `data/server-config.json` sets the limit (30 s by default).
+- `HYDRA_UMC_SERVER_PORT` - the listen port; it wins over the shared `PORT`. `HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV=off`, `HYDRA_UMC_PORTS_REGISTRY` and `HYDRA_UMC_SDK_DIR` / `HYDRA_UMC_REQUIRE_SDK=1` are described in the same table.
+
 The access switches below are the ones the Server Admin screen of STUDIO and SUITE edits. Each one resolves in the same order: the environment of the deployment first (the screen shows it as locked), then what the administrator saved in `data/server-config.json`, then the conservative default. The variables listed above cover everything else.
 
 | Variable | Default | What it sets |
