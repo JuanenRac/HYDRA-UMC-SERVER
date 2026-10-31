@@ -332,10 +332,11 @@ Getting a certificate:
 
 ### Access Switches, Connection History and Signal of Life
 
-Nine options widen what the server answers or records; all start on the conservative value and each has an environment variable and an administrator switch (`PUT /api/admin/server-config`, shown in Server Admin of STUDIO; an environment variable locks the switch). The full table is in section 2k of [`docs/REMOTE_API.md`](docs/REMOTE_API.md).
+Ten options widen what the server answers or records; all start on the conservative value and each has an environment variable and an administrator switch (`PUT /api/admin/server-config`, shown in Server Admin of STUDIO; an environment variable locks the switch). The full table is in section 2k of [`docs/REMOTE_API.md`](docs/REMOTE_API.md).
 
 - `HYDRA_UMC_HEALTH_OPEN=1` (`health.open`) - `GET /health` answers without a sign-in with a bare health report (no version, host or counts); off, it answers `404`.
 - `HYDRA_UMC_ECOSYSTEM_HEALTH=1` (`ecosystemHealth.enabled`) - `GET /api/ecosystem/health` answers with the health of the services of the ecosystem; off, it answers `404`.
+- `HYDRA_UMC_RUL=1` (`rul.enabled`) - `POST /api/ai/anomaly-detector/rul`, the remaining-useful-life estimate behind the card of the AI dashboard, is open to operators as well as administrators (only that request, with a limit on its size and time); off, only an administrator may send it.
 - `HYDRA_UMC_SAFETY_PUBLISH_STOP=1` (`safety.publishGlobalStop`) - a global stop is also announced on the MQTT bridge as a retained `SAFE_STOP` on `<prefix>/safety/estop` (see `docs/GLOBAL_STOP.md`).
 - `HYDRA_UMC_CONNECTION_RECORD_ADDRESS=1` (`connections.recordAddress`) - the history of connections also keeps the address and user agent of each client, shown to administrators only.
 - `HYDRA_UMC_CAMERA_AUTH=open` (`camera.open`) - camera pictures without a ticket; by default they demand one.

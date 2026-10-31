@@ -207,10 +207,11 @@ CORS 通过一个可配置的白名单（`CORS_ALLOWED_ORIGINS`，见下文“�
 
 ### 访问开关、连接历史和生存信号
 
-有九个选项会扩大服务器的响应或记录范围；全部以保守值开始，每个都有环境变量和管理员开关（`PUT /api/admin/server-config`，显示在 STUDIO 的 Server Admin 中；环境变量会锁定开关）。完整表格见 [`docs/REMOTE_API.md`](docs/REMOTE_API.md) 第 2k 节。
+有十个选项会扩大服务器的响应或记录范围；全部以保守值开始，每个都有环境变量和管理员开关（`PUT /api/admin/server-config`，显示在 STUDIO 的 Server Admin 中；环境变量会锁定开关）。完整表格见 [`docs/REMOTE_API.md`](docs/REMOTE_API.md) 第 2k 节。
 
 - `HYDRA_UMC_HEALTH_OPEN=1`（`health.open`）- `GET /health` 无需登录即可返回精简的健康报告（不含版本、主机或计数）；关闭时返回 `404`。
 - `HYDRA_UMC_ECOSYSTEM_HEALTH=1`（`ecosystemHealth.enabled`）- `GET /api/ecosystem/health` 返回生态系统各服务的健康状况；关闭时返回 `404`。
+- `HYDRA_UMC_RUL=1`（`rul.enabled`）- AI 仪表板卡片背后的剩余使用寿命估算 `POST /api/ai/anomaly-detector/rul`，除管理员外也向操作员开放（仅限这一个请求，并限制其大小和时间）；关闭时只有管理员可以发送。
 - `HYDRA_UMC_SAFETY_PUBLISH_STOP=1`（`safety.publishGlobalStop`）- 全局停止还会在 MQTT 桥的 `<前缀>/safety/estop` 上以保留的 `SAFE_STOP` 通告（见 `docs/GLOBAL_STOP.md`）。
 - `HYDRA_UMC_CONNECTION_RECORD_ADDRESS=1`（`connections.recordAddress`）- 连接历史还会保留每个客户端的地址和用户代理，仅管理员可见。
 - `HYDRA_UMC_CAMERA_AUTH=open`（`camera.open`）- 无需票据的摄像头画面；默认需要票据。

@@ -359,10 +359,11 @@ Ottenere un certificato:
 
 ### Interruttori di accesso, cronologia delle connessioni e segnale di vita
 
-Nove opzioni ampliano ciò che il server risponde o registra; tutte partono dal valore prudente e ciascuna ha una variabile d'ambiente e un interruttore da amministratore (`PUT /api/admin/server-config`, visibile in Server Admin di STUDIO; una variabile d'ambiente blocca l'interruttore). La tabella completa è nella sezione 2k di [`docs/REMOTE_API.md`](docs/REMOTE_API.md).
+Dieci opzioni ampliano ciò che il server risponde o registra; tutte partono dal valore prudente e ciascuna ha una variabile d'ambiente e un interruttore da amministratore (`PUT /api/admin/server-config`, visibile in Server Admin di STUDIO; una variabile d'ambiente blocca l'interruttore). La tabella completa è nella sezione 2k di [`docs/REMOTE_API.md`](docs/REMOTE_API.md).
 
 - `HYDRA_UMC_HEALTH_OPEN=1` (`health.open`) - `GET /health` risponde senza accesso con un rapporto di salute minimo (senza versione, host o conteggi); disattivato, risponde `404`.
 - `HYDRA_UMC_ECOSYSTEM_HEALTH=1` (`ecosystemHealth.enabled`) - `GET /api/ecosystem/health` risponde con la salute dei servizi dell'ecosistema; disattivato, risponde `404`.
+- `HYDRA_UMC_RUL=1` (`rul.enabled`) - `POST /api/ai/anomaly-detector/rul`, la stima della vita utile residua dietro la scheda del cruscotto IA, è aperta agli operatori oltre che agli amministratori (solo quella richiesta, con un limite di dimensione e di tempo); disattivata, solo un amministratore può inviarla.
 - `HYDRA_UMC_SAFETY_PUBLISH_STOP=1` (`safety.publishGlobalStop`) - un arresto globale è annunciato anche sul ponte MQTT come `SAFE_STOP` trattenuto su `<prefisso>/safety/estop` (vedi `docs/GLOBAL_STOP.md`).
 - `HYDRA_UMC_CONNECTION_RECORD_ADDRESS=1` (`connections.recordAddress`) - la cronologia delle connessioni conserva anche indirizzo e user agent di ogni client, visibili solo agli amministratori.
 - `HYDRA_UMC_CAMERA_AUTH=open` (`camera.open`) - immagini della telecamera senza ticket; per impostazione predefinita ne richiedono uno.

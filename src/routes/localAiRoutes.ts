@@ -15,12 +15,47 @@ export function aiAccessAdminOnly(value: string | undefined): boolean {
 }
 
 /** Does this request change something in the service (not just ask it)? Used to keep the writes that shape a model for administrators. */
-export function isWriteToModel(service: string, method: string, upstreamPath: string): boolean {
+export function isWriteToModel(service: string, method: string, upstreamPath: string, rulOpen = false): boolean {
   // The anomaly detector scores any window an operator sends (POST /detect) but its baseline and drift state are shared: fitting
   // or initialising them from any other POST would let one operator change what every other client is told is normal.
   if (service !== "anomaly-detector") return false;
   if (["GET", "HEAD", "OPTIONS"].includes(method)) return false;
+  // The remaining-useful-life estimate only reads the points that come with the request; it is open to operators once the option is on.
+  if (rulOpen && method === "POST" && upstreamPath === "/rul") return false;
   return upstreamPath !== "/detect";
+}
+
+/** What the remaining-useful-life relay is allowed (see RulFile in securityConfig.ts). */
+export interface RulSettings { enabled: boolean; maxBodyBytes: number; maxPoints: number; timeoutMs: number }
+
+function boundedInt(value: unknown, min: number, max: number, fallback: number): number {
+  return typeof value === "number" && Number.isInteger(value) && value >= min && value <= max ? value : fallback;
+}
+
+/** The switch and the limits of the remaining-useful-life relay; a limit that is missing or invalid gives its default. */
+export function rulSettings(enabled: boolean, file: unknown): RulSettings {
+  const f = (typeof file === "object" && file !== null ? file : {}) as Record<string, unknown>;
+  return {
+    enabled,
+    maxBodyBytes: boundedInt(f.maxBodyBytes, 1024, 1048576, 262144),
+    maxPoints: boundedInt(f.maxPoints, 8, 100000, 5000),
+    timeoutMs: boundedInt(f.timeoutMs, 500, 60000, 8000),
+  };
+}
+
+/** Is this the remaining-useful-life request the option opens? Only the exact POST /rul of the anomaly detector. */
+export function isRulRequest(service: string, method: string, upstreamPath: string): boolean {
+  return service === "anomaly-detector" && method === "POST" && upstreamPath === "/rul";
+}
+
+/** Checks the body of a remaining-useful-life request before it is forwarded; returns the error to answer, or null. */
+export function rulBodyError(body: unknown, serialized: string, settings: RulSettings): { status: number; error: string } | null {
+  if (Buffer.byteLength(serialized, "utf8") > settings.maxBodyBytes) return { status: 413, error: `the request is larger than ${settings.maxBodyBytes} bytes` };
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return { status: 400, error: "the body must be a JSON object with a list of points" };
+  const points = (body as { points?: unknown }).points;
+  if (!Array.isArray(points)) return { status: 400, error: "the body must be a JSON object with a list of points" };
+  if (points.length > settings.maxPoints) return { status: 413, error: `more than ${settings.maxPoints} points` };
+  return null;
 }
 
 /**
@@ -39,7 +74,7 @@ export function isForwardable(service: string, method: string, upstreamPath: str
   return (method === "GET" || method === "HEAD") && allowed.includes(upstreamPath);
 }
 
-export function registerLocalAiRoutes(app: express.Express, deps: { authenticate: Middleware; requireAdmin?: Middleware; requireOperator?: Middleware; adminOnly?: boolean | (() => boolean); env?: NodeJS.ProcessEnv }): void {
+export function registerLocalAiRoutes(app: express.Express, deps: { authenticate: Middleware; requireAdmin?: Middleware; requireOperator?: Middleware; adminOnly?: boolean | (() => boolean); rul?: () => RulSettings; env?: NodeJS.ProcessEnv }): void {
   const { authenticate, requireAdmin, requireOperator } = deps;
   const isAdminOnly = () => (typeof deps.adminOnly === "function" ? deps.adminOnly() : deps.adminOnly === true);
   // HYDRA_UMC_AI_ACCESS=admin: only administrators may use the relay (it reaches services that can move robots or run models).
@@ -90,15 +125,23 @@ export function registerLocalAiRoutes(app: express.Express, deps: { authenticate
     if (!isForwardable(req.params.service, req.method, upstreamPath)) {
       return res.status(403).json({ error: `Access denied: '${req.params.service}' is reached read-only through this server (${READ_ONLY_SERVICE_PATHS[req.params.service].join(", ")})` });
     }
-    if (isWriteToModel(req.params.service, req.method, upstreamPath) && (req as any).user?.role !== "admin") {
+    const rul = deps.rul?.();
+    const rulOpen = rul?.enabled === true;
+    const isRul = rulOpen && isRulRequest(req.params.service, req.method, upstreamPath);
+    if (isWriteToModel(req.params.service, req.method, upstreamPath, rulOpen) && (req as any).user?.role !== "admin") {
       return res.status(403).json({ error: "Access denied: changing the baseline of the anomaly detector needs administrator privileges" });
     }
     const queryString = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
     const url = `http://127.0.0.1:${port}${upstreamPath}${queryString}`;
 
     const hasBody = !["GET", "HEAD"].includes(req.method);
+    const payload = hasBody ? JSON.stringify(req.body ?? {}) : undefined;
+    if (isRul && rul) {
+      const problem = rulBodyError(req.body, payload ?? "", rul);
+      if (problem) return res.status(problem.status).json({ error: problem.error });
+    }
     const controller = new AbortController();
-    const connectTimeout = setTimeout(() => controller.abort(), 10000);
+    const connectTimeout = setTimeout(() => controller.abort(), isRul && rul ? rul.timeoutMs : 10000);
     let upstream: Response;
     // the Bearer token of this service, when it has one: only this server holds it, a client never sees it
     const headers: Record<string, string> = { ...upstreamHeaders(req.params.service, deps.env ?? process.env), ...(hasBody ? { "Content-Type": "application/json" } : {}) };
@@ -106,7 +149,7 @@ export function registerLocalAiRoutes(app: express.Express, deps: { authenticate
       upstream = await fetch(url, {
         method: req.method,
         headers: Object.keys(headers).length > 0 ? headers : undefined,
-        body: hasBody ? JSON.stringify(req.body ?? {}) : undefined,
+        body: payload,
         signal: controller.signal,
       });
     } catch {
@@ -115,9 +158,18 @@ export function registerLocalAiRoutes(app: express.Express, deps: { authenticate
         available: false,
       });
     } finally {
+      if (!isRul) clearTimeout(connectTimeout);
+    }
+    // the estimate keeps its deadline while the answer is read, so a detector that stalls cannot hold the connection
+    let text: string;
+    try {
+      text = await upstream.text();
+    } catch (error) {
+      if (!isRul) throw error;
+      return res.status(503).json({ error: `Local AI service '${req.params.service}' did not answer in time`, available: false });
+    } finally {
       clearTimeout(connectTimeout);
     }
-    const text = await upstream.text();
     res.status(upstream.status);
     res.setHeader("Content-Type", upstream.headers.get("content-type") || "application/json");
     res.send(text);

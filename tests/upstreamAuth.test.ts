@@ -99,3 +99,9 @@ test("the writes that shape the anomaly baseline are for administrators", () => 
   assert.equal(isWriteToModel("anomaly-detector", "GET", "/stats"), false);
   assert.equal(isWriteToModel("vla-engine", "POST", "/tokens/encode"), false);
 });
+
+test("today the remaining-useful-life request of the anomaly detector is a write for administrators only", () => {
+  assert.equal(isWriteToModel("anomaly-detector", "POST", "/rul"), true);
+  assert.equal(isWriteToModel("anomaly-detector", "GET", "/rul"), false);
+  assert.equal(isWriteToModel("vla-engine", "POST", "/rul"), false);
+});

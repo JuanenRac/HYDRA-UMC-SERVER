@@ -206,10 +206,11 @@ Como obter um certificado:
 
 ### Interruptores de acesso, histórico de ligações e sinal de vida
 
-Nove opções alargam o que o servidor responde ou regista; todas arrancam com o valor conservador e cada uma tem uma variável de ambiente e um interruptor de administrador (`PUT /api/admin/server-config`, visível no Server Admin do STUDIO; uma variável de ambiente bloqueia o interruptor). A tabela completa está na secção 2k de [`docs/REMOTE_API.md`](docs/REMOTE_API.md).
+Dez opções alargam o que o servidor responde ou regista; todas arrancam com o valor conservador e cada uma tem uma variável de ambiente e um interruptor de administrador (`PUT /api/admin/server-config`, visível no Server Admin do STUDIO; uma variável de ambiente bloqueia o interruptor). A tabela completa está na secção 2k de [`docs/REMOTE_API.md`](docs/REMOTE_API.md).
 
 - `HYDRA_UMC_HEALTH_OPEN=1` (`health.open`) - `GET /health` responde sem iniciar sessão com um relatório de saúde mínimo (sem versão, anfitrião nem contagens); desativado, responde `404`.
 - `HYDRA_UMC_ECOSYSTEM_HEALTH=1` (`ecosystemHealth.enabled`) - `GET /api/ecosystem/health` responde com a saúde dos serviços do ecossistema; desativado, responde `404`.
+- `HYDRA_UMC_RUL=1` (`rul.enabled`) - `POST /api/ai/anomaly-detector/rul`, a estimativa de vida útil restante por trás do cartão do painel de IA, fica aberta aos operadores além dos administradores (apenas esse pedido, com um limite de tamanho e de tempo); desativada, só um administrador a pode enviar.
 - `HYDRA_UMC_SAFETY_PUBLISH_STOP=1` (`safety.publishGlobalStop`) - uma paragem global também é anunciada na ponte MQTT como um `SAFE_STOP` retido em `<prefixo>/safety/estop` (ver `docs/GLOBAL_STOP.md`).
 - `HYDRA_UMC_CONNECTION_RECORD_ADDRESS=1` (`connections.recordAddress`) - o histórico de ligações guarda também o endereço e o agente de utilizador de cada cliente, visíveis só para administradores.
 - `HYDRA_UMC_CAMERA_AUTH=open` (`camera.open`) - imagens da câmara sem bilhete; por omissão exigem um.

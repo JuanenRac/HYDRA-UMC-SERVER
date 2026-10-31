@@ -363,10 +363,11 @@ Cómo conseguir un certificado:
 
 ### Interruptores de acceso, historial de conexiones y señal de vida
 
-Nueve opciones amplían lo que el servidor responde o registra; todas parten del valor conservador y cada una tiene una variable de entorno y un interruptor de administrador (`PUT /api/admin/server-config`, visible en Server Admin de STUDIO; una variable de entorno bloquea el interruptor). La tabla completa está en la sección 2k de [`docs/REMOTE_API.md`](docs/REMOTE_API.md).
+Diez opciones amplían lo que el servidor responde o registra; todas parten del valor conservador y cada una tiene una variable de entorno y un interruptor de administrador (`PUT /api/admin/server-config`, visible en Server Admin de STUDIO; una variable de entorno bloquea el interruptor). La tabla completa está en la sección 2k de [`docs/REMOTE_API.md`](docs/REMOTE_API.md).
 
 - `HYDRA_UMC_HEALTH_OPEN=1` (`health.open`) - `GET /health` responde sin iniciar sesión con un informe de salud mínimo (sin versión, host ni recuentos); desactivado, responde `404`.
 - `HYDRA_UMC_ECOSYSTEM_HEALTH=1` (`ecosystemHealth.enabled`) - `GET /api/ecosystem/health` responde con la salud de los servicios del ecosistema; desactivado, responde `404`.
+- `HYDRA_UMC_RUL=1` (`rul.enabled`) - `POST /api/ai/anomaly-detector/rul`, la estimación de vida útil restante de la tarjeta del panel de IA, queda abierta a operadores además de administradores (solo esa petición, con un límite de tamaño y de tiempo); desactivada, solo un administrador puede enviarla.
 - `HYDRA_UMC_SAFETY_PUBLISH_STOP=1` (`safety.publishGlobalStop`) - una parada global también se anuncia en el puente MQTT como un `SAFE_STOP` retenido en `<prefijo>/safety/estop` (véase `docs/GLOBAL_STOP.md`).
 - `HYDRA_UMC_CONNECTION_RECORD_ADDRESS=1` (`connections.recordAddress`) - el historial de conexiones guarda también la dirección y el agente de usuario de cada cliente, visibles solo para administradores.
 - `HYDRA_UMC_CAMERA_AUTH=open` (`camera.open`) - imágenes de cámara sin ticket; por defecto lo exigen.

@@ -59,7 +59,7 @@ import { registerTotpRoutes } from "./routes/totpRoutes";
 import { registerSettingsRoutes } from "./routes/settings";
 import { registerStaticRoutes } from "./routes/staticRoutes";
 import { registerAssistantRoutes } from "./routes/assistantRoutes";
-import { registerLocalAiRoutes } from "./routes/localAiRoutes";
+import { registerLocalAiRoutes, rulSettings } from "./routes/localAiRoutes";
 import { registerInfoRoutes } from "./routes/infoRoutes";
 import { registerPowerRoutes } from "./routes/powerRoutes";
 import { registerWorksRoutes } from "./routes/worksRoutes";
@@ -302,8 +302,8 @@ async function startServer() {
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
     save: (file) => {
-      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, safety, camera, install, websocket, logging } = file;
-      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, safety, camera, install, websocket, logging });
+      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, rul, safety, camera, install, websocket, logging } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, rul, safety, camera, install, websocket, logging });
     },
     tlsActive: startupTls.enabled,
     bleActiveMode: resolveBleMode(securityEnvFrom(process.env).bleGatt, loadServerConfig()).value,
@@ -398,7 +398,7 @@ async function startServer() {
   registerCameraRoutes(app, { authenticate, requireAdmin, mediaAccess, issueMediaTicket: issueMediaTicketFor, dataPath, resolveWithinDataDir, cameraProcesses });
 
   if (security.aiAdminOnly()) console.log("[SECURITY] The local AI relay (/api/ai/*) answers administrators only.");
-  registerLocalAiRoutes(app, { authenticate, requireAdmin, requireOperator, adminOnly: () => security.aiAdminOnly() });
+  registerLocalAiRoutes(app, { authenticate, requireAdmin, requireOperator, adminOnly: () => security.aiAdminOnly(), rul: () => rulSettings(security.rulEnabled(), (loadServerConfig() as { rul?: unknown }).rul) });
 
   registerSystemRoutes(app, { authenticate, requireAdmin, industrialLog, infoAccess });
 

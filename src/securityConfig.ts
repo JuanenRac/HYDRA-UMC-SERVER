@@ -87,6 +87,18 @@ export interface EcosystemHealthFile {
   probeTimeoutMs?: number;
 }
 
+/** The remaining-useful-life relay (POST /api/ai/anomaly-detector/rul, src/routes/localAiRoutes.ts). */
+export interface RulFile {
+  /** Whether an operator may ask the anomaly detector for a remaining-useful-life estimate through the relay (default: no; only an administrator may then). */
+  enabled?: boolean;
+  /** Largest request body in bytes (1024 to 1048576; 262144 by default). Read from the file only. */
+  maxBodyBytes?: number;
+  /** Largest number of points in one request (8 to 100000; 5000 by default). Read from the file only. */
+  maxPoints?: number;
+  /** How long to wait for the detector, in milliseconds (500 to 60000; 8000 by default). Read from the file only. */
+  timeoutMs?: number;
+}
+
 /** The live pictures and saved photos and recordings of the cameras (src/mediaTickets.ts). */
 export interface CameraFile {
   /** Whether the pictures answer without a ticket or a signed-in client (default: no; they then need one). */
@@ -135,6 +147,7 @@ export interface SecurityFile {
   connections?: ConnectionsFile;
   health?: HealthFile;
   ecosystemHealth?: EcosystemHealthFile;
+  rul?: RulFile;
   safety?: SafetyFile;
   camera?: CameraFile;
   install?: InstallFile;
@@ -158,6 +171,7 @@ export interface SecurityEnv {
   connectionRecordAddress?: string;
   healthOpen?: string;
   ecosystemHealth?: string;
+  rul?: string;
   safetyPublishStop?: string;
   cameraAuth?: string;
   wsQueryToken?: string;
@@ -184,6 +198,7 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     connectionRecordAddress: env.HYDRA_UMC_CONNECTION_RECORD_ADDRESS,
     healthOpen: env.HYDRA_UMC_HEALTH_OPEN,
     ecosystemHealth: env.HYDRA_UMC_ECOSYSTEM_HEALTH,
+    rul: env.HYDRA_UMC_RUL,
     safetyPublishStop: env.HYDRA_UMC_SAFETY_PUBLISH_STOP,
     cameraAuth: env.HYDRA_UMC_CAMERA_AUTH,
     wsQueryToken: env.HYDRA_UMC_WS_QUERY_TOKEN,
@@ -273,6 +288,13 @@ export function resolveHealthOpen(env: string | undefined, file: SecurityFile): 
 export function resolveEcosystemHealth(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
   if (isSet(env)) return { value: env.trim() === "1", source: "env" };
   if (typeof file.ecosystemHealth?.enabled === "boolean") return { value: file.ecosystemHealth.enabled, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** The remaining-useful-life relay for operators: only the exact word "1" in the environment switches it on; the default is off. */
+export function resolveRul(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.rul?.enabled === "boolean") return { value: file.rul.enabled, source: "config" };
   return { value: false, source: "default" };
 }
 
@@ -411,6 +433,7 @@ export interface SecuritySnapshot {
   connections: { recordAddress: { value: boolean; source: Source } };
   health: { open: { value: boolean; source: Source } };
   ecosystemHealth: { enabled: { value: boolean; source: Source } };
+  rul: { enabled: { value: boolean; source: Source } };
   safety: { publishGlobalStop: { value: boolean; source: Source } };
   camera: { open: { value: boolean; source: Source }; credentialsViaEnv: { value: boolean; source: Source } };
   install: { newInstallTls: { value: boolean; source: Source } };
@@ -482,6 +505,11 @@ export class SecurityConfig {
     return resolveEcosystemHealth(this.options.env.ecosystemHealth, this.file).value;
   }
 
+  /** Whether an operator may use the remaining-useful-life relay (off unless an administrator turned it on). */
+  rulEnabled(): boolean {
+    return resolveRul(this.options.env.rul, this.file).value;
+  }
+
   /** Whether the camera pictures answer without a ticket (off unless an administrator opened them). */
   cameraOpen(): boolean {
     return resolveCameraOpen(this.options.env.cameraAuth, this.file).value;
@@ -549,6 +577,7 @@ export class SecurityConfig {
       connections: { recordAddress: resolveConnectionRecordAddress(this.options.env.connectionRecordAddress, this.file) },
       health: { open: resolveHealthOpen(this.options.env.healthOpen, this.file) },
       ecosystemHealth: { enabled: resolveEcosystemHealth(this.options.env.ecosystemHealth, this.file) },
+      rul: { enabled: resolveRul(this.options.env.rul, this.file) },
       safety: { publishGlobalStop: resolveSafetyPublishStop(this.options.env.safetyPublishStop, this.file) },
       camera: { open: resolveCameraOpen(this.options.env.cameraAuth, this.file), credentialsViaEnv: resolveCameraCredentialsViaEnv(this.options.env.cameraCredentialsViaEnv, this.file) },
       install: { newInstallTls: resolveNewInstallTls(this.options.env.newInstallTls, this.file) },
@@ -587,7 +616,7 @@ export class SecurityConfig {
   /** Applies a change asked for by an administrator; returns the new state and the warnings to show. */
   update(patch: any, actor: string): { snapshot: SecuritySnapshot; warnings: string[]; appliesOnRestart: boolean } {
     const warnings: string[] = [];
-    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined };
+    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined };
     let appliesOnRestart = false;
     const log = this.options.log ?? (() => undefined);
     const lockedBy = (name: string) => new SecurityConfigError(409, `${name} is set in the environment of this server; remove it there to change it here`);
@@ -762,6 +791,18 @@ export class SecurityConfig {
       next.ecosystemHealth = merged;
     }
 
+    if (patch.rul !== undefined) {
+      const rulPatch = patch.rul;
+      if (typeof rulPatch !== "object" || rulPatch === null || Array.isArray(rulPatch)) throw new SecurityConfigError(400, "rul must be an object");
+      const merged: RulFile = { ...(next.rul ?? {}) };
+      if (rulPatch.enabled !== undefined) {
+        if (typeof rulPatch.enabled !== "boolean") throw new SecurityConfigError(400, "rul.enabled must be true or false");
+        if (resolveRul(this.options.env.rul, this.file).source === "env") throw lockedBy("HYDRA_UMC_RUL");
+        merged.enabled = rulPatch.enabled;
+      }
+      next.rul = merged;
+    }
+
     if (patch.camera !== undefined) {
       const cameraPatch = patch.camera;
       if (typeof cameraPatch !== "object" || cameraPatch === null || Array.isArray(cameraPatch)) throw new SecurityConfigError(400, "camera must be an object");
@@ -906,6 +947,9 @@ export class SecurityConfig {
     }
     if (patch.ecosystemHealth !== undefined) {
       log(`[SECURITY] ${actor} turned the health of the ecosystem (GET /api/ecosystem/health) ${snapshot.ecosystemHealth.enabled.value ? "on" : "off"}.`);
+    }
+    if (patch.rul !== undefined) {
+      log(`[SECURITY] ${actor} turned the remaining-useful-life relay for operators (POST /api/ai/anomaly-detector/rul) ${snapshot.rul.enabled.value ? "on" : "off"}.`);
     }
     if (patch.safety !== undefined) {
       log(`[SECURITY] ${actor} ${snapshot.safety.publishGlobalStop.value ? "allowed" : "forbade"} announcing a global stop on the MQTT bridge.`);

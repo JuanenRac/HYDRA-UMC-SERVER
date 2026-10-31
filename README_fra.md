@@ -366,10 +366,11 @@ Obtenir un certificat :
 
 ### Interrupteurs d'accès, historique des connexions et signe de vie
 
-Neuf options élargissent ce que le serveur répond ou enregistre ; toutes démarrent sur la valeur prudente et chacune a une variable d'environnement et un interrupteur d'administrateur (`PUT /api/admin/server-config`, visible dans Server Admin de STUDIO ; une variable d'environnement verrouille l'interrupteur). Le tableau complet est dans la section 2k de [`docs/REMOTE_API.md`](docs/REMOTE_API.md).
+Dix options élargissent ce que le serveur répond ou enregistre ; toutes démarrent sur la valeur prudente et chacune a une variable d'environnement et un interrupteur d'administrateur (`PUT /api/admin/server-config`, visible dans Server Admin de STUDIO ; une variable d'environnement verrouille l'interrupteur). Le tableau complet est dans la section 2k de [`docs/REMOTE_API.md`](docs/REMOTE_API.md).
 
 - `HYDRA_UMC_HEALTH_OPEN=1` (`health.open`) - `GET /health` répond sans connexion par un rapport de santé minimal (sans version, hôte ni compteurs) ; désactivé, il répond `404`.
 - `HYDRA_UMC_ECOSYSTEM_HEALTH=1` (`ecosystemHealth.enabled`) - `GET /api/ecosystem/health` répond avec la santé des services de l'écosystème ; désactivé, il répond `404`.
+- `HYDRA_UMC_RUL=1` (`rul.enabled`) - `POST /api/ai/anomaly-detector/rul`, l'estimation de durée de vie restante derrière la carte du tableau de bord IA, est ouverte aux opérateurs en plus des administrateurs (cette seule requête, avec une limite de taille et de durée) ; désactivée, seul un administrateur peut l'envoyer.
 - `HYDRA_UMC_SAFETY_PUBLISH_STOP=1` (`safety.publishGlobalStop`) - un arrêt global est aussi annoncé sur le pont MQTT comme un `SAFE_STOP` retenu sur `<préfixe>/safety/estop` (voir `docs/GLOBAL_STOP.md`).
 - `HYDRA_UMC_CONNECTION_RECORD_ADDRESS=1` (`connections.recordAddress`) - l'historique des connexions garde aussi l'adresse et l'agent utilisateur de chaque client, visibles des seuls administrateurs.
 - `HYDRA_UMC_CAMERA_AUTH=open` (`camera.open`) - images de caméra sans ticket ; par défaut elles en exigent un.

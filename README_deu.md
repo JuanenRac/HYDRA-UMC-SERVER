@@ -369,10 +369,11 @@ Ein Zertifikat besorgen:
 
 ### Zugriffsschalter, Verbindungsverlauf und Lebenszeichen
 
-Neun Optionen erweitern, was der Server beantwortet oder aufzeichnet; alle starten mit dem vorsichtigen Wert, und jede hat eine Umgebungsvariable und einen Administrator-Schalter (`PUT /api/admin/server-config`, sichtbar in Server Admin von STUDIO; eine Umgebungsvariable sperrt den Schalter). Die vollständige Tabelle steht in Abschnitt 2k von [`docs/REMOTE_API.md`](docs/REMOTE_API.md).
+Zehn Optionen erweitern, was der Server beantwortet oder aufzeichnet; alle starten mit dem vorsichtigen Wert, und jede hat eine Umgebungsvariable und einen Administrator-Schalter (`PUT /api/admin/server-config`, sichtbar in Server Admin von STUDIO; eine Umgebungsvariable sperrt den Schalter). Die vollständige Tabelle steht in Abschnitt 2k von [`docs/REMOTE_API.md`](docs/REMOTE_API.md).
 
 - `HYDRA_UMC_HEALTH_OPEN=1` (`health.open`) - `GET /health` antwortet ohne Anmeldung mit einem knappen Gesundheitsbericht (ohne Version, Host oder Zähler); aus, antwortet es mit `404`.
 - `HYDRA_UMC_ECOSYSTEM_HEALTH=1` (`ecosystemHealth.enabled`) - `GET /api/ecosystem/health` antwortet mit der Gesundheit der Dienste des Ökosystems; aus, antwortet es mit `404`.
+- `HYDRA_UMC_RUL=1` (`rul.enabled`) - `POST /api/ai/anomaly-detector/rul`, die Schätzung der Restnutzungsdauer hinter der Karte des KI-Dashboards, steht neben Administratoren auch Bedienern offen (nur diese Anfrage, mit Begrenzung von Größe und Zeit); aus, darf nur ein Administrator sie senden.
 - `HYDRA_UMC_SAFETY_PUBLISH_STOP=1` (`safety.publishGlobalStop`) - ein globaler Stopp wird zusätzlich auf der MQTT-Brücke als gehaltenes `SAFE_STOP` auf `<Präfix>/safety/estop` angekündigt (siehe `docs/GLOBAL_STOP.md`).
 - `HYDRA_UMC_CONNECTION_RECORD_ADDRESS=1` (`connections.recordAddress`) - der Verbindungsverlauf behält auch Adresse und User-Agent jedes Clients, nur für Administratoren sichtbar.
 - `HYDRA_UMC_CAMERA_AUTH=open` (`camera.open`) - Kamerabilder ohne Ticket; standardmäßig verlangen sie eines.
