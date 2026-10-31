@@ -79,6 +79,19 @@ if errorlevel 1 (
   %KEEP_OPEN%
   exit /b 1
 )
+REM The 3D models are not in the STUDIO tree: fetch them from the verified package before the build, so what this
+REM server serves has them. Offline: put the package in %USERPROFILE%\.cache\hydra-umc\meshes or set
+REM HYDRA_UMC_MESH_PACKAGE to its path (HYDRA-UMC-STUDIO docs\MESH_PACKAGE.md).
+if exist scripts\mesh_pack.mjs (
+  node scripts\mesh_pack.mjs ensure --source auto
+  if errorlevel 1 (
+    popd
+    echo.
+    echo STUDIO 3D models are missing and could not be fetched - see the message above.
+    %KEEP_OPEN%
+    exit /b 1
+  )
+)
 call npm run build
 if errorlevel 1 (
   popd

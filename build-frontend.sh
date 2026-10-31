@@ -75,6 +75,12 @@ fi
 echo "========================================"
 echo " Building HYDRA-UMC STUDIO ($STUDIO_DIR)"
 echo "========================================"
+# The 3D models are not in the STUDIO tree: fetch them from the verified package before the build, so what this
+# server serves has them. Offline: put the package in ~/.cache/hydra-umc/meshes or set HYDRA_UMC_MESH_PACKAGE to its
+# path (HYDRA-UMC-STUDIO docs/MESH_PACKAGE.md).
+if [ -f "$STUDIO_DIR/scripts/mesh_pack.mjs" ]; then
+  (cd "$STUDIO_DIR" && node scripts/mesh_pack.mjs ensure --source auto) || { echo "STUDIO 3D models are missing and could not be fetched - see the message above."; exit 1; }
+fi
 (cd "$STUDIO_DIR" && npm install && npm run build)
 if [ $? -ne 0 ]; then
   echo ""
