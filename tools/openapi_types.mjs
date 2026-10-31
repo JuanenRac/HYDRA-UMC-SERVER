@@ -73,6 +73,7 @@ export const SCHEMAS = {
       stoppedCount: int,
       failedCount: int,
       persisted: bool,
+      announced: { type: "boolean", description: "Present only when announcing a global stop is configured (safety.publishGlobalStop): whether the retained SAFE_STOP went out on the MQTT bridge." },
       robots: {
         type: "array",
         items: {
@@ -255,6 +256,34 @@ export const SCHEMAS = {
       agent: { type: "string", description: "Administrators only, and only when connections.recordAddress is on." },
     },
   },
+  GlobalStopReleased: {
+    type: "object",
+    required: ["success", "announced"],
+    properties: { success: bool, announced: { type: "boolean", description: "Whether the retained READY went out on the MQTT bridge (false when announcing is not configured or the broker is not connected)." } },
+  },
+  HealthReport: {
+    type: "object",
+    required: ["schema_version", "state", "timestamp_utc", "checks"],
+    description: "The HealthReport contract of the SDK. Nothing else about the host is in it.",
+    properties: { schema_version: str, state: str, timestamp_utc: str, checks: { type: "object" }, service: str },
+  },
+  RobotLiveness: {
+    type: "object",
+    required: ["schema_version", "stale_after_s", "robots"],
+    properties: {
+      schema_version: str,
+      stale_after_s: int,
+      robots: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["controller_id", "robot_id", "state"],
+          description: "state is live (news within stale_after_s), stale (older news) or unknown (none since the server started). The flag online of the roster is not read.",
+          properties: { controller_id: str, robot_id: int, state: str, last_update_utc: str, age_s: int, source: { type: "string", description: "state (a command or a change of its state) or heartbeat." } },
+        },
+      },
+    },
+  },
   ConnectionClientList: {
     type: "object",
     required: ["clients"],
@@ -298,6 +327,10 @@ export const RESPONSES = {
   "GET /api/adapters/{adapterId}": ref("Passthrough"),
   "GET /api/hardware/canota/version": ref("Passthrough"),
   "POST /api/stop-all": ref("StopAllResult"),
+  "POST /api/stop-all/release": ref("GlobalStopReleased"),
+  "GET /health": ref("HealthReport"),
+  "GET /api/robots/liveness": ref("RobotLiveness"),
+  "POST /api/robot/{id}/heartbeat": ref("Success"),
   "POST /api/robot/{id}/claim": ref("Reservation"),
   "POST /api/robot/{id}/release": ref("Reservation"),
   "POST /api/camera/{id}/snapshot": ref("CameraCapture"),

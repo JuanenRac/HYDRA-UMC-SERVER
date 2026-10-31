@@ -50,6 +50,8 @@ import type { BleGateway } from "./ble/bleGateway";
 import { cameraAuthRequiredByDefault, issueMediaTicket, mediaTicketKey, verifyMediaTicket } from "./mediaTickets";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerConnectionRoutes } from "./routes/connectionRoutes";
+import { registerLivenessRoutes } from "./routes/livenessRoutes";
+import { RobotLivenessTracker } from "./robotLiveness";
 import { connectionTracker, setRecordAddress } from "./connections";
 import { registerTotpRoutes } from "./routes/totpRoutes";
 import { registerSettingsRoutes } from "./routes/settings";
@@ -232,9 +234,13 @@ async function startServer() {
   let bleGateway: BleGateway | null = null;
   // Off unless an administrator (or HYDRA_UMC_MQTT_BRIDGE) turns the MQTT bridge on: then the robots' state goes to the broker of the cell and, in "commands" mode, a command published there is carried out.
   let mqttBridge: MqttBridge | null = null;
+  const livenessTracker = new RobotLivenessTracker();
   const hub = createWsHub({
     setSettings,
-    onRobotDelta: telemetryProducer ? (deltas) => telemetryProducer.record(deltas) : undefined,
+    onRobotDelta: (deltas) => {
+      for (const delta of deltas) livenessTracker.touch(delta.robotId, "state");
+      telemetryProducer?.record(deltas);
+    },
     onStateChanged: () => { bleGateway?.publishState(); mqttBridge?.publishState(); },
   });
   const { wsClients, broadcastSettings, broadcastRobotDelta } = hub;
@@ -293,8 +299,8 @@ async function startServer() {
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
     save: (file) => {
-      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections } = file;
-      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections });
+      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, safety } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, safety });
     },
     tlsActive: startupTls.enabled,
     bleActiveMode: resolveBleMode(securityEnvFrom(process.env).bleGatt, loadServerConfig()).value,
@@ -328,6 +334,15 @@ async function startServer() {
     audit,
     onClaimsChanged,
     robotEnableAllowed: () => security.robotEnableAllowed(),
+    // A global stop is also announced on the MQTT bridge only when an administrator allowed it (safety.publishGlobalStop, off by default).
+    announceGlobalStop: () => (security.globalStopPublished() ? mqttBridge?.publishSafety("SAFE_STOP", "global stop") ?? false : undefined),
+    announceGlobalStopReleased: () => (security.globalStopPublished() ? mqttBridge?.publishSafety("READY", "global stop released") ?? false : false),
+    requireAdmin,
+  });
+
+  registerLivenessRoutes(app, {
+    authenticate, requireOperator, getSettings, tracker: livenessTracker,
+    staleAfterS: () => (loadServerConfig() as { liveness?: { staleAfterS?: unknown } }).liveness?.staleAfterS,
   });
 
   registerRobotRoutes(app, {
@@ -388,7 +403,7 @@ async function startServer() {
     CONNECTOR_HUB_TIMEOUT_MS, SPI_BRIDGE_URL, SPI_BRIDGE_VERSION_TIMEOUT_MS, SPI_BRIDGE_FLASH_TIMEOUT_MS,
   });
 
-  registerInfoRoutes(app, { infoAccess, getSettings, REMOTE_API_VERSION });
+  registerInfoRoutes(app, { infoAccess, getSettings, REMOTE_API_VERSION, healthOpen: () => security.healthOpen() });
 
   registerPowerRoutes(app);
 

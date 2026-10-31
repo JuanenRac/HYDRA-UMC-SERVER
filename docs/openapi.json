@@ -237,6 +237,10 @@
           "persisted": {
             "type": "boolean"
           },
+          "announced": {
+            "type": "boolean",
+            "description": "Present only when announcing a global stop is configured (safety.publishGlobalStop): whether the retained SAFE_STOP went out on the MQTT bridge."
+          },
           "robots": {
             "type": "array",
             "items": {
@@ -942,6 +946,98 @@
           "agent": {
             "type": "string",
             "description": "Administrators only, and only when connections.recordAddress is on."
+          }
+        }
+      },
+      "GlobalStopReleased": {
+        "type": "object",
+        "required": [
+          "success",
+          "announced"
+        ],
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "announced": {
+            "type": "boolean",
+            "description": "Whether the retained READY went out on the MQTT bridge (false when announcing is not configured or the broker is not connected)."
+          }
+        }
+      },
+      "HealthReport": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "state",
+          "timestamp_utc",
+          "checks"
+        ],
+        "description": "The HealthReport contract of the SDK. Nothing else about the host is in it.",
+        "properties": {
+          "schema_version": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "timestamp_utc": {
+            "type": "string"
+          },
+          "checks": {
+            "type": "object"
+          },
+          "service": {
+            "type": "string"
+          }
+        }
+      },
+      "RobotLiveness": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "stale_after_s",
+          "robots"
+        ],
+        "properties": {
+          "schema_version": {
+            "type": "string"
+          },
+          "stale_after_s": {
+            "type": "integer"
+          },
+          "robots": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "controller_id",
+                "robot_id",
+                "state"
+              ],
+              "description": "state is live (news within stale_after_s), stale (older news) or unknown (none since the server started). The flag online of the roster is not read.",
+              "properties": {
+                "controller_id": {
+                  "type": "string"
+                },
+                "robot_id": {
+                  "type": "integer"
+                },
+                "state": {
+                  "type": "string"
+                },
+                "last_update_utc": {
+                  "type": "string"
+                },
+                "age_s": {
+                  "type": "integer"
+                },
+                "source": {
+                  "type": "string",
+                  "description": "state (a command or a change of its state) or heartbeat."
+                }
+              }
+            }
           }
         }
       },
@@ -3061,6 +3157,53 @@
         ]
       }
     },
+    "/api/robot/{id}/heartbeat": {
+      "post": {
+        "tags": [
+          "robot"
+        ],
+        "summary": "POST /api/robot/{id}/heartbeat",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/robot/{id}/jog-arm": {
       "post": {
         "tags": [
@@ -3240,6 +3383,33 @@
         ]
       }
     },
+    "/api/robots/liveness": {
+      "get": {
+        "tags": [
+          "robots"
+        ],
+        "summary": "GET /api/robots/liveness",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RobotLiveness"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/safety-limits": {
       "get": {
         "tags": [
@@ -3398,6 +3568,33 @@
           }
         ],
         "x-rate-limited": true
+      }
+    },
+    "/api/stop-all/release": {
+      "post": {
+        "tags": [
+          "stop-all"
+        ],
+        "summary": "POST /api/stop-all/release",
+        "description": "Requires a signed-in account with the admin role.",
+        "x-access": "admin",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GlobalStopReleased"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/api/system/bluetooth/pair": {
@@ -4524,6 +4721,38 @@
             "bearerAuth": []
           }
         ]
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "GET /health",
+        "description": "No authentication required by the route itself.",
+        "x-access": "public",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthReport"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/metrics": {

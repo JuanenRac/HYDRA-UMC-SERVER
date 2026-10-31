@@ -11,7 +11,10 @@ import fs from "fs";
 import { realSettings, remoteAccessAllowed } from "../serverPolicy";
 import { registry as metricsRegistry } from "../metrics";
 
-export function registerInfoRoutes(app: express.Express, deps: { infoAccess: express.RequestHandler; getSettings: () => any; REMOTE_API_VERSION: number }): void {
+export function registerInfoRoutes(
+  app: express.Express,
+  deps: { infoAccess: express.RequestHandler; getSettings: () => any; REMOTE_API_VERSION: number; healthOpen?: () => boolean },
+): void {
   const { infoAccess, getSettings, REMOTE_API_VERSION } = deps;
   let pkgVersion = "0.0.0";
   try {
@@ -40,6 +43,23 @@ export function registerInfoRoutes(app: express.Express, deps: { infoAccess: exp
       console.error("Error collecting Prometheus metrics", e);
       res.status(500).end("Error collecting metrics");
     }
+  });
+
+  // Health of the process, for a supervisor or a load balancer that cannot sign in: the HealthReport shape of the SDK and nothing else
+  // (no version, no host, no counts). It is behind a switch of Server Admin (health.open, off by default): while it is off the
+  // route answers 404, exactly as a server without it would.
+  app.get("/health", (req, res) => {
+    if (!deps.healthOpen?.()) {
+      res.status(404).end();
+      return;
+    }
+    res.json({
+      schema_version: "1.0",
+      state: "READY",
+      timestamp_utc: new Date().toISOString(),
+      checks: { process: "ok" },
+      service: "hydra-umc-server",
+    });
   });
 
   // Discovery/identity endpoint - what a remote client (HYDRA-UMC SUITE

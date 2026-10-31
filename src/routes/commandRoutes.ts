@@ -45,6 +45,16 @@ export interface CommandRouteDeps {
   onClaimsChanged?: () => void;
   /** Whether the `enable` command may bring a disabled robot back (security option; off when absent). */
   robotEnableAllowed?: () => boolean;
+  /**
+   * Announces a global stop outside this server (the retained SAFE_STOP of the MQTT bridge, when the administrator allowed it).
+   * Returns whether the announcement went out, or undefined when announcing is not configured (the answer then has no `announced` field).
+   * It is called after the stop was applied and must never delay or break it.
+   */
+  announceGlobalStop?: (reason: string) => boolean | undefined;
+  /** Announces that an administrator released the global stop (READY). Returns whether it went out. */
+  announceGlobalStopReleased?: (reason: string) => boolean;
+  /** The guard of the administrator-only routes. */
+  requireAdmin?: Middleware;
 }
 
 /** The playback state a stopped robot ends in; shared by the single-robot "stop" and the global stop so they can never disagree. */
@@ -166,6 +176,16 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
       detail: { stoppedCount, failedCount, reservedByOthers },
     });
     onClaimsChanged?.();
+    // Outside announcement (optional, behind a switch): after the stop is applied in memory, never before, and never able to break it.
+    let announced: boolean | undefined;
+    if (deps.announceGlobalStop) {
+      try {
+        announced = deps.announceGlobalStop(`global stop by ${user?.username ?? "unknown"}`);
+      } catch (error) {
+        announced = false;
+        industrialLog(`GLOBAL STOP: the announcement failed (${error instanceof Error ? error.message : "unknown error"}).`);
+      }
+    }
     let persisted = true;
     try {
       await queueSettingsWrite(getSettings());
@@ -178,7 +198,22 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     } catch (error) {
       industrialLog(`GLOBAL STOP: the broadcast failed (${error instanceof Error ? error.message : "unknown error"}).`);
     }
-    res.json({ success: failedCount === 0, stoppedCount, failedCount, persisted, robots: results });
+    res.json({ success: failedCount === 0, stoppedCount, failedCount, persisted, ...(announced === undefined ? {} : { announced }), robots: results });
+  });
+
+  // RELEASE OF THE GLOBAL STOP: the retained SAFE_STOP stays on the broker until somebody says it is over. Only an administrator may say it,
+  // it moves no robot (a robot is brought back by its own commands) and it is recorded in the audit record.
+  app.post("/api/stop-all/release", authenticate, deps.requireAdmin ?? ((_req: any, _res: any, next: any) => next()), (req: any, res: any) => {
+    const user = req.user;
+    let announced = false;
+    try {
+      announced = deps.announceGlobalStopReleased?.(`released by ${user?.username ?? "unknown"}`) ?? false;
+    } catch (error) {
+      industrialLog(`GLOBAL STOP: the release announcement failed (${error instanceof Error ? error.message : "unknown error"}).`);
+    }
+    industrialLog(`GLOBAL STOP released by ${user?.username ?? "unknown"} from ${req.ip ?? "unknown"}; announced: ${announced ? "yes" : "no"}.`);
+    audit?.record({ type: "stop-all-release", outcome: announced ? "ok" : "failed", userId: user?.id, username: user?.username, ip: req.ip, detail: { announced } });
+    res.json({ success: true, announced });
   });
 
   // Direct Atomic API for Industrial Control

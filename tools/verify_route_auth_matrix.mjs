@@ -33,6 +33,8 @@ const PUBLIC_ROUTES = new Set([
   "POST /api/refresh",
   "POST /api/logout",
   "GET /api/hydra-info",
+  // The health of the process: answers 404 until an administrator opens it (health.open), then a HealthReport with nothing else in it.
+  "GET /health",
   // The kiosk power buttons: accepted only for a direct request from the machine itself, never probed here.
   "POST /api/system/reboot",
   "POST /api/system/shutdown",

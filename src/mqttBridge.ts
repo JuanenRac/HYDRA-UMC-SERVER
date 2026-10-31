@@ -141,6 +141,8 @@ export function readSecret(direct: string | undefined, filePath: string | undefi
 // ---- topics and payloads ---------------------------------------------------------------------------------------
 
 export const robotTopic = (prefix: string, robotId: number): string => `${prefix}/robot_${robotId}`;
+/** The topic of the retained safety state of the installation (global stop). */
+export const safetyTopic = (prefix: string): string => `${prefix}/safety/estop`;
 
 /** The commands a message on the broker may carry out: the control commands of the route, never the edits of a robot's data. */
 export function mqttCommandAllowed(command: string, allowed: ReadonlySet<string>): boolean {
@@ -323,6 +325,24 @@ export class MqttBridge {
         this.publishIfChanged(`${base}/tool`, JSON.stringify(robot.tool ?? null));
       }
     }
+  }
+
+  /**
+   * Announces the safety state of the whole installation on `<prefix>/safety/estop`: a retained message, QoS 1, in the closed
+   * shape of the SafetyState contract of the SDK (`SAFE_STOP` after a global stop, `READY` once an administrator released it).
+   * Returns false when the broker is not connected, so the caller can say the announcement did not go out.
+   */
+  publishSafety(state: "SAFE_STOP" | "READY", reason: string): boolean {
+    if (!this.client || !this.connected || this.stopped) return false;
+    const payload = JSON.stringify({
+      schema_version: "1.0",
+      state,
+      source: "hydra-umc-server",
+      timestamp_utc: new Date(this.now()).toISOString(),
+      reason: reason.slice(0, 120),
+    });
+    this.client.publish(safetyTopic(this.prefix), payload, { qos: 1, retain: true });
+    return true;
   }
 
   private publishIfChanged(topic: string, payload: string): void {

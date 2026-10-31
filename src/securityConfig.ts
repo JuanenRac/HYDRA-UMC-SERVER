@@ -69,6 +69,18 @@ export interface ConnectionsFile {
   recordAddress?: boolean;
 }
 
+/** The unauthenticated health route of the server (GET /health, src/routes/infoRoutes.ts). */
+export interface HealthFile {
+  /** Whether GET /health answers without a sign-in (default: no; the route then looks as if it did not exist). */
+  open?: boolean;
+}
+
+/** What the global stop does beyond stopping the robots of this server. */
+export interface SafetyFile {
+  /** Whether a global stop is also announced on the MQTT bridge as a retained SafetyState (default: no). */
+  publishGlobalStop?: boolean;
+}
+
 export const DEFAULT_VOICE_MIN_CONFIDENCE = 0.6;
 export const MAVLINK_SIGNING_KEY_BYTES = 32;
 
@@ -83,6 +95,8 @@ export interface SecurityFile {
   mavlink?: MavlinkFile;
   robots?: RobotsFile;
   connections?: ConnectionsFile;
+  health?: HealthFile;
+  safety?: SafetyFile;
 }
 
 export interface SecurityEnv {
@@ -99,6 +113,8 @@ export interface SecurityEnv {
   mavlinkAllowUnsigned?: string;
   robotAllowEnable?: string;
   connectionRecordAddress?: string;
+  healthOpen?: string;
+  safetyPublishStop?: string;
 }
 
 export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
@@ -116,6 +132,8 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     mavlinkAllowUnsigned: env.HYDRA_UMC_BRIDGE_UAV_SIGNING_ALLOW_UNSIGNED,
     robotAllowEnable: env.HYDRA_UMC_ROBOT_ALLOW_ENABLE,
     connectionRecordAddress: env.HYDRA_UMC_CONNECTION_RECORD_ADDRESS,
+    healthOpen: env.HYDRA_UMC_HEALTH_OPEN,
+    safetyPublishStop: env.HYDRA_UMC_SAFETY_PUBLISH_STOP,
   };
 }
 
@@ -184,6 +202,20 @@ export function resolveRobotAllowEnable(env: string | undefined, file: SecurityF
 export function resolveConnectionRecordAddress(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
   if (isSet(env)) return { value: env.trim() === "1", source: "env" };
   if (typeof file.connections?.recordAddress === "boolean") return { value: file.connections.recordAddress, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** The unauthenticated GET /health: only the exact word "1" in the environment switches it on; the default is off. */
+export function resolveHealthOpen(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.health?.open === "boolean") return { value: file.health.open, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** Announcing a global stop on the MQTT bridge: only the exact word "1" in the environment switches it on; the default is off. */
+export function resolveSafetyPublishStop(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.safety?.publishGlobalStop === "boolean") return { value: file.safety.publishGlobalStop, source: "config" };
   return { value: false, source: "default" };
 }
 
@@ -271,6 +303,8 @@ export interface SecuritySnapshot {
   voice: { includeHeardText: { value: boolean; source: Source }; minConfidence: { value: number; source: Source } };
   robots: { allowEnable: { value: boolean; source: Source } };
   connections: { recordAddress: { value: boolean; source: Source } };
+  health: { open: { value: boolean; source: Source } };
+  safety: { publishGlobalStop: { value: boolean; source: Source } };
   /** The signing key itself is never part of this; only where its file is. */
   mavlink: { signingKeyFile: { value: string; source: Source }; signingAllowUnsigned: { value: boolean; source: Source }; signing: boolean; appliesOnRestart: boolean };
 }
@@ -327,6 +361,16 @@ export class SecurityConfig {
     return resolveConnectionRecordAddress(this.options.env.connectionRecordAddress, this.file).value;
   }
 
+  /** Whether GET /health answers without a sign-in (off unless an administrator turned it on). */
+  healthOpen(): boolean {
+    return resolveHealthOpen(this.options.env.healthOpen, this.file).value;
+  }
+
+  /** Whether a global stop is also announced on the MQTT bridge (off unless an administrator turned it on). */
+  globalStopPublished(): boolean {
+    return resolveSafetyPublishStop(this.options.env.safetyPublishStop, this.file).value;
+  }
+
   /** Whether the `enable` command may bring a disabled robot back (off unless an administrator turned it on). */
   robotEnableAllowed(): boolean {
     return resolveRobotAllowEnable(this.options.env.robotAllowEnable, this.file).value;
@@ -362,6 +406,8 @@ export class SecurityConfig {
       },
       robots: { allowEnable: resolveRobotAllowEnable(this.options.env.robotAllowEnable, this.file) },
       connections: { recordAddress: resolveConnectionRecordAddress(this.options.env.connectionRecordAddress, this.file) },
+      health: { open: resolveHealthOpen(this.options.env.healthOpen, this.file) },
+      safety: { publishGlobalStop: resolveSafetyPublishStop(this.options.env.safetyPublishStop, this.file) },
       voice: {
         includeHeardText: resolveVoiceHeardText(this.options.env.voiceHeardText, this.file),
         minConfidence: resolveVoiceMinConfidence(this.options.env.voiceMinConfidence, this.file),
@@ -394,7 +440,7 @@ export class SecurityConfig {
   /** Applies a change asked for by an administrator; returns the new state and the warnings to show. */
   update(patch: any, actor: string): { snapshot: SecuritySnapshot; warnings: string[]; appliesOnRestart: boolean } {
     const warnings: string[] = [];
-    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined };
+    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, health: this.file.health ? { ...this.file.health } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined };
     let appliesOnRestart = false;
     const log = this.options.log ?? (() => undefined);
     const lockedBy = (name: string) => new SecurityConfigError(409, `${name} is set in the environment of this server; remove it there to change it here`);
@@ -539,6 +585,32 @@ export class SecurityConfig {
       if (connectionsPatch.recordAddress === true) warnings.push("connection_address_recorded");
     }
 
+    if (patch.health !== undefined) {
+      const healthPatch = patch.health;
+      if (typeof healthPatch !== "object" || healthPatch === null || Array.isArray(healthPatch)) throw new SecurityConfigError(400, "health must be an object");
+      const merged: HealthFile = { ...(next.health ?? {}) };
+      if (healthPatch.open !== undefined) {
+        if (typeof healthPatch.open !== "boolean") throw new SecurityConfigError(400, "health.open must be true or false");
+        if (resolveHealthOpen(this.options.env.healthOpen, this.file).source === "env") throw lockedBy("HYDRA_UMC_HEALTH_OPEN");
+        merged.open = healthPatch.open;
+      }
+      next.health = merged;
+      if (healthPatch.open === true) warnings.push("health_open");
+    }
+
+    if (patch.safety !== undefined) {
+      const safetyPatch = patch.safety;
+      if (typeof safetyPatch !== "object" || safetyPatch === null || Array.isArray(safetyPatch)) throw new SecurityConfigError(400, "safety must be an object");
+      const merged: SafetyFile = { ...(next.safety ?? {}) };
+      if (safetyPatch.publishGlobalStop !== undefined) {
+        if (typeof safetyPatch.publishGlobalStop !== "boolean") throw new SecurityConfigError(400, "safety.publishGlobalStop must be true or false");
+        if (resolveSafetyPublishStop(this.options.env.safetyPublishStop, this.file).source === "env") throw lockedBy("HYDRA_UMC_SAFETY_PUBLISH_STOP");
+        merged.publishGlobalStop = safetyPatch.publishGlobalStop;
+      }
+      next.safety = merged;
+      if (safetyPatch.publishGlobalStop === true) warnings.push("global_stop_published");
+    }
+
     if (patch.mavlink !== undefined) {
       const mavPatch = patch.mavlink;
       if (typeof mavPatch !== "object" || mavPatch === null || Array.isArray(mavPatch)) throw new SecurityConfigError(400, "mavlink must be an object");
@@ -594,6 +666,12 @@ export class SecurityConfig {
     }
     if (patch.connections !== undefined) {
       log(`[SECURITY] ${actor} ${snapshot.connections.recordAddress.value ? "allowed" : "forbade"} keeping the address and user agent of the clients in the history of connections.`);
+    }
+    if (patch.health !== undefined) {
+      log(`[SECURITY] ${actor} ${snapshot.health.open.value ? "opened" : "closed"} GET /health to clients that are not signed in.`);
+    }
+    if (patch.safety !== undefined) {
+      log(`[SECURITY] ${actor} ${snapshot.safety.publishGlobalStop.value ? "allowed" : "forbade"} announcing a global stop on the MQTT bridge.`);
     }
     if (patch.mavlink !== undefined) {
       log(`[SECURITY] ${actor} set MAVLink signing ${snapshot.mavlink.signing ? "on" : "OFF"}${snapshot.mavlink.signing && snapshot.mavlink.signingAllowUnsigned.value ? " (unsigned messages still accepted)" : ""}; the bridge applies it on its next start.`);
