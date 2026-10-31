@@ -780,6 +780,198 @@
             }
           }
         }
+      },
+      "ConnectionClient": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "id",
+          "kind",
+          "first_seen_utc",
+          "last_seen_utc",
+          "active_sessions",
+          "logins_ok",
+          "logins_failed"
+        ],
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "enum": [
+              "1.0"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{16}$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "studio",
+              "suite",
+              "android",
+              "ios",
+              "dsi",
+              "watch",
+              "voice",
+              "other"
+            ]
+          },
+          "user": {
+            "type": "string"
+          },
+          "app_version": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "local",
+              "remote"
+            ]
+          },
+          "two_factor": {
+            "type": "boolean"
+          },
+          "first_seen_utc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_seen_utc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_failure_utc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "active_sessions": {
+            "type": "integer"
+          },
+          "logins_ok": {
+            "type": "integer"
+          },
+          "logins_failed": {
+            "type": "integer"
+          },
+          "ip": {
+            "type": "string",
+            "description": "Administrators only, and only when connections.recordAddress is on."
+          },
+          "agent": {
+            "type": "string",
+            "description": "Administrators only, and only when connections.recordAddress is on."
+          }
+        }
+      },
+      "ConnectionEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schema_version",
+          "id",
+          "at_utc",
+          "action",
+          "client_kind",
+          "client_id"
+        ],
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "enum": [
+              "1.0"
+            ]
+          },
+          "id": {
+            "type": "integer"
+          },
+          "at_utc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "first_seen",
+              "login",
+              "login_failed",
+              "second_factor_failed",
+              "logout",
+              "session_ended",
+              "session_expired"
+            ]
+          },
+          "client_kind": {
+            "type": "string",
+            "enum": [
+              "studio",
+              "suite",
+              "android",
+              "ios",
+              "dsi",
+              "watch",
+              "voice",
+              "other"
+            ]
+          },
+          "client_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{16}$"
+          },
+          "user": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "local",
+              "remote"
+            ]
+          },
+          "two_factor": {
+            "type": "boolean"
+          },
+          "app_version": {
+            "type": "string"
+          },
+          "ip": {
+            "type": "string",
+            "description": "Administrators only, and only when connections.recordAddress is on."
+          },
+          "agent": {
+            "type": "string",
+            "description": "Administrators only, and only when connections.recordAddress is on."
+          }
+        }
+      },
+      "ConnectionClientList": {
+        "type": "object",
+        "required": [
+          "clients"
+        ],
+        "properties": {
+          "clients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConnectionClient"
+            }
+          }
+        }
+      },
+      "ConnectionEventList": {
+        "type": "object",
+        "required": [
+          "events"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConnectionEvent"
+            }
+          }
+        }
       }
     }
   },
@@ -1801,6 +1993,148 @@
             "description": "Success. The body is documented in docs/REMOTE_API.md."
           }
         },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/connections/clients": {
+      "get": {
+        "tags": [
+          "connections"
+        ],
+        "summary": "GET /api/connections/clients",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionClientList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "active",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/connections/events": {
+      "get": {
+        "tags": [
+          "connections"
+        ],
+        "summary": "GET /api/connections/events",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionEventList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "user",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "security": [
           {
             "bearerAuth": []

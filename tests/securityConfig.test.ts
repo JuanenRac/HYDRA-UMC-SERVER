@@ -340,3 +340,34 @@ test("the option for enabling robots refuses a value that is not true or false a
   const fixed = makeConfig({ robotAllowEnable: "1" }).config;
   assert.throws(() => fixed.update({ robots: { allowEnable: false } }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 409 && /ROBOT_ALLOW_ENABLE/.test(e.message));
 });
+
+test("keeping the address of the clients in the history is off by default and only the exact word 1 switches it on from the environment", () => {
+  const { config } = makeConfig();
+  assert.equal(config.connectionAddressRecorded(), false);
+  assert.deepEqual(config.snapshot().connections.recordAddress, { value: false, source: "default" });
+  assert.equal(makeConfig({ connectionRecordAddress: "1" }).config.connectionAddressRecorded(), true);
+  for (const word of ["true", "yes", "on", "0", ""]) assert.equal(makeConfig({ connectionRecordAddress: word }).config.connectionAddressRecorded(), false, word);
+});
+
+test("an administrator can allow keeping the address of the clients; it warns, is logged and is saved", () => {
+  const { config, logs, stored } = makeConfig();
+  const result = config.update({ connections: { recordAddress: true } }, "root");
+  assert.deepEqual(result.warnings, ["connection_address_recorded"]);
+  assert.equal(config.connectionAddressRecorded(), true);
+  assert.deepEqual(stored().connections, { recordAddress: true });
+  assert.match(logs.at(-1)!, /allowed keeping the address/);
+  const off = config.update({ connections: { recordAddress: false } }, "root");
+  assert.deepEqual(off.warnings, []);
+  assert.equal(config.connectionAddressRecorded(), false);
+  assert.match(logs.at(-1)!, /forbade/);
+});
+
+test("the option for the address of the clients refuses a value that is not true or false and one fixed by the environment", () => {
+  const { config } = makeConfig();
+  for (const bad of [{ recordAddress: "yes" }, { recordAddress: 1 }]) {
+    assert.throws(() => config.update({ connections: bad }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 400);
+  }
+  assert.throws(() => config.update({ connections: [] }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 400);
+  const fixed = makeConfig({ connectionRecordAddress: "1" }).config;
+  assert.throws(() => fixed.update({ connections: { recordAddress: false } }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 409 && /CONNECTION_RECORD_ADDRESS/.test(e.message));
+});

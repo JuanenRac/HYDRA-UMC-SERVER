@@ -49,6 +49,8 @@ import { startBle } from "./ble/start";
 import type { BleGateway } from "./ble/bleGateway";
 import { cameraAuthRequiredByDefault, issueMediaTicket, mediaTicketKey, verifyMediaTicket } from "./mediaTickets";
 import { registerAuthRoutes } from "./routes/auth";
+import { registerConnectionRoutes } from "./routes/connectionRoutes";
+import { connectionTracker, setRecordAddress } from "./connections";
 import { registerTotpRoutes } from "./routes/totpRoutes";
 import { registerSettingsRoutes } from "./routes/settings";
 import { registerStaticRoutes } from "./routes/staticRoutes";
@@ -171,12 +173,14 @@ async function startServer() {
   // startup (same timing as the .tmp sweep above) and again every 6h for
   // a long-running process - an expired-but-never-rotated record (an
   // abandoned/lost device) would otherwise never get removed on its own.
-  const prunedAtStartup = pruneExpiredRefreshTokens();
+  const prunedAtStartup = pruneExpiredRefreshTokens(clientId => connectionTracker().endedClient(clientId, "session_expired"));
   if (prunedAtStartup > 0) industrialLog(`[STARTUP] Removed ${prunedAtStartup} expired refresh token(s).`);
   setInterval(() => {
-    const pruned = pruneExpiredRefreshTokens();
+    const pruned = pruneExpiredRefreshTokens(clientId => connectionTracker().endedClient(clientId, "session_expired"));
     if (pruned > 0) industrialLog(`[MAINTENANCE] Removed ${pruned} expired refresh token(s).`);
   }, 6 * 60 * 60 * 1000).unref();
+  // The history of connections is written when something changed and the last write was a while ago.
+  setInterval(() => connectionTracker().tick(), 30_000).unref();
 
   // The signing key and first administrator are enforced above. Keep a loud
   // diagnostic for an operator who deliberately configured the weak literal
@@ -279,6 +283,7 @@ async function startServer() {
   registerStaticRoutes(app, { dataPath });
 
   registerAuthRoutes(app);
+  registerConnectionRoutes(app);
   registerTotpRoutes(app);
 
   // Who may use the local AI relay, whether the host information asks for a sign-in, and TLS: the
@@ -288,14 +293,16 @@ async function startServer() {
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
     save: (file) => {
-      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots } = file;
-      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots });
+      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections });
     },
     tlsActive: startupTls.enabled,
     bleActiveMode: resolveBleMode(securityEnvFrom(process.env).bleGatt, loadServerConfig()).value,
     mqttActiveMode: resolveMqttMode(securityEnvFrom(process.env).mqtt?.mode, loadServerConfig()).value,
     log: industrialLog,
   });
+  // Whether the history of connections keeps the address and user agent of a client (off unless an administrator turned it on).
+  setRecordAddress(() => security.connectionAddressRecorded());
 
   registerAdminRoutes(app, {
     authenticate, requireAdmin, asyncHandler, industrialLog, wsClients,
@@ -478,6 +485,7 @@ async function startServer() {
     for (const key of cameraProcesses.keys()) stopCameraProcess(key);
     void bleGateway?.stop().catch(() => undefined);
     void mqttBridge?.stop().catch(() => undefined);
+    try { connectionTracker().flush(); } catch { /* best-effort */ }
     closeLog();
     httpServer.close(() => process.exit(0));
     // httpServer.close() waits for in-flight HTTP requests but not for

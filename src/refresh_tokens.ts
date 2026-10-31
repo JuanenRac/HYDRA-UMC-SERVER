@@ -46,6 +46,8 @@ interface StoredRefreshToken {
   userId: string;
   expiresAt: number; // epoch ms
   createdAt: string;
+  /** Which client (see connections.ts) opened this session, to count the open sessions of a client. */
+  clientId?: string;
 }
 
 const refreshTokensPath = () => path.join(process.cwd(), "data", "refresh_tokens.json");
@@ -114,7 +116,7 @@ function saveRefreshTokens(tokens: StoredRefreshToken[]): void {
  * token value the client stores alongside its access token. */
 export const MAX_REFRESH_TOKENS_PER_USER = 10;
 
-export function issueRefreshToken(user: StoredUser): string {
+export function issueRefreshToken(user: StoredUser, clientId?: string): string {
   const tokens = loadRefreshTokens();
   const token = crypto.randomBytes(32).toString("hex");
   tokens.push({
@@ -124,6 +126,7 @@ export function issueRefreshToken(user: StoredUser): string {
     userId: effectiveId(user),
     expiresAt: Date.now() + REFRESH_TOKEN_TTL_MS,
     createdAt: new Date().toISOString(),
+    ...(clientId ? { clientId } : {}),
   });
   // Abandoned sessions (a reinstalled app, a web login never closed) must not
   // pile up: keep only the newest MAX_REFRESH_TOKENS_PER_USER per account.
@@ -138,8 +141,8 @@ export function issueRefreshToken(user: StoredUser): string {
 }
 
 export type ConsumeRefreshTokenResult =
-  | { ok: true; user: StoredUser; refreshToken: string }
-  | { ok: false; reason: "invalid" | "expired" | "revoked" };
+  | { ok: true; user: StoredUser; refreshToken: string; clientId?: string }
+  | { ok: false; reason: "invalid" | "expired" | "revoked"; clientId?: string };
 
 /** Validates `token`, and on success ROTATES it (deletes the old record,
  * issues a new one for the account's CURRENT tokenVersion/id) and returns
@@ -158,7 +161,7 @@ export function consumeRefreshToken(token: string): ConsumeRefreshTokenResult {
   if (Date.now() > record.expiresAt) {
     tokens.splice(idx, 1);
     saveRefreshTokens(tokens);
-    return { ok: false, reason: "expired" };
+    return { ok: false, reason: "expired", ...(record.clientId ? { clientId: record.clientId } : {}) };
   }
 
   const currentUser = findUser(record.username);
@@ -168,7 +171,7 @@ export function consumeRefreshToken(token: string): ConsumeRefreshTokenResult {
     // effectiveId() doc comment) since this refresh token was issued.
     tokens.splice(idx, 1);
     saveRefreshTokens(tokens);
-    return { ok: false, reason: "revoked" };
+    return { ok: false, reason: "revoked", ...(record.clientId ? { clientId: record.clientId } : {}) };
   }
 
   tokens.splice(idx, 1);
@@ -180,9 +183,10 @@ export function consumeRefreshToken(token: string): ConsumeRefreshTokenResult {
     userId: effectiveId(currentUser),
     expiresAt: Date.now() + REFRESH_TOKEN_TTL_MS,
     createdAt: new Date().toISOString(),
+    ...(record.clientId ? { clientId: record.clientId } : {}),
   });
   saveRefreshTokens(tokens);
-  return { ok: true, user: currentUser, refreshToken: newToken };
+  return { ok: true, user: currentUser, refreshToken: newToken, ...(record.clientId ? { clientId: record.clientId } : {}) };
 }
 
 /** POST /api/logout calls this so a real, explicit logout actually
@@ -191,10 +195,22 @@ export function consumeRefreshToken(token: string): ConsumeRefreshTokenResult {
  * token that doesn't exist (already used, already expired, or simply never
  * sent) is a harmless no-op - logout always succeeds from the client's
  * point of view. */
-export function revokeRefreshToken(token: string): void {
+export function revokeRefreshToken(token: string): { clientId?: string } | undefined {
   const tokens = loadRefreshTokens();
+  const found = tokens.find(t => t.token === token);
   const next = tokens.filter(t => t.token !== token);
   if (next.length !== tokens.length) saveRefreshTokens(next);
+  return found ? { ...(found.clientId ? { clientId: found.clientId } : {}) } : undefined;
+}
+
+/** How many open (not expired) sessions each client has, by the client identifier kept with the refresh token. */
+export function openSessionsByClient(): Map<string, number> {
+  const counts = new Map<string, number>();
+  let tokens: StoredRefreshToken[] = [];
+  try { tokens = loadRefreshTokens(); } catch { return counts; }
+  const now = Date.now();
+  for (const t of tokens) if (t.clientId && t.expiresAt > now) counts.set(t.clientId, (counts.get(t.clientId) ?? 0) + 1);
+  return counts;
 }
 
 /** Startup + periodic hygiene sweep - a refresh token that expired without
@@ -204,10 +220,11 @@ export function revokeRefreshToken(token: string): void {
  * state left behind by something that will never come back to clean up
  * after itself. Returns the number of records removed, for the startup log
  * line to report. */
-export function pruneExpiredRefreshTokens(): number {
+export function pruneExpiredRefreshTokens(onExpired?: (clientId: string) => void): number {
   const tokens = loadRefreshTokens();
   const now = Date.now();
   const next = tokens.filter(t => t.expiresAt > now);
   if (next.length !== tokens.length) saveRefreshTokens(next);
+  if (onExpired) for (const t of tokens) if (t.expiresAt <= now && t.clientId) onExpired(t.clientId);
   return tokens.length - next.length;
 }

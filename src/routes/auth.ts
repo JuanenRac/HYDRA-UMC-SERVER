@@ -10,7 +10,19 @@ import { findUser, verifyPassword, effectiveTokenVersion, effectiveId } from "..
 import { issueRefreshToken, consumeRefreshToken, revokeRefreshToken } from "../refresh_tokens";
 import { authFailuresTotal } from "../metrics";
 import { totpStore } from "../totp";
+import { connectionTracker, identify, originOf, type Sighting } from "../connections";
 import { JWT_SECRET, JWT_EXPIRES_IN, asyncHandler, loginRateLimiter, refreshRateLimiter } from "../auth";
+
+/** Who is asking, as the history of connections describes a client (never a secret: kind, version, address and agent only). */
+function sightingOf(req: express.Request, user?: string): Sighting {
+  const ip = (req.ip ?? "").replace(/^::ffff:/i, "") || undefined;
+  return { ...identify(req), ...(user ? { user } : {}), ip, origin: originOf(ip) };
+}
+
+/** Telling the history never stops a sign-in. */
+function tell(note: () => void): void {
+  try { note(); } catch { /* the history is a convenience */ }
+}
 
 export function registerAuthRoutes(app: express.Express): void {
   app.post("/api/login", loginRateLimiter, asyncHandler(async (req, res) => {
@@ -27,6 +39,7 @@ export function registerAuthRoutes(app: express.Express): void {
     // is being verified.
     if (!user || !(await verifyPassword(password, user.passwordHash))) {
       authFailuresTotal.inc({ reason: "invalid_credentials" });
+      tell(() => connectionTracker().refused(sightingOf(req, user ? user.username : undefined), "login_failed", Boolean(user)));
       return res.status(401).json({ error: "Invalid credentials" });
     }
     // An account that turned on the second factor needs a current code (or an unused recovery code) as well. Accounts
@@ -39,6 +52,7 @@ export function registerAuthRoutes(app: express.Express): void {
       if (typeof totp !== "string" || !totp.trim()) return res.status(401).json({ error: "A second-factor code is required", totpRequired: true });
       if (!factor.verify(effectiveId(user), totp)) {
         authFailuresTotal.inc({ reason: "invalid_totp" });
+        tell(() => connectionTracker().refused(sightingOf(req, user.username), "second_factor_failed", true));
         return res.status(401).json({ error: "Invalid credentials", totpRequired: true });
       }
     }
@@ -62,7 +76,9 @@ export function registerAuthRoutes(app: express.Express): void {
     // comment) without forcing a manual re-login - a client that predates
     // this field simply never sends refreshToken to POST /api/refresh and
     // keeps today's forced-logout behavior, so this is purely additive.
-    const refreshToken = issueRefreshToken(user);
+    let clientId: string | undefined;
+    tell(() => { clientId = connectionTracker().login(sightingOf(req, user.username), factor.enabled(effectiveId(user))); });
+    const refreshToken = issueRefreshToken(user, clientId);
     res.json({ success: true, token, refreshToken, role: user.role });
   }));
 
@@ -84,6 +100,10 @@ export function registerAuthRoutes(app: express.Express): void {
     const result = consumeRefreshToken(refreshToken);
     if (!result.ok) {
       authFailuresTotal.inc({ reason: `refresh_${result.reason}` });
+      if (result.reason === "expired" && result.clientId) {
+        const clientId = result.clientId;
+        tell(() => connectionTracker().endedClient(clientId, "session_expired", sightingOf(req)));
+      }
       return res.status(401).json({ error: "Invalid or expired refresh token" });
     }
     const token = jwt.sign(
@@ -104,7 +124,11 @@ export function registerAuthRoutes(app: express.Express): void {
   // error, from the caller's point of view.
   app.post("/api/logout", asyncHandler(async (req, res) => {
     const { refreshToken } = req.body || {};
-    if (typeof refreshToken === "string" && refreshToken) revokeRefreshToken(refreshToken);
+    if (typeof refreshToken === "string" && refreshToken) {
+      const gone = revokeRefreshToken(refreshToken);
+      const clientId = gone?.clientId;
+      if (clientId) tell(() => connectionTracker().endedClient(clientId, "logout", sightingOf(req)));
+    }
     res.json({ success: true });
   }));
 }

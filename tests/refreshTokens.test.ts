@@ -17,6 +17,7 @@ import {
   consumeRefreshToken,
   revokeRefreshToken,
   pruneExpiredRefreshTokens,
+  openSessionsByClient,
   RefreshTokensFileError,
   MAX_REFRESH_TOKENS_PER_USER,
 } from "../src/refresh_tokens";
@@ -222,5 +223,27 @@ test("a refresh_tokens.json holding something other than a JSON array fails loud
   await withTempCwd(async (dir) => {
     writeRawRefreshTokensJson(dir, JSON.stringify({ not: "an array" }));
     assert.throws(() => consumeRefreshToken("anything"), RefreshTokensFileError);
+  });
+});
+
+test("the client that opened a session travels with it through a rotation and a logout, and open sessions are counted per client", async () => {
+  await withTempCwd(async () => {
+    await createUser("carol", "correcthorsebattery", "operator");
+    const carol = findUser("carol") as StoredUser;
+    const a = issueRefreshToken(carol, "aaaaaaaaaaaaaaaa");
+    issueRefreshToken(carol, "aaaaaaaaaaaaaaaa");
+    issueRefreshToken(carol, "bbbbbbbbbbbbbbbb");
+    issueRefreshToken(carol);
+    assert.deepEqual([...openSessionsByClient()].sort(), [["aaaaaaaaaaaaaaaa", 2], ["bbbbbbbbbbbbbbbb", 1]]);
+
+    const rotated = consumeRefreshToken(a);
+    assert.ok(rotated.ok);
+    assert.equal(rotated.ok && rotated.clientId, "aaaaaaaaaaaaaaaa");
+    assert.equal(openSessionsByClient().get("aaaaaaaaaaaaaaaa"), 2, "a rotation keeps the client of the session");
+
+    const gone = revokeRefreshToken(rotated.ok ? rotated.refreshToken : "");
+    assert.deepEqual(gone, { clientId: "aaaaaaaaaaaaaaaa" });
+    assert.equal(openSessionsByClient().get("aaaaaaaaaaaaaaaa"), 1);
+    assert.equal(revokeRefreshToken("0".repeat(64)), undefined, "an unknown token revokes nothing");
   });
 });
