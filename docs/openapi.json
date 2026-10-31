@@ -1043,6 +1043,33 @@
           }
         }
       },
+      "RulConfig": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "maxPoints",
+          "timeoutMs"
+        ],
+        "description": "What a signed-in client may read of the remaining-useful-life relay: whether an operator may use it and the two limits that size a request. Nothing else; closed (enabled false, 5000 points, 8000 ms) when the configuration is missing or damaged.",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "True only when the relay is open to operators (rul.enabled, or HYDRA_UMC_RUL=1)."
+          },
+          "maxPoints": {
+            "type": "integer",
+            "minimum": 8,
+            "maximum": 100000,
+            "description": "Largest number of points the relay accepts in one request."
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 500,
+            "maximum": 60000,
+            "description": "How long the relay waits for the detector, in milliseconds."
+          }
+        }
+      },
       "EcosystemHealth": {
         "type": "object",
         "required": [
@@ -3621,6 +3648,33 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RobotLiveness"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/rul/config": {
+      "get": {
+        "tags": [
+          "rul"
+        ],
+        "summary": "GET /api/rul/config",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RulConfig"
                 }
               }
             }

@@ -16,7 +16,7 @@
 
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import http from "node:http";
 import { tmpdir } from "node:os";
@@ -189,6 +189,26 @@ async function main() {
     }
     assert.equal(datalakeStub.seenRequests.length, 1, "nothing but the read reached the data lake");
 
+    // What the dashboard reads to know whether to show its remaining-useful-life card: any signed-in account, never anonymous, three
+    // fields and nothing else. Closed by default; open once an administrator switches rul.enabled on; closed again when the stored
+    // configuration cannot be read at start (fail-closed; a file that is damaged while running only resets the limits, as for the relay).
+    const rulConfigUrl = `http://127.0.0.1:${serverPort}/api/rul/config`;
+    assert.equal((await fetch(rulConfigUrl)).status, 401, "anonymous");
+    const rulClosed = await fetch(rulConfigUrl, { headers: auth });
+    assert.equal(rulClosed.status, 200);
+    assert.equal(rulClosed.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await rulClosed.json(), { enabled: false, maxPoints: 5000, timeoutMs: 8000 }, "closed by default");
+    const switchRul = await fetch(`http://127.0.0.1:${serverPort}/api/admin/server-config`, { method: "PUT", headers: { "content-type": "application/json", ...auth }, body: JSON.stringify({ rul: { enabled: true } }) });
+    assert.equal(switchRul.status, 200);
+    assert.deepEqual(await (await fetch(rulConfigUrl, { headers: auth })).json(), { enabled: true, maxPoints: 5000, timeoutMs: 8000 }, "open after the switch");
+    const configFile = path.join(workspace, "data", "server-config.json");
+    const stored = JSON.parse(await readFile(configFile, "utf-8"));
+    await writeFile(configFile, JSON.stringify({ ...stored, rul: { enabled: true, maxPoints: 64, timeoutMs: 1500, maxBodyBytes: 4096, token: "never-shown" } }));
+    assert.deepEqual(await (await fetch(rulConfigUrl, { headers: auth })).json(), { enabled: true, maxPoints: 64, timeoutMs: 1500 }, "the limits of the file, and only those");
+    await writeFile(configFile, "{ this is not json");
+    assert.deepEqual(await (await fetch(rulConfigUrl, { headers: auth })).json(), { enabled: true, maxPoints: 5000, timeoutMs: 8000 }, "damaged file: the switch is the one the relay enforces (held in memory), the limits fall back to their defaults");
+    await writeFile(configFile, JSON.stringify(stored));
+
     // A real, known service whose own systemd unit simply isn't running
     // right now (nothing bound on its port) - a clean 503, not a hang or
     // an unhandled rejection.
@@ -200,7 +220,7 @@ async function main() {
     const notRunningBody = await notRunning.json();
     assert.equal(notRunningBody.available, false);
 
-    console.log("SERVER_LOCAL_AI_PROXY_CONTRACT=PASS auth=1 unknown_service=1 get_forward=1 post_forward=1 not_running=1 service_tokens=2 datalake_read_only=1");
+    console.log("SERVER_LOCAL_AI_PROXY_CONTRACT=PASS auth=1 unknown_service=1 get_forward=1 post_forward=1 not_running=1 service_tokens=2 datalake_read_only=1 rul_config=1");
   } catch (error) {
     throw new Error(`${error instanceof Error ? error.message : error}\nServer startup output:\n${logs || "<no output>"}`);
   } finally {

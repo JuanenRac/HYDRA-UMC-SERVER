@@ -20,14 +20,14 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/Framework-Express-000000.svg" alt="Framework">
   <img src="https://img.shields.io/badge/Language-TypeScript-3178C6.svg" alt="Language">
   <img src="https://img.shields.io/badge/Protocol-WebSocket-lightgrey.svg" alt="Protocol">
-  <img src="https://img.shields.io/badge/Tests-414%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-518%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.8.1.7-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
 
 ---
 
-> **诚实检查——今天真正可运行的部分：** Express + WebSocket 引擎、其 REST 和 WebSocket 接口（58 条路径上的 63 个操作）、带刷新令牌轮换和 scrypt 的 JWT 登录、mDNS 发现、机器人预约与修订、播放，以及通往 CAN-OTA、遥测、语音、本地 AI 服务和连接器中枢的中继都是真实的，并针对测试自己启动的本服务器真实实例做过测试：414 个单元测试加 28 个端到端契约脚本，全部通过。与硬件相关、此处未验证的部分：到带 STM32H745 板的真实 HYDRA-UMC CM5 的连接，这是真实代码，但只通过 API 和契约层验证过。TLS、蓝牙 LE、MQTT 桥以及 Prometheus 和 Grafana 栈都是真实的、可选的，默认关闭。
+> **诚实检查——今天真正可运行的部分：** Express + WebSocket 引擎、其 REST 和 WebSocket 接口（58 条路径上的 63 个操作）、带刷新令牌轮换和 scrypt 的 JWT 登录、mDNS 发现、机器人预约与修订、播放，以及通往 CAN-OTA、遥测、语音、本地 AI 服务和连接器中枢的中继都是真实的，并针对测试自己启动的本服务器真实实例做过测试：518 个单元测试加 28 个端到端契约脚本，全部通过。与硬件相关、此处未验证的部分：到带 STM32H745 板的真实 HYDRA-UMC CM5 的连接，这是真实代码，但只通过 API 和契约层验证过。TLS、蓝牙 LE、MQTT 桥以及 Prometheus 和 Grafana 栈都是真实的、可选的，默认关闭。
 
 ---
 
@@ -41,7 +41,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | 版本 | `0.8.1.7` |
 | 成熟度 | 可用 |
-| 测试 | 414 (`npm run test:unit`) |
+| 测试 | 518 (`npm run test:unit`) |
 | 技术栈 | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | 目标 | HYDRA-UMC 工作单元的 Raspberry Pi CM5 |
 | 真实硬件 | 已在试验台上运行：上面的诚实性检查说明了哪些部分在真实硬件上运行过 |
@@ -57,7 +57,7 @@ GPL-3.0-or-later - see LICENSE
 | 领域 | 状态 | 在这里的含义 |
 |---|---|---|
 | 软件 | 🟡 | 主要用途可用；上面的诚实性检查列出了仍然缺少的内容 |
-| 测试 | 🟢 | 414 项自动测试，每次变更都会运行 |
+| 测试 | 🟢 | 518 项自动测试，每次变更都会运行 |
 | 真实硬件 | 🟡 | 已在试验台上运行：上面的诚实性检查说明了哪些部分在真实硬件上运行过 |
 | 文档 | 🟢 | 八种语言的 README，每次变更都会与清单核对 |
 
@@ -211,7 +211,7 @@ CORS 通过一个可配置的白名单（`CORS_ALLOWED_ORIGINS`，见下文“�
 
 - `HYDRA_UMC_HEALTH_OPEN=1`（`health.open`）- `GET /health` 无需登录即可返回精简的健康报告（不含版本、主机或计数）；关闭时返回 `404`。
 - `HYDRA_UMC_ECOSYSTEM_HEALTH=1`（`ecosystemHealth.enabled`）- `GET /api/ecosystem/health` 返回生态系统各服务的健康状况；关闭时返回 `404`。
-- `HYDRA_UMC_RUL=1`（`rul.enabled`）- AI 仪表板卡片背后的剩余使用寿命估算 `POST /api/ai/anomaly-detector/rul`，除管理员外也向操作员开放（仅限这一个请求，并限制其大小和时间）；关闭时只有管理员可以发送。
+- `HYDRA_UMC_RUL=1`（`rul.enabled`）- AI 仪表板卡片背后的剩余使用寿命估算 `POST /api/ai/anomaly-detector/rul`，除管理员外也向操作员开放（仅限这一个请求，并限制其大小和时间）；关闭时只有管理员可以发送。已登录的客户端可通过 `GET /api/rul/config` 读取它是否开启及两项上限（只有开启时，AI 仪表板的卡片才会出现）。
 - `HYDRA_UMC_SAFETY_PUBLISH_STOP=1`（`safety.publishGlobalStop`）- 全局停止还会在 MQTT 桥的 `<前缀>/safety/estop` 上以保留的 `SAFE_STOP` 通告（见 `docs/GLOBAL_STOP.md`）。
 - `HYDRA_UMC_CONNECTION_RECORD_ADDRESS=1`（`connections.recordAddress`）- 连接历史还会保留每个客户端的地址和用户代理，仅管理员可见。
 - `HYDRA_UMC_CAMERA_AUTH=open`（`camera.open`）- 无需票据的摄像头画面；默认需要票据。
@@ -256,7 +256,7 @@ npm run build && npm start  # one bundled file (build.sh and build.bat make a ve
 
 ## 🧪 测试
 
-运行 `npm run test:unit` 会执行 414 个自动测试。 此外，`npm test` 会运行 OpenAPI 检查，以及针对本服务器真实实例的 `tools/` 中 28 个端到端契约脚本（发现、无凭据和有凭据登录、生产环境引导、机器人命令与归属、刷新令牌、语音中继及其错误路径、播放、全局停止、蓝牙和 MQTT 桥、摄像头媒体、AI 与连接器中枢中继、观察者角色等）；全部通过。都不需要硬件。
+运行 `npm run test:unit` 会执行 518 个自动测试。 此外，`npm test` 会运行 OpenAPI 检查，以及针对本服务器真实实例的 `tools/` 中 28 个端到端契约脚本（发现、无凭据和有凭据登录、生产环境引导、机器人命令与归属、刷新令牌、语音中继及其错误路径、播放、全局停止、蓝牙和 MQTT 桥、摄像头媒体、AI 与连接器中枢中继、观察者角色等）；全部通过。都不需要硬件。
 
 CI 运行 `HYDRA_UMC_CI=1 python tools/ci_validate.py`，检查清单、文档、八个 README 和图片。
 

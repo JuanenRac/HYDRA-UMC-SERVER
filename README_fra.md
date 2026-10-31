@@ -20,14 +20,14 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/Framework-Express-000000.svg" alt="Framework">
   <img src="https://img.shields.io/badge/Language-TypeScript-3178C6.svg" alt="Language">
   <img src="https://img.shields.io/badge/Protocol-WebSocket-lightgrey.svg" alt="Protocol">
-  <img src="https://img.shields.io/badge/Tests-414%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-518%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.8.1.7-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
 
 ---
 
-> **Vérification d'honnêteté - ce qui fonctionne réellement aujourd'hui :** le moteur Express + WebSocket, sa surface REST et WebSocket (63 opérations sur 58 chemins), la connexion JWT avec rotation du jeton de rafraîchissement et scrypt, la découverte mDNS, les réservations et révisions de robots, la lecture, et les relais vers CAN-OTA, la télémétrie, la voix, les services d'IA locaux et le connector hub sont réels et testés contre une instance réelle de ce même serveur que les tests démarrent eux-mêmes : 414 tests unitaires plus 28 scripts de contrat de bout en bout, tous réussis. Ce qui touche au matériel et n'est pas vérifié ici : la liaison avec une vraie CM5 HYDRA-UMC et une carte STM32H745, du vrai code exercé seulement par la couche API et contrats. TLS, Bluetooth LE, le pont MQTT et la pile Prometheus et Grafana sont réels, facultatifs et désactivés par défaut.
+> **Vérification d'honnêteté - ce qui fonctionne réellement aujourd'hui :** le moteur Express + WebSocket, sa surface REST et WebSocket (63 opérations sur 58 chemins), la connexion JWT avec rotation du jeton de rafraîchissement et scrypt, la découverte mDNS, les réservations et révisions de robots, la lecture, et les relais vers CAN-OTA, la télémétrie, la voix, les services d'IA locaux et le connector hub sont réels et testés contre une instance réelle de ce même serveur que les tests démarrent eux-mêmes : 518 tests unitaires plus 28 scripts de contrat de bout en bout, tous réussis. Ce qui touche au matériel et n'est pas vérifié ici : la liaison avec une vraie CM5 HYDRA-UMC et une carte STM32H745, du vrai code exercé seulement par la couche API et contrats. TLS, Bluetooth LE, le pont MQTT et la pile Prometheus et Grafana sont réels, facultatifs et désactivés par défaut.
 
 ---
 
@@ -41,7 +41,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | Version | `0.8.1.7` |
 | Maturité | Fonctionnel |
-| Tests | 414 (`npm run test:unit`) |
+| Tests | 518 (`npm run test:unit`) |
 | Technologie | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | Cible | Le Raspberry Pi CM5 d'une cellule HYDRA-UMC |
 | Sur matériel réel | Exécuté sur un banc d'essai : la vérification d'honnêteté ci-dessus indique quelles parties ont tourné sur du matériel réel |
@@ -57,7 +57,7 @@ Chaque ligne est une partie de ce dépôt et le feu dit où elle en est aujourd'
 | Domaine | État | Ce que cela veut dire ici |
 |---|---|---|
 | Logiciel | 🟡 | Fonctionne pour son usage principal ; la vérification d'honnêteté ci-dessus liste ce qui manque encore |
-| Tests | 🟢 | 414 tests automatiques, exécutés à chaque modification |
+| Tests | 🟢 | 518 tests automatiques, exécutés à chaque modification |
 | Matériel réel | 🟡 | Exécuté sur un banc d'essai : la vérification d'honnêteté ci-dessus indique quelles parties ont tourné sur du matériel réel |
 | Documentation | 🟢 | README en huit langues, vérifié par rapport au manifeste à chaque modification |
 
@@ -370,7 +370,7 @@ Dix options élargissent ce que le serveur répond ou enregistre ; toutes démar
 
 - `HYDRA_UMC_HEALTH_OPEN=1` (`health.open`) - `GET /health` répond sans connexion par un rapport de santé minimal (sans version, hôte ni compteurs) ; désactivé, il répond `404`.
 - `HYDRA_UMC_ECOSYSTEM_HEALTH=1` (`ecosystemHealth.enabled`) - `GET /api/ecosystem/health` répond avec la santé des services de l'écosystème ; désactivé, il répond `404`.
-- `HYDRA_UMC_RUL=1` (`rul.enabled`) - `POST /api/ai/anomaly-detector/rul`, l'estimation de durée de vie restante derrière la carte du tableau de bord IA, est ouverte aux opérateurs en plus des administrateurs (cette seule requête, avec une limite de taille et de durée) ; désactivée, seul un administrateur peut l'envoyer.
+- `HYDRA_UMC_RUL=1` (`rul.enabled`) - `POST /api/ai/anomaly-detector/rul`, l'estimation de durée de vie restante derrière la carte du tableau de bord IA, est ouverte aux opérateurs en plus des administrateurs (cette seule requête, avec une limite de taille et de durée) ; désactivée, seul un administrateur peut l'envoyer. Un client connecté lit si elle est ouverte, avec ses deux limites, sur `GET /api/rul/config` (la carte du tableau de bord IA n'apparaît que si elle l'est).
 - `HYDRA_UMC_SAFETY_PUBLISH_STOP=1` (`safety.publishGlobalStop`) - un arrêt global est aussi annoncé sur le pont MQTT comme un `SAFE_STOP` retenu sur `<préfixe>/safety/estop` (voir `docs/GLOBAL_STOP.md`).
 - `HYDRA_UMC_CONNECTION_RECORD_ADDRESS=1` (`connections.recordAddress`) - l'historique des connexions garde aussi l'adresse et l'agent utilisateur de chaque client, visibles des seuls administrateurs.
 - `HYDRA_UMC_CAMERA_AUTH=open` (`camera.open`) - images de caméra sans ticket ; par défaut elles en exigent un.
@@ -415,7 +415,7 @@ Le serveur écoute sur `0.0.0.0:3000` ; tout son état vit dans `data/`. Ce dép
 
 ## 🧪 Tests
 
-414 tests automatiques s'exécutent avec `npm run test:unit`. En plus, `npm test` exécute la vérification OpenAPI et 28 scripts de contrat de bout en bout dans `tools/` contre une instance réelle de ce serveur (découverte, connexion sans et avec identifiants, démarrage de production, commandes et propriété des robots, jetons de rafraîchissement, relais vocal et ses chemins d'erreur, lecture, l'arrêt global, ponts Bluetooth et MQTT, médias de caméra, relais IA et connector-hub, rôle observateur et plus) ; tous passent. Aucun n'a besoin de matériel.
+518 tests automatiques s'exécutent avec `npm run test:unit`. En plus, `npm test` exécute la vérification OpenAPI et 28 scripts de contrat de bout en bout dans `tools/` contre une instance réelle de ce serveur (découverte, connexion sans et avec identifiants, démarrage de production, commandes et propriété des robots, jetons de rafraîchissement, relais vocal et ses chemins d'erreur, lecture, l'arrêt global, ponts Bluetooth et MQTT, médias de caméra, relais IA et connector-hub, rôle observateur et plus) ; tous passent. Aucun n'a besoin de matériel.
 
 La CI exécute `HYDRA_UMC_CI=1 python tools/ci_validate.py`, qui vérifie le manifeste, les documents, les huit README et les images.
 

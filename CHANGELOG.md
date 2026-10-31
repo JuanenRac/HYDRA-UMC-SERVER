@@ -4,6 +4,7 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **A client can read whether the remaining-useful-life relay is open:** the new `GET /api/rul/config` (any signed-in account, read only) answers `{ enabled, maxPoints, timeoutMs }` and nothing else, so the card of the AI dashboard appears only when the server has `rul.enabled` on and sizes its request to `rul.maxPoints`. A missing or unreadable configuration gives the closed default (`enabled` false) instead of an error. Characterization and route tests in `tests/rulRelay.test.ts`, a live check in `tools/verify_local_ai_proxy_contract.mjs`, and the answer is typed in `docs/openapi.json`.
 - **The last contact of each service survives a restart:** the time the health of the ecosystem last heard from each service is kept in `data/ecosystem-health-last-seen.json`, written atomically (temporary file, then rename) at most once per `ecosystemHealth.lastSeenSaveIntervalS` seconds (30 by default) and capped to `ecosystemHealth.lastSeenMaxEntries` services (256 by default, the most recently heard are kept). A file that is missing, damaged, over 256 KiB or with times in the future is ignored.
 - **The route inventory is more exact:** `docs/openapi.json` now lists the `404` a signed-in client gets from `GET /api/ecosystem/health` while `ecosystemHealth.enabled` is off (and the `403` for a viewer), and the `{id}` of the robot and camera routes is an integer, as the handlers read it.
 

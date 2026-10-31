@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { isRulRequest, isWriteToModel, registerLocalAiRoutes, rulBodyError, rulSettings } from "../src/routes/localAiRoutes.ts";
+import { RUL_CONFIG_CLOSED, isRulRequest, isWriteToModel, registerLocalAiRoutes, registerRulConfigRoute, rulBodyError, rulConfigAnswer, rulSettings } from "../src/routes/localAiRoutes.ts";
 import { SecurityConfig, SecurityConfigError, resolveRul, type SecurityFile } from "../src/securityConfig.ts";
 
 // ---- the switch ---------------------------------------------------------------------------------------------------------------------------
@@ -176,4 +176,58 @@ test("on, the estimate is asked of the anomaly detector only", async () => {
     assert.equal(calls[0].url, "http://127.0.0.1:8098/rul");
     assert.equal((await call("operator", "datalake", ["rul"], points)).status, 403);
   });
+});
+
+// ---- what a signed-in client may read of the relay (GET /api/rul/config) ---------------------------------------------------------------
+
+function readConfigRoute(rul: (() => ReturnType<typeof rulSettings>) | undefined) {
+  const routes: { method: string; path: string; handlers: any[] }[] = [];
+  const authenticate = () => undefined;
+  const app: any = { get(path: string, ...handlers: any[]) { routes.push({ method: "GET", path, handlers }); } };
+  registerRulConfigRoute(app, { authenticate, rul });
+  const [route] = routes;
+  const call = () => {
+    const out: { status: number; body?: any; headers: Record<string, string> } = { status: 200, headers: {} };
+    const res: any = { set(name: string, value: string) { out.headers[name.toLowerCase()] = value; return res; }, status(code: number) { out.status = code; return res; }, json(value: any) { out.body = value; return res; } };
+    route.handlers[route.handlers.length - 1]({ user: { role: "viewer" } }, res);
+    return out;
+  };
+  return { routes, authenticate, call };
+}
+
+test("the route is one read, behind the session and nothing else (any role, so a viewer may read it)", () => {
+  const { routes, authenticate } = readConfigRoute(undefined);
+  assert.equal(routes.length, 1);
+  assert.equal(routes[0].path, "/api/rul/config");
+  assert.deepEqual(routes[0].handlers.slice(0, -1), [authenticate]);
+});
+
+test("closed by default, with the default limits, and never cached", () => {
+  const { call } = readConfigRoute(() => rulSettings(false, undefined));
+  const out = call();
+  assert.equal(out.status, 200);
+  assert.deepEqual(out.body, { enabled: false, maxPoints: 5000, timeoutMs: 8000 });
+  assert.equal(out.headers["cache-control"], "no-store");
+  assert.deepEqual(RUL_CONFIG_CLOSED, { enabled: false, maxPoints: 5000, timeoutMs: 8000 });
+});
+
+test("open, it gives the switch and the two limits and nothing else (no body limit, no secret)", () => {
+  const { call } = readConfigRoute(() => rulSettings(true, { maxBodyBytes: 4096, maxPoints: 50, timeoutMs: 1000, token: "secret", path: "/x" }));
+  assert.deepEqual(call().body, { enabled: true, maxPoints: 50, timeoutMs: 1000 });
+});
+
+test("a damaged limit gives its default and a setting that is not a real true stays closed", () => {
+  assert.deepEqual(rulConfigAnswer(() => rulSettings(true, { maxPoints: "9", timeoutMs: 1e9 })), { enabled: true, maxPoints: 5000, timeoutMs: 8000 });
+  assert.deepEqual(rulConfigAnswer(() => ({ enabled: "true", maxPoints: 50, timeoutMs: 900 }) as any), { enabled: false, maxPoints: 50, timeoutMs: 900 });
+  assert.deepEqual(rulConfigAnswer(() => ({ enabled: 1, maxPoints: 7, timeoutMs: 499 }) as any), { enabled: false, maxPoints: 5000, timeoutMs: 8000 });
+});
+
+test("fail-closed: no reader, an empty answer or a reader that throws gives the closed default", () => {
+  assert.deepEqual(rulConfigAnswer(undefined), { enabled: false, maxPoints: 5000, timeoutMs: 8000 });
+  assert.deepEqual(rulConfigAnswer(() => undefined as any), { enabled: false, maxPoints: 5000, timeoutMs: 8000 });
+  assert.deepEqual(rulConfigAnswer(() => { throw new Error("config unreadable"); }), { enabled: false, maxPoints: 5000, timeoutMs: 8000 });
+  const { call } = readConfigRoute(() => { throw new Error("damaged"); });
+  const out = call();
+  assert.equal(out.status, 200);
+  assert.deepEqual(out.body, { enabled: false, maxPoints: 5000, timeoutMs: 8000 });
 });

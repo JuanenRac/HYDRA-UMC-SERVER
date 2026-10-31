@@ -43,6 +43,35 @@ export function rulSettings(enabled: boolean, file: unknown): RulSettings {
   };
 }
 
+/** What a client may read of the relay: the switch and the two limits it needs to size a request (nothing else). */
+export interface RulConfigAnswer { enabled: boolean; maxPoints: number; timeoutMs: number }
+
+/** The answer when the configuration is missing, damaged or cannot be read: closed, with the default limits. */
+export const RUL_CONFIG_CLOSED: Readonly<RulConfigAnswer> = Object.freeze({ enabled: false, maxPoints: 5000, timeoutMs: 8000 });
+
+/** The public part of the relay settings. Fail-closed: only a real `true` opens it, and anything unreadable gives the closed default. */
+export function rulConfigAnswer(read: (() => RulSettings) | undefined): RulConfigAnswer {
+  try {
+    const settings = read?.();
+    if (!settings) return { ...RUL_CONFIG_CLOSED };
+    return {
+      enabled: settings.enabled === true,
+      maxPoints: boundedInt(settings.maxPoints, 8, 100000, RUL_CONFIG_CLOSED.maxPoints),
+      timeoutMs: boundedInt(settings.timeoutMs, 500, 60000, RUL_CONFIG_CLOSED.timeoutMs),
+    };
+  } catch {
+    return { ...RUL_CONFIG_CLOSED };
+  }
+}
+
+/** GET /api/rul/config: read only, for any signed-in account (a viewer too); no secret, no path, nothing but the three fields. */
+export function registerRulConfigRoute(app: express.Express, deps: { authenticate: Middleware; rul?: () => RulSettings }): void {
+  app.get("/api/rul/config", deps.authenticate, (req, res) => {
+    res.set("Cache-Control", "no-store");
+    res.json(rulConfigAnswer(deps.rul));
+  });
+}
+
 /** Is this the remaining-useful-life request the option opens? Only the exact POST /rul of the anomaly detector. */
 export function isRulRequest(service: string, method: string, upstreamPath: string): boolean {
   return service === "anomaly-detector" && method === "POST" && upstreamPath === "/rul";

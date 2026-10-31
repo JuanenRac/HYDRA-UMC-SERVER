@@ -59,7 +59,7 @@ import { registerTotpRoutes } from "./routes/totpRoutes";
 import { registerSettingsRoutes } from "./routes/settings";
 import { registerStaticRoutes } from "./routes/staticRoutes";
 import { registerAssistantRoutes } from "./routes/assistantRoutes";
-import { registerLocalAiRoutes, rulSettings } from "./routes/localAiRoutes";
+import { registerLocalAiRoutes, registerRulConfigRoute, rulSettings } from "./routes/localAiRoutes";
 import { registerInfoRoutes } from "./routes/infoRoutes";
 import { registerPowerRoutes } from "./routes/powerRoutes";
 import { registerWorksRoutes } from "./routes/worksRoutes";
@@ -398,7 +398,10 @@ async function startServer() {
   registerCameraRoutes(app, { authenticate, requireAdmin, mediaAccess, issueMediaTicket: issueMediaTicketFor, dataPath, resolveWithinDataDir, cameraProcesses });
 
   if (security.aiAdminOnly()) console.log("[SECURITY] The local AI relay (/api/ai/*) answers administrators only.");
-  registerLocalAiRoutes(app, { authenticate, requireAdmin, requireOperator, adminOnly: () => security.aiAdminOnly(), rul: () => rulSettings(security.rulEnabled(), (loadServerConfig() as { rul?: unknown }).rul) });
+  const rulNow = () => rulSettings(security.rulEnabled(), (loadServerConfig() as { rul?: unknown }).rul);
+  registerLocalAiRoutes(app, { authenticate, requireAdmin, requireOperator, adminOnly: () => security.aiAdminOnly(), rul: rulNow });
+  // What the dashboard of the AI summaries reads to know whether to show its remaining-useful-life card: any signed-in account, read only.
+  registerRulConfigRoute(app, { authenticate, rul: rulNow });
 
   registerSystemRoutes(app, { authenticate, requireAdmin, industrialLog, infoAccess });
 
