@@ -34,7 +34,7 @@ import { registerCameraRoutes } from "./routes/cameraRoutes";
 import { registerRobotRoutes } from "./routes/robotRoutes";
 import { registerCommandRoutes, ROBOT_COMMANDS } from "./routes/commandRoutes";
 import { registerUpstreamRoutes } from "./routes/upstreamRoutes";
-import { realSettings, redactSettingsSecrets } from "./serverPolicy";
+import { realSettings, redactSettingsSecrets, setCameraCredentialsViaEnv } from "./serverPolicy";
 import { ensureSeedUser, findUser, verifyPassword } from "./users";
 import { pruneExpiredRefreshTokens } from "./refresh_tokens";
 import { SafetyLimits, JogArming } from "./safetyLimits";
@@ -300,8 +300,8 @@ async function startServer() {
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
     save: (file) => {
-      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, safety, camera, websocket, logging } = file;
-      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, safety, camera, websocket, logging });
+      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, safety, camera, install, websocket, logging } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, safety, camera, install, websocket, logging });
     },
     tlsActive: startupTls.enabled,
     bleActiveMode: resolveBleMode(securityEnvFrom(process.env).bleGatt, loadServerConfig()).value,
@@ -383,6 +383,7 @@ async function startServer() {
     console.warn("[SECURITY] /ws?token= is accepted (HYDRA_UMC_WS_QUERY_TOKEN=allow or Server Admin), so the token is recorded in proxy and server logs. Forbid it once every client sends the hydra.bearer subprotocol.");
   }
   setLogRedaction(() => security.logRedactionOn());
+  setCameraCredentialsViaEnv(() => security.cameraCredentialsViaEnv());
   setSignatureRequirement(() => security.voiceSignatureRequired());
   const mediaAccess = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (security.cameraOpen()) return next();

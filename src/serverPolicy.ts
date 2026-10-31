@@ -48,11 +48,32 @@ import nodePath from "node:path";
 // browser tab and always passed regardless of the Remote Access toggle
 // state - the toggle for DSI (added to store.tsx/Config.tsx in the same
 // pass) previously had no server-side enforcement whatsoever.
-export function remoteAccessAllowed(settings: any, clientType: string | undefined): boolean {
-  if (clientType !== "suite" && clientType !== "android" && clientType !== "ios" && clientType !== "watch" && clientType !== "dsi") return true;
+//
+// The header is `X-Hydra-Client: <type>` or `<type>/<version>` (an app says which version it is, for the
+// history of connections). Only the TYPE is compared here: the version is cut off before the comparison, so a
+// header with a version, with any text after the slash or a very long one opens and closes access exactly
+// as the same header without a version. A header carrying several values ("a, b") is allowed only when
+// every one of them is.
+const GATED_CLIENT_TYPES = ["suite", "android", "ios", "watch", "dsi"] as const;
+
+/** The type part of an `X-Hydra-Client` value (lower case, without the version), or undefined when it is empty. */
+export function clientTypeOfHeader(value: string | string[] | undefined): string | undefined {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (typeof raw !== "string") return undefined;
+  const type = raw.slice(0, 256).split("/", 1)[0].trim().toLowerCase();
+  return type === "" ? undefined : type;
+}
+
+export function remoteAccessAllowed(settings: any, clientType: string | string[] | undefined): boolean {
+  const parts = (Array.isArray(clientType) ? clientType : [clientType]).flatMap((part) => (typeof part === "string" ? part.slice(0, 1024).split(",") : []));
+  return parts.every((part) => remoteAccessAllowedFor(settings, clientTypeOfHeader(part)));
+}
+
+function remoteAccessAllowedFor(settings: any, type: string | undefined): boolean {
+  if (type === undefined || !(GATED_CLIENT_TYPES as readonly string[]).includes(type)) return true;
   const ra = settings?.remoteAccess;
   if (!ra) return true; // no config saved at all yet - matches this feature's own original always-on default
-  const specific = ra[clientType];
+  const specific = ra[type];
   if (specific !== undefined) return specific !== false;
   return ra.enabled !== false; // legacy singular toggle, only consulted if this client's own flag was never set
 }
@@ -197,12 +218,19 @@ export const CAMERA_DEVICE_ENV_VAR = "HYDRA_CAMERA_DEVICE";
 // credentials stays a plain --device argument. Setting
 // HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV=off keeps the older argument form
 // for a streamer that predates --device-env.
+let cameraCredentialsViaEnvSource: () => boolean = () => (process.env.HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV ?? "").trim().toLowerCase() !== "off";
+/** Lets the server configuration (environment first, then what an administrator saved) decide how the password of an IP camera is handed over. */
+export function setCameraCredentialsViaEnv(source: () => boolean): void {
+  cameraCredentialsViaEnvSource = source;
+}
+
 export function cameraSpawnSpec(
   device: string,
   port: number,
-  option: string | undefined = process.env.HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV,
+  option?: string | boolean,
 ): { args: string[]; extraEnv: Record<string, string> } {
-  const viaEnv = (option ?? "").trim().toLowerCase() !== "off" && deviceCarriesCredentials(device);
+  const wanted = typeof option === "boolean" ? option : option === undefined ? cameraCredentialsViaEnvSource() : option.trim().toLowerCase() !== "off";
+  const viaEnv = wanted && deviceCarriesCredentials(device);
   if (viaEnv) {
     return {
       args: ["stream", "serve", "--device-env", CAMERA_DEVICE_ENV_VAR, "--port", String(port)],

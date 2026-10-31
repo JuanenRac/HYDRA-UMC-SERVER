@@ -12,10 +12,12 @@
 //
 // An installation that already has any of those files is never touched, and neither is one without
 // the certificates (it stays on plain HTTP until an administrator turns TLS on). The deployment can
-// forbid the default with HYDRA_UMC_NEW_INSTALL_TLS=off.
+// forbid the default with HYDRA_UMC_NEW_INSTALL_TLS=off or, in a configuration seeded before the first start,
+// with "install": { "newInstallTls": false } (the Server Admin screen shows and saves the same option; the
+// environment wins). It is only read at the first start of an installation.
 import fs from "node:fs";
 import path from "node:path";
-import { tlsFilesProblem } from "./securityConfig";
+import { resolveNewInstallTls, tlsFilesProblem } from "./securityConfig";
 import type { ServerConfig } from "./runtime";
 
 export const DEFAULT_TLS_DIR = "/etc/hydra-umc/tls";
@@ -36,9 +38,10 @@ export type NewInstallTlsOutcome = "enabled" | "not-new" | "no-certificates" | "
 
 export function applyNewInstallTlsDefault(options: NewInstallTlsOptions): NewInstallTlsOutcome {
   const { env, dataDir, load, save, log } = options;
-  if ((env[NEW_INSTALL_TLS_ENV] ?? "").trim().toLowerCase() === "off") return "switched-off";
-  if (FIRST_RUN_MARKERS.some((name) => fs.existsSync(path.join(dataDir, name)))) return "not-new";
+  // The environment first, then the option saved in the server configuration (Server Admin), then the default (on).
   const config = load();
+  if (!resolveNewInstallTls(env[NEW_INSTALL_TLS_ENV], config).value) return "switched-off";
+  if (FIRST_RUN_MARKERS.some((name) => fs.existsSync(path.join(dataDir, name)))) return "not-new";
   if (config.tls !== undefined) return "already-chosen";
   const dir = (env.HYDRA_TLS_DIR ?? "").trim() || DEFAULT_TLS_DIR;
   const certPath = path.join(dir, "server.pem");

@@ -207,7 +207,7 @@ CORS 通过一个可配置的白名单（`CORS_ALLOWED_ORIGINS`，见下文“�
 
 ### 访问开关、连接历史和生存信号
 
-有七个选项会扩大服务器的响应或记录范围；全部以保守值开始，每个都有环境变量和管理员开关（`PUT /api/admin/server-config`，显示在 STUDIO 的 Server Admin 中；环境变量会锁定开关）。完整表格见 [`docs/REMOTE_API.md`](docs/REMOTE_API.md) 第 2k 节。
+有九个选项会扩大服务器的响应或记录范围；全部以保守值开始，每个都有环境变量和管理员开关（`PUT /api/admin/server-config`，显示在 STUDIO 的 Server Admin 中；环境变量会锁定开关）。完整表格见 [`docs/REMOTE_API.md`](docs/REMOTE_API.md) 第 2k 节。
 
 - `HYDRA_UMC_HEALTH_OPEN=1`（`health.open`）- `GET /health` 无需登录即可返回精简的健康报告（不含版本、主机或计数）；关闭时返回 `404`。
 - `HYDRA_UMC_SAFETY_PUBLISH_STOP=1`（`safety.publishGlobalStop`）- 全局停止还会在 MQTT 桥的 `<前缀>/safety/estop` 上以保留的 `SAFE_STOP` 通告（见 `docs/GLOBAL_STOP.md`）。
@@ -215,11 +215,12 @@ CORS 通过一个可配置的白名单（`CORS_ALLOWED_ORIGINS`，见下文“�
 - `HYDRA_UMC_CAMERA_AUTH=open`（`camera.open`）- 无需票据的摄像头画面；默认需要票据。
 - `HYDRA_UMC_WS_QUERY_TOKEN=allow`（`websocket.allowQueryToken`）- WebSocket 地址中的令牌；默认被拒绝。
 - `HYDRA_UMC_LOG_REDACTION=off`（`logging.redactSecrets`）- 不再遮蔽日志中的机密；默认会遮蔽。
-- `HYDRA_UMC_VOICE_CONFIRM_REQUIRE_SIGNATURE=1`（`voice.requireSignature`）- 已确认的语音请求需要经过验证的签名。
+- `HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV=off`（`camera.credentialsViaEnv`）- IP 摄像头的密码放在其进程的命令行而不是环境中；默认通过环境传递（下次启动摄像头进程时生效）。
+- `HYDRA_UMC_NEW_INSTALL_TLS=off`（`install.newInstallTls`）- 新安装不会自行开启 TLS；默认在已有自有认证机构的证书时会开启（仅在安装首次启动时读取）。
 
 - **谁在连接：** `GET /api/connections/clients` 和 `GET /api/connections/events` 以 HYDRA-UMC-SDK 的封闭契约 `ConnectionClient` 和 `ConnectionEvent` 作答（首次见到、成功或失败的登录、第二因素、登出、已结束的会话）。管理员能看到全部条目，其他账号只能看到自己的；不保存密码、令牌或机密。
 - **生存信号：** `GET /api/robots/liveness` 说明服务器是否收到名册中每个机器人的消息（`live`、`stale` 或 `unknown`，并带最后一条消息的时长），而不是重复只记录操作员所开关内容的 `online` 标志；`data/server-config.json` 的 `liveness.staleAfterS` 设定上限（默认 30 秒）。
-- `HYDRA_UMC_SERVER_PORT` - 监听端口；优先于共享的 `PORT`。`HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV=off`、`HYDRA_UMC_PORTS_REGISTRY` 以及 `HYDRA_UMC_SDK_DIR` / `HYDRA_UMC_REQUIRE_SDK=1` 在同一张表中说明。
+- `HYDRA_UMC_SERVER_PORT` - 监听端口；优先于共享的 `PORT`。`HYDRA_UMC_PORTS_REGISTRY` 以及 `HYDRA_UMC_SDK_DIR` / `HYDRA_UMC_REQUIRE_SDK=1` 在同一张表中说明。
 
 以下访问开关就是 STUDIO 和 SUITE 的 Server Admin 画面所编辑的那些。每一项都按相同顺序决定：先是部署环境变量（画面中显示为锁定），然后是管理员保存在 `data/server-config.json` 中的值，最后是保守的默认值。其余一切由上面列出的变量涵盖。
 

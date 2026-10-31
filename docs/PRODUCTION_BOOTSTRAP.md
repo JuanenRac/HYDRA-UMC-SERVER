@@ -39,7 +39,7 @@ TLS is the default of a **new** installation only: on the very first start (no `
 (`server.pem` and `server.key` in `HYDRA_TLS_DIR`, default `/etc/hydra-umc/tls`, made by the OS provisioning
 script `hydra_mqtt_tls.sh init`), the server saves TLS as on, exactly as an administrator would from the Server
 Admin screen, and logs it. Clients then have to trust that authority (`hydra_mqtt_tls.sh export-ca`). The Admin
-screen can switch it off; `HYDRA_UMC_NEW_INSTALL_TLS=off` forbids the default; an installation that already has
+screen can switch it off; `HYDRA_UMC_NEW_INSTALL_TLS=off` (or the saved option `install.newInstallTls`, which the variable overrules) forbids the default; an installation that already has
 any of those files, or none of those certificates, is left exactly as it is.
 
 ## Development and test

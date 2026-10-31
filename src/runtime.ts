@@ -45,7 +45,7 @@ const SERVER_CONFIG_FILE = path.join(process.cwd(), "data", "server-config.json"
 
 import type { BleFile } from "./securityConfig";
 import type { MqttFile } from "./mqttBridge";
-import type { ConnectionsFile, HealthFile, MavlinkFile, RobotsFile, SafetyFile, CameraFile, WebsocketFile, LoggingFile, VoiceFile } from "./securityConfig";
+import type { ConnectionsFile, HealthFile, MavlinkFile, RobotsFile, SafetyFile, CameraFile, InstallFile, WebsocketFile, LoggingFile, VoiceFile } from "./securityConfig";
 
 export interface ServerConfig {
   port?: number;
@@ -61,6 +61,7 @@ export interface ServerConfig {
   health?: HealthFile;
   safety?: SafetyFile;
   camera?: CameraFile;
+  install?: InstallFile;
   websocket?: WebsocketFile;
   logging?: LoggingFile;
   /** How old the last news of a robot may be before it is called stale, in seconds (src/robotLiveness.ts; 30 by default). */

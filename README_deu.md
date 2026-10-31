@@ -369,7 +369,7 @@ Ein Zertifikat besorgen:
 
 ### Zugriffsschalter, Verbindungsverlauf und Lebenszeichen
 
-Sieben Optionen erweitern, was der Server beantwortet oder aufzeichnet; alle starten mit dem vorsichtigen Wert, und jede hat eine Umgebungsvariable und einen Administrator-Schalter (`PUT /api/admin/server-config`, sichtbar in Server Admin von STUDIO; eine Umgebungsvariable sperrt den Schalter). Die vollständige Tabelle steht in Abschnitt 2k von [`docs/REMOTE_API.md`](docs/REMOTE_API.md).
+Neun Optionen erweitern, was der Server beantwortet oder aufzeichnet; alle starten mit dem vorsichtigen Wert, und jede hat eine Umgebungsvariable und einen Administrator-Schalter (`PUT /api/admin/server-config`, sichtbar in Server Admin von STUDIO; eine Umgebungsvariable sperrt den Schalter). Die vollständige Tabelle steht in Abschnitt 2k von [`docs/REMOTE_API.md`](docs/REMOTE_API.md).
 
 - `HYDRA_UMC_HEALTH_OPEN=1` (`health.open`) - `GET /health` antwortet ohne Anmeldung mit einem knappen Gesundheitsbericht (ohne Version, Host oder Zähler); aus, antwortet es mit `404`.
 - `HYDRA_UMC_SAFETY_PUBLISH_STOP=1` (`safety.publishGlobalStop`) - ein globaler Stopp wird zusätzlich auf der MQTT-Brücke als gehaltenes `SAFE_STOP` auf `<Präfix>/safety/estop` angekündigt (siehe `docs/GLOBAL_STOP.md`).
@@ -377,11 +377,12 @@ Sieben Optionen erweitern, was der Server beantwortet oder aufzeichnet; alle sta
 - `HYDRA_UMC_CAMERA_AUTH=open` (`camera.open`) - Kamerabilder ohne Ticket; standardmäßig verlangen sie eines.
 - `HYDRA_UMC_WS_QUERY_TOKEN=allow` (`websocket.allowQueryToken`) - ein Token in der WebSocket-Adresse; standardmäßig wird es abgelehnt.
 - `HYDRA_UMC_LOG_REDACTION=off` (`logging.redactSecrets`) - hört auf, Geheimnisse im Protokoll zu schwärzen; standardmäßig werden sie geschwärzt.
-- `HYDRA_UMC_VOICE_CONFIRM_REQUIRE_SIGNATURE=1` (`voice.requireSignature`) - eine bestätigte Sprachanfrage braucht eine geprüfte Signatur.
+- `HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV=off` (`camera.credentialsViaEnv`) - das Passwort einer IP-Kamera steht in der Befehlszeile ihres Prozesses statt in dessen Umgebung; standardmäßig geht es über die Umgebung (gilt beim nächsten Start eines Kameraprozesses).
+- `HYDRA_UMC_NEW_INSTALL_TLS=off` (`install.newInstallTls`) - eine neue Installation schaltet TLS nicht selbst ein; standardmäßig tut sie es, wenn sie schon die Zertifikate ihrer eigenen Stelle hat (wird nur beim ersten Start einer Installation gelesen).
 
 - **Wer sich verbindet:** `GET /api/connections/clients` und `GET /api/connections/events` antworten in den geschlossenen Verträgen `ConnectionClient` und `ConnectionEvent` von HYDRA-UMC-SDK (erstmals gesehen, gelungene oder fehlgeschlagene Anmeldungen, zweiter Faktor, Abmeldungen, beendete Sitzungen). Ein Administrator sieht alle Einträge, jedes andere Konto nur seine eigenen; Passwörter, Token und Geheimnisse werden nicht gespeichert.
 - **Lebenszeichen:** `GET /api/robots/liveness` sagt, ob der Server von jedem Roboter der Liste Nachricht hatte (`live`, `stale` oder `unknown`, mit dem Alter der letzten Nachricht), statt das Flag `online` zu wiederholen, das nur festhält, was ein Bediener eingeschaltet hat; `liveness.staleAfterS` in `data/server-config.json` setzt die Grenze (standardmäßig 30 s).
-- `HYDRA_UMC_SERVER_PORT` - der Listen-Port; er hat Vorrang vor dem gemeinsamen `PORT`. `HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV=off`, `HYDRA_UMC_PORTS_REGISTRY` und `HYDRA_UMC_SDK_DIR` / `HYDRA_UMC_REQUIRE_SDK=1` stehen in derselben Tabelle.
+- `HYDRA_UMC_SERVER_PORT` - der Listen-Port; er hat Vorrang vor dem gemeinsamen `PORT`. `HYDRA_UMC_PORTS_REGISTRY` und `HYDRA_UMC_SDK_DIR` / `HYDRA_UMC_REQUIRE_SDK=1` stehen in derselben Tabelle.
 
 Die folgenden Zugriffsschalter sind die, die der Server-Admin-Bildschirm von STUDIO und SUITE bearbeitet. Jeder wird in derselben Reihenfolge aufgelöst: zuerst die Umgebung des Deployments (der Bildschirm zeigt ihn gesperrt), dann das, was der Administrator in `data/server-config.json` gespeichert hat, dann der konservative Standard. Die oben aufgeführten Variablen decken alles andere ab.
 

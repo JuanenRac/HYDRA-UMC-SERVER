@@ -283,6 +283,14 @@ async function main() {
     });
     assert.equal(turnGatedOut.status, 404);
 
+    // A version after the slash does not change the gate: only the type counts.
+    for (const header of ["watch/0.2.7", "Watch/0.2.7", "watch/" + "9".repeat(300), "watch/0.2.7;x y"]) {
+      const withVersion = await fetch(`http://127.0.0.1:${serverPort}/api/watch/system-status`, { headers: { ...authorization, "x-hydra-client": header } });
+      assert.equal(withVersion.status, 404, `a versioned header is gated like the bare type: ${header.slice(0, 24)}`);
+    }
+    const otherType = await fetch(`http://127.0.0.1:${serverPort}/api/watch/system-status`, { headers: { ...authorization, "x-hydra-client": "android/0.7.5" } });
+    assert.equal(otherType.status, 200, "closing Watch does not close Android, with or without a version");
+
     // The SAME phone session, without that header, is unaffected - Watch
     // access and this app's own direct access are genuinely independent.
     const statusStillDirect = await request(serverPort, "/api/watch/system-status", { headers: authorization });

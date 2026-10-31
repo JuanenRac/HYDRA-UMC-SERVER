@@ -363,7 +363,7 @@ Cómo conseguir un certificado:
 
 ### Interruptores de acceso, historial de conexiones y señal de vida
 
-Siete opciones amplían lo que el servidor responde o registra; todas parten del valor conservador y cada una tiene una variable de entorno y un interruptor de administrador (`PUT /api/admin/server-config`, visible en Server Admin de STUDIO; una variable de entorno bloquea el interruptor). La tabla completa está en la sección 2k de [`docs/REMOTE_API.md`](docs/REMOTE_API.md).
+Nueve opciones amplían lo que el servidor responde o registra; todas parten del valor conservador y cada una tiene una variable de entorno y un interruptor de administrador (`PUT /api/admin/server-config`, visible en Server Admin de STUDIO; una variable de entorno bloquea el interruptor). La tabla completa está en la sección 2k de [`docs/REMOTE_API.md`](docs/REMOTE_API.md).
 
 - `HYDRA_UMC_HEALTH_OPEN=1` (`health.open`) - `GET /health` responde sin iniciar sesión con un informe de salud mínimo (sin versión, host ni recuentos); desactivado, responde `404`.
 - `HYDRA_UMC_SAFETY_PUBLISH_STOP=1` (`safety.publishGlobalStop`) - una parada global también se anuncia en el puente MQTT como un `SAFE_STOP` retenido en `<prefijo>/safety/estop` (véase `docs/GLOBAL_STOP.md`).
@@ -371,11 +371,12 @@ Siete opciones amplían lo que el servidor responde o registra; todas parten del
 - `HYDRA_UMC_CAMERA_AUTH=open` (`camera.open`) - imágenes de cámara sin ticket; por defecto lo exigen.
 - `HYDRA_UMC_WS_QUERY_TOKEN=allow` (`websocket.allowQueryToken`) - un token en la dirección del WebSocket; por defecto se rechaza.
 - `HYDRA_UMC_LOG_REDACTION=off` (`logging.redactSecrets`) - deja de ocultar secretos en el registro; por defecto se ocultan.
-- `HYDRA_UMC_VOICE_CONFIRM_REQUIRE_SIGNATURE=1` (`voice.requireSignature`) - una petición hablada confirmada necesita una firma verificada.
+- `HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV=off` (`camera.credentialsViaEnv`) - la contraseña de una cámara IP va en la línea de órdenes de su proceso en vez de en su entorno; por defecto va por el entorno (se aplica la próxima vez que arranque un proceso de cámara).
+- `HYDRA_UMC_NEW_INSTALL_TLS=off` (`install.newInstallTls`) - una instalación nueva no activa TLS por sí sola; por defecto sí lo hace cuando ya tiene los certificados de su propia autoridad (solo se lee en el primer arranque de una instalación).
 
 - **Quién se conecta:** `GET /api/connections/clients` y `GET /api/connections/events` responden con los contratos cerrados `ConnectionClient` y `ConnectionEvent` de HYDRA-UMC-SDK (primera vez visto, entradas que funcionaron o fallaron, segundo factor, salidas, sesiones terminadas). Un administrador ve todas las entradas, cualquier otra cuenta solo las suyas; no se guarda ninguna contraseña, token ni secreto.
 - **Señal de vida:** `GET /api/robots/liveness` dice si el servidor tuvo noticias de cada robot del reparto (`live`, `stale` o `unknown`, con la antigüedad de la última noticia), en vez de repetir el indicador `online` que solo registra lo que un operador activó; `liveness.staleAfterS` de `data/server-config.json` fija el límite (30 s por defecto).
-- `HYDRA_UMC_SERVER_PORT` - el puerto de escucha; prevalece sobre el `PORT` compartido. `HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV=off`, `HYDRA_UMC_PORTS_REGISTRY` y `HYDRA_UMC_SDK_DIR` / `HYDRA_UMC_REQUIRE_SDK=1` se describen en la misma tabla.
+- `HYDRA_UMC_SERVER_PORT` - el puerto de escucha; prevalece sobre el `PORT` compartido. `HYDRA_UMC_PORTS_REGISTRY` y `HYDRA_UMC_SDK_DIR` / `HYDRA_UMC_REQUIRE_SDK=1` se describen en la misma tabla.
 
 Los interruptores de acceso de abajo son los que editan las pantallas Server Admin de STUDIO y SUITE. Cada uno se resuelve en el mismo orden: primero el entorno del despliegue (la pantalla lo muestra bloqueado), luego lo que el administrador guardó en `data/server-config.json` y por último el valor por defecto conservador. Las variables de arriba cubren todo lo demás.
 

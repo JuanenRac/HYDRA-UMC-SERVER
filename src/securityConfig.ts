@@ -81,6 +81,14 @@ export interface HealthFile {
 export interface CameraFile {
   /** Whether the pictures answer without a ticket or a signed-in client (default: no; they then need one). */
   open?: boolean;
+  /** Whether the password of an IP camera is handed to its stream process through the environment instead of its command line (default: yes; with "no" it shows in the process table). */
+  credentialsViaEnv?: boolean;
+}
+
+/** What a first start of a new installation does by itself (src/newInstallTls.ts). */
+export interface InstallFile {
+  /** Whether a new installation that has the certificates of its own authority starts with TLS on (default: yes). It is only read at the very first start. */
+  newInstallTls?: boolean;
 }
 
 /** The live WebSocket of the control apps (src/ws.ts). */
@@ -118,6 +126,7 @@ export interface SecurityFile {
   health?: HealthFile;
   safety?: SafetyFile;
   camera?: CameraFile;
+  install?: InstallFile;
   websocket?: WebsocketFile;
   logging?: LoggingFile;
 }
@@ -142,6 +151,8 @@ export interface SecurityEnv {
   wsQueryToken?: string;
   logRedaction?: string;
   voiceRequireSignature?: string;
+  cameraCredentialsViaEnv?: string;
+  newInstallTls?: string;
 }
 
 export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
@@ -165,6 +176,8 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     wsQueryToken: env.HYDRA_UMC_WS_QUERY_TOKEN,
     logRedaction: env.HYDRA_UMC_LOG_REDACTION,
     voiceRequireSignature: env.HYDRA_UMC_VOICE_CONFIRM_REQUIRE_SIGNATURE,
+    cameraCredentialsViaEnv: env.HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV,
+    newInstallTls: env.HYDRA_UMC_NEW_INSTALL_TLS,
   };
 }
 
@@ -278,6 +291,20 @@ export function resolveVoiceRequireSignature(env: string | undefined, file: Secu
   return { value: false, source: "default" };
 }
 
+/** Is the password of an IP camera handed over through the environment of its process? Yes, unless the environment says "off" or an administrator turned it off. */
+export function resolveCameraCredentialsViaEnv(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim().toLowerCase() !== "off", source: "env" };
+  if (typeof file.camera?.credentialsViaEnv === "boolean") return { value: file.camera.credentialsViaEnv, source: "config" };
+  return { value: true, source: "default" };
+}
+
+/** Does a new installation start with TLS on? Yes, unless the environment says "off" or the saved configuration says no. */
+export function resolveNewInstallTls(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim().toLowerCase() !== "off", source: "env" };
+  if (typeof file.install?.newInstallTls === "boolean") return { value: file.install.newInstallTls, source: "config" };
+  return { value: true, source: "default" };
+}
+
 export function resolveMavlinkKeyFile(env: string | undefined, file: SecurityFile): { value: string; source: Source } {
   if (isSet(env)) return { value: env.trim(), source: "env" };
   if (isSet(file.mavlink?.signingKeyFile)) return { value: file.mavlink.signingKeyFile.trim(), source: "config" };
@@ -364,7 +391,8 @@ export interface SecuritySnapshot {
   connections: { recordAddress: { value: boolean; source: Source } };
   health: { open: { value: boolean; source: Source } };
   safety: { publishGlobalStop: { value: boolean; source: Source } };
-  camera: { open: { value: boolean; source: Source } };
+  camera: { open: { value: boolean; source: Source }; credentialsViaEnv: { value: boolean; source: Source } };
+  install: { newInstallTls: { value: boolean; source: Source } };
   websocket: { allowQueryToken: { value: boolean; source: Source } };
   logging: { redactSecrets: { value: boolean; source: Source } };
   /** The signing key itself is never part of this; only where its file is. */
@@ -433,6 +461,11 @@ export class SecurityConfig {
     return resolveCameraOpen(this.options.env.cameraAuth, this.file).value;
   }
 
+  /** Whether the password of an IP camera goes to its process through the environment (on unless an administrator turned it off). */
+  cameraCredentialsViaEnv(): boolean {
+    return resolveCameraCredentialsViaEnv(this.options.env.cameraCredentialsViaEnv, this.file).value;
+  }
+
   /** Whether /ws?token= is accepted (off unless an administrator allowed it). */
   wsQueryTokenAllowed(): boolean {
     return resolveWsQueryToken(this.options.env.wsQueryToken, this.file).value;
@@ -490,7 +523,8 @@ export class SecurityConfig {
       connections: { recordAddress: resolveConnectionRecordAddress(this.options.env.connectionRecordAddress, this.file) },
       health: { open: resolveHealthOpen(this.options.env.healthOpen, this.file) },
       safety: { publishGlobalStop: resolveSafetyPublishStop(this.options.env.safetyPublishStop, this.file) },
-      camera: { open: resolveCameraOpen(this.options.env.cameraAuth, this.file) },
+      camera: { open: resolveCameraOpen(this.options.env.cameraAuth, this.file), credentialsViaEnv: resolveCameraCredentialsViaEnv(this.options.env.cameraCredentialsViaEnv, this.file) },
+      install: { newInstallTls: resolveNewInstallTls(this.options.env.newInstallTls, this.file) },
       websocket: { allowQueryToken: resolveWsQueryToken(this.options.env.wsQueryToken, this.file) },
       logging: { redactSecrets: resolveLogRedaction(this.options.env.logRedaction, this.file) },
       voice: {
@@ -698,8 +732,27 @@ export class SecurityConfig {
         if (resolveCameraOpen(this.options.env.cameraAuth, this.file).source === "env") throw lockedBy("HYDRA_UMC_CAMERA_AUTH");
         merged.open = cameraPatch.open;
       }
+      if (cameraPatch.credentialsViaEnv !== undefined) {
+        if (typeof cameraPatch.credentialsViaEnv !== "boolean") throw new SecurityConfigError(400, "camera.credentialsViaEnv must be true or false");
+        if (resolveCameraCredentialsViaEnv(this.options.env.cameraCredentialsViaEnv, this.file).source === "env") throw lockedBy("HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV");
+        merged.credentialsViaEnv = cameraPatch.credentialsViaEnv;
+      }
       next.camera = merged;
       if (cameraPatch.open === true) warnings.push("camera_open");
+      if (cameraPatch.credentialsViaEnv === false) warnings.push("camera_credentials_in_arguments");
+    }
+
+    if (patch.install !== undefined) {
+      const installPatch = patch.install;
+      if (typeof installPatch !== "object" || installPatch === null || Array.isArray(installPatch)) throw new SecurityConfigError(400, "install must be an object");
+      const merged: InstallFile = { ...(next.install ?? {}) };
+      if (installPatch.newInstallTls !== undefined) {
+        if (typeof installPatch.newInstallTls !== "boolean") throw new SecurityConfigError(400, "install.newInstallTls must be true or false");
+        if (resolveNewInstallTls(this.options.env.newInstallTls, this.file).source === "env") throw lockedBy("HYDRA_UMC_NEW_INSTALL_TLS");
+        merged.newInstallTls = installPatch.newInstallTls;
+      }
+      next.install = merged;
+      if (installPatch.newInstallTls === false) warnings.push("new_install_tls_off");
     }
 
     if (patch.websocket !== undefined) {
@@ -798,7 +851,10 @@ export class SecurityConfig {
       log(`[SECURITY] ${actor} ${snapshot.connections.recordAddress.value ? "allowed" : "forbade"} keeping the address and user agent of the clients in the history of connections.`);
     }
     if (patch.camera !== undefined) {
-      log(`[SECURITY] ${actor} ${snapshot.camera.open.value ? "OPENED the camera pictures to the whole network (no ticket needed)" : "made the camera pictures ask for a ticket or a signed-in client"}.`);
+      log(`[SECURITY] ${actor} ${snapshot.camera.open.value ? "OPENED the camera pictures to the whole network (no ticket needed)" : "made the camera pictures ask for a ticket or a signed-in client"}; the password of an IP camera ${snapshot.camera.credentialsViaEnv.value ? "goes to its process through the environment" : "is on the command line of its process (visible in the process table)"}.`);
+    }
+    if (patch.install !== undefined) {
+      log(`[SECURITY] ${actor} ${snapshot.install.newInstallTls.value ? "allowed" : "forbade"} a new installation to start with TLS on by itself.`);
     }
     if (patch.websocket !== undefined) {
       log(`[SECURITY] ${actor} ${snapshot.websocket.allowQueryToken.value ? "allowed a token in the address of the WebSocket (it is recorded in proxy and server logs)" : "forbade a token in the address of the WebSocket"}.`);

@@ -123,7 +123,30 @@ async function main() {
     assert.equal(gotSettings(await openSocket(port, `?token=${encodeURIComponent(token)}`, undefined)), false);
   });
 
-  console.log("SERVER_LEGACY_OPT_OUT_CONTRACT=PASS defaults=8 camera_opt_out=3 ws_query_opt_out=4 saved_options=6");
+  // --- the password of an IP camera and the TLS of a new installation: conservative by default, loosened from Server Admin with a warning, locked by the environment
+  await withServer({}, async (port, token) => {
+    const put = async (patch) => { const response = await fetch(`http://127.0.0.1:${port}/api/admin/server-config`, { method: "PUT", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify(patch) }); return { status: response.status, body: await response.json() }; };
+    const before = (await (await fetch(`http://127.0.0.1:${port}/api/admin/server-config`, { headers: { authorization: `Bearer ${token}` } })).json());
+    assert.deepEqual(before.camera.credentialsViaEnv, { value: true, source: "default" });
+    assert.deepEqual(before.install.newInstallTls, { value: true, source: "default" });
+    const loosened = await put({ camera: { credentialsViaEnv: false }, install: { newInstallTls: false } });
+    assert.equal(loosened.status, 200);
+    assert.deepEqual(loosened.body.warnings.sort(), ["camera_credentials_in_arguments", "new_install_tls_off"]);
+    assert.deepEqual(loosened.body.camera.credentialsViaEnv, { value: false, source: "config" });
+    assert.equal((await put({ camera: { credentialsViaEnv: "off" } })).status, 400);
+    assert.equal((await put({ install: [] })).status, 400);
+    const closed = await put({ camera: { credentialsViaEnv: true }, install: { newInstallTls: true } });
+    assert.deepEqual(closed.body.warnings, []);
+  });
+  await withServer({ HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV: "off", HYDRA_UMC_NEW_INSTALL_TLS: "off" }, async (port, token) => {
+    const response = await fetch(`http://127.0.0.1:${port}/api/admin/server-config`, { method: "PUT", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ camera: { credentialsViaEnv: true } }) });
+    assert.equal(response.status, 409, "the environment locks the option");
+    const config = await (await fetch(`http://127.0.0.1:${port}/api/admin/server-config`, { headers: { authorization: `Bearer ${token}` } })).json();
+    assert.deepEqual(config.camera.credentialsViaEnv, { value: false, source: "env" });
+    assert.deepEqual(config.install.newInstallTls, { value: false, source: "env" });
+  });
+
+  console.log("SERVER_LEGACY_OPT_OUT_CONTRACT=PASS defaults=8 camera_opt_out=3 ws_query_opt_out=4 saved_options=6 access_options=10");
 }
 
 main().catch((error) => { console.error(error); process.exitCode = 1; });
