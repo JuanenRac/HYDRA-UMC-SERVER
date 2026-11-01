@@ -1,0 +1,1272 @@
+{
+  "format": "hydra-server-shapes/1",
+  "document": {
+    "title": "HYDRA-UMC-SERVER API",
+    "version": "2",
+    "description": "Generated from the routes registered in src/. It lists paths, methods, required access, the status codes each handler can return, and the names of the JSON body fields and query parameters it reads. Routes with a stable shape carry typed request and response schemas; the others are described in docs/REMOTE_API.md."
+  },
+  "security_schemes": {
+    "bearerAuth": {
+      "type": "http",
+      "scheme": "bearer",
+      "bearerFormat": "JWT"
+    }
+  },
+  "shapes": {
+    "Error": {
+      "type": "object",
+      "required": [
+        "error"
+      ],
+      "properties": {
+        "error": {
+          "type": "string"
+        }
+      }
+    },
+    "Success": {
+      "type": "object",
+      "required": [
+        "success"
+      ],
+      "properties": {
+        "success": {
+          "type": "boolean"
+        }
+      }
+    },
+    "LoginResult": {
+      "type": "object",
+      "required": [
+        "success",
+        "token",
+        "refreshToken",
+        "role"
+      ],
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "token": {
+          "type": "string"
+        },
+        "refreshToken": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        }
+      }
+    },
+    "TotpStatus": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "recoveryLeft"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "recoveryLeft": {
+          "type": "integer"
+        }
+      }
+    },
+    "TotpEnrolment": {
+      "type": "object",
+      "required": [
+        "success",
+        "secret",
+        "uri"
+      ],
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "secret": {
+          "type": "string"
+        },
+        "uri": {
+          "type": "string"
+        }
+      }
+    },
+    "TotpConfirmed": {
+      "type": "object",
+      "required": [
+        "success",
+        "recoveryCodes"
+      ],
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "recoveryCodes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "SystemMetrics": {
+      "type": "object",
+      "required": [
+        "cpu_load",
+        "memory_usage",
+        "temp",
+        "temp_is_real",
+        "rp1_temp",
+        "uptime",
+        "network"
+      ],
+      "properties": {
+        "cpu_load": {
+          "type": "number"
+        },
+        "memory_usage": {
+          "type": "number"
+        },
+        "temp": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "temp_is_real": {
+          "type": "boolean"
+        },
+        "rp1_temp": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "uptime": {
+          "type": "number"
+        },
+        "network": {
+          "type": "object"
+        }
+      }
+    },
+    "HydraInfo": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "product",
+        "remoteApiVersion",
+        "appVersion",
+        "hostname",
+        "controllerCount",
+        "robotCount",
+        "uptimeSeconds"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string"
+        },
+        "product": {
+          "type": "string"
+        },
+        "remoteApiVersion": {
+          "type": "integer"
+        },
+        "appVersion": {
+          "type": "string"
+        },
+        "hostname": {
+          "type": "string"
+        },
+        "controllerCount": {
+          "type": "integer"
+        },
+        "robotCount": {
+          "type": "integer"
+        },
+        "uptimeSeconds": {
+          "type": "integer"
+        }
+      }
+    },
+    "Reservation": {
+      "type": "object",
+      "required": [
+        "success",
+        "reservationHistory"
+      ],
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "reservation": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "reservationHistory": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "StopAllResult": {
+      "type": "object",
+      "required": [
+        "success",
+        "stoppedCount",
+        "failedCount",
+        "persisted",
+        "robots"
+      ],
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "stoppedCount": {
+          "type": "integer"
+        },
+        "failedCount": {
+          "type": "integer"
+        },
+        "persisted": {
+          "type": "boolean"
+        },
+        "announced": {
+          "type": "boolean",
+          "description": "Present only when announcing a global stop is configured (safety.publishGlobalStop): whether the retained SAFE_STOP went out on the MQTT bridge."
+        },
+        "robots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "robotId",
+              "controllerId",
+              "name",
+              "stopped",
+              "valvesOff",
+              "pumpsOff"
+            ],
+            "properties": {
+              "robotId": {
+                "type": "integer"
+              },
+              "controllerId": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "stopped": {
+                "type": "boolean"
+              },
+              "valvesOff": {
+                "type": "integer"
+              },
+              "pumpsOff": {
+                "type": "integer"
+              },
+              "reservedBy": {
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "CameraCapture": {
+      "type": "object",
+      "required": [
+        "success",
+        "cameraId",
+        "filename"
+      ],
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "cameraId": {
+          "type": "integer"
+        },
+        "filename": {
+          "type": "string"
+        },
+        "capturedAt": {
+          "type": "string"
+        },
+        "sizeBytes": {
+          "type": "integer"
+        },
+        "startedAt": {
+          "type": "string"
+        },
+        "stoppedAt": {
+          "type": "string"
+        }
+      }
+    },
+    "CameraMediaList": {
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "cameraId",
+              "kind",
+              "filename",
+              "sizeBytes",
+              "capturedAt",
+              "recording"
+            ],
+            "properties": {
+              "cameraId": {
+                "type": "integer"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "snapshots",
+                  "recordings"
+                ]
+              },
+              "filename": {
+                "type": "string"
+              },
+              "sizeBytes": {
+                "type": "integer"
+              },
+              "capturedAt": {
+                "type": "string"
+              },
+              "recording": {
+                "type": "boolean"
+              },
+              "durationMs": {
+                "type": "integer"
+              },
+              "frameCount": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      }
+    },
+    "CameraProcessStatus": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "status",
+          "lastError",
+          "port"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "lastError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "port": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "UsbDevices": {
+      "type": "object",
+      "required": [
+        "devices"
+      ],
+      "properties": {
+        "devices": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "Clients": {
+      "type": "object",
+      "required": [
+        "clients"
+      ],
+      "properties": {
+        "clients": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "LogLines": {
+      "type": "object",
+      "required": [
+        "lines"
+      ],
+      "properties": {
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "ServerConfig": {
+      "type": "object",
+      "required": [
+        "port",
+        "pendingPort"
+      ],
+      "properties": {
+        "port": {
+          "type": "integer"
+        },
+        "pendingPort": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "ServerConfigSaved": {
+      "type": "object",
+      "required": [
+        "success",
+        "appliesOnRestart"
+      ],
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "appliesOnRestart": {
+          "type": "boolean"
+        }
+      }
+    },
+    "Reachable": {
+      "type": "object",
+      "required": [
+        "reachable"
+      ],
+      "properties": {
+        "reachable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "ModelList": {
+      "type": "object",
+      "required": [
+        "models"
+      ],
+      "properties": {
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "ModelSubmitted": {
+      "type": "object",
+      "required": [
+        "success",
+        "slug"
+      ],
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "slug": {
+          "type": "string"
+        }
+      }
+    },
+    "BluetoothScan": {
+      "type": "object",
+      "required": [
+        "success",
+        "devices"
+      ],
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "devices": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "CanotaFlash": {
+      "type": "object",
+      "required": [
+        "success",
+        "finalPhase"
+      ],
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "finalPhase": {
+          "type": "string"
+        }
+      }
+    },
+    "PtzResult": {
+      "type": "object",
+      "required": [
+        "ok"
+      ],
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        }
+      }
+    },
+    "Passthrough": {
+      "type": "object",
+      "description": "The body of the upstream service, relayed unchanged; its shape is that service's own."
+    },
+    "Settings": {
+      "type": "object",
+      "description": "The full settings document. Controllers and their robots are listed under controllers[].robots.",
+      "properties": {
+        "controllers": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "SupervisorSnapshot": {
+      "type": "object",
+      "description": "Host deep-dive: CPU per core, memory, disks, network, temperatures. Fields the host cannot report are null."
+    },
+    "WatchStatus": {
+      "type": "object",
+      "required": [
+        "type",
+        "headline",
+        "detail",
+        "level",
+        "speak"
+      ],
+      "properties": {
+        "type": {
+          "const": "system_status"
+        },
+        "headline": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "level": {
+          "type": "string",
+          "enum": [
+            "NOMINAL",
+            "WARNING",
+            "CRITICAL"
+          ]
+        },
+        "speak": {
+          "type": "boolean"
+        }
+      }
+    },
+    "VoiceReply": {
+      "type": "object",
+      "required": [
+        "type",
+        "requestId",
+        "text",
+        "level",
+        "speak",
+        "requiresConfirmation"
+      ],
+      "properties": {
+        "type": {
+          "const": "assistant_reply"
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "level": {
+          "type": "string"
+        },
+        "speak": {
+          "type": "boolean"
+        },
+        "requiresConfirmation": {
+          "type": "boolean"
+        },
+        "visualState": {
+          "type": "string"
+        },
+        "intent": {
+          "type": "object"
+        },
+        "interpretation": {
+          "type": "object"
+        },
+        "messageCode": {
+          "type": "string"
+        },
+        "messageParams": {
+          "type": "object"
+        },
+        "textLanguage": {
+          "type": "string"
+        },
+        "confirmationToken": {
+          "type": "string"
+        },
+        "confirmationValiditySeconds": {
+          "type": "number"
+        }
+      }
+    },
+    "EcosystemStatus": {
+      "type": "object",
+      "required": [
+        "available",
+        "scannedAt",
+        "projects"
+      ],
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "scannedAt": {
+          "type": "string"
+        },
+        "projects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "role": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "stack": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "maturity": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "family": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "version": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "deploymentTarget": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "servicePort": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "serviceHealthPath": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "serviceHost": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "systemdUnit": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "pid": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "activeState": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "subState": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "live": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "UserList": {
+      "type": "object",
+      "required": [
+        "users"
+      ],
+      "properties": {
+        "users": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "ConnectionClient": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "id",
+        "kind",
+        "first_seen_utc",
+        "last_seen_utc",
+        "active_sessions",
+        "logins_ok",
+        "logins_failed"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "studio",
+            "suite",
+            "android",
+            "ios",
+            "dsi",
+            "watch",
+            "voice",
+            "other"
+          ]
+        },
+        "user": {
+          "type": "string"
+        },
+        "app_version": {
+          "type": "string",
+          "pattern": "^[0-9A-Za-z._-]{1,24}$"
+        },
+        "origin": {
+          "type": "string",
+          "enum": [
+            "local",
+            "remote"
+          ]
+        },
+        "two_factor": {
+          "type": "boolean"
+        },
+        "first_seen_utc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "last_seen_utc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "last_failure_utc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "active_sessions": {
+          "type": "integer"
+        },
+        "logins_ok": {
+          "type": "integer"
+        },
+        "logins_failed": {
+          "type": "integer"
+        },
+        "ip": {
+          "type": "string",
+          "description": "Administrators only, and only when connections.recordAddress is on."
+        },
+        "agent": {
+          "type": "string",
+          "description": "Administrators only, and only when connections.recordAddress is on."
+        }
+      }
+    },
+    "ConnectionEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "id",
+        "at_utc",
+        "action",
+        "client_kind",
+        "client_id"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "enum": [
+            "1.0"
+          ]
+        },
+        "id": {
+          "type": "integer"
+        },
+        "at_utc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "first_seen",
+            "login",
+            "login_failed",
+            "second_factor_failed",
+            "logout",
+            "session_ended",
+            "session_expired"
+          ]
+        },
+        "client_kind": {
+          "type": "string",
+          "enum": [
+            "studio",
+            "suite",
+            "android",
+            "ios",
+            "dsi",
+            "watch",
+            "voice",
+            "other"
+          ]
+        },
+        "client_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}$"
+        },
+        "user": {
+          "type": "string"
+        },
+        "origin": {
+          "type": "string",
+          "enum": [
+            "local",
+            "remote"
+          ]
+        },
+        "two_factor": {
+          "type": "boolean"
+        },
+        "app_version": {
+          "type": "string",
+          "pattern": "^[0-9A-Za-z._-]{1,24}$"
+        },
+        "ip": {
+          "type": "string",
+          "description": "Administrators only, and only when connections.recordAddress is on."
+        },
+        "agent": {
+          "type": "string",
+          "description": "Administrators only, and only when connections.recordAddress is on."
+        }
+      }
+    },
+    "GlobalStopReleased": {
+      "type": "object",
+      "required": [
+        "success",
+        "announced"
+      ],
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "announced": {
+          "type": "boolean",
+          "description": "Whether the retained READY went out on the MQTT bridge (false when announcing is not configured or the broker is not connected)."
+        }
+      }
+    },
+    "HealthReport": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "state",
+        "timestamp_utc",
+        "checks"
+      ],
+      "description": "The HealthReport contract of the SDK. Nothing else about the host is in it.",
+      "properties": {
+        "schema_version": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        },
+        "timestamp_utc": {
+          "type": "string"
+        },
+        "checks": {
+          "type": "object"
+        },
+        "service": {
+          "type": "string"
+        }
+      }
+    },
+    "RobotLiveness": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "stale_after_s",
+        "robots"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "string"
+        },
+        "stale_after_s": {
+          "type": "integer"
+        },
+        "robots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "controller_id",
+              "robot_id",
+              "state"
+            ],
+            "description": "state is live (news within stale_after_s), stale (older news) or unknown (none since the server started). The flag online of the roster is not read.",
+            "properties": {
+              "controller_id": {
+                "type": "string"
+              },
+              "robot_id": {
+                "type": "integer"
+              },
+              "state": {
+                "type": "string"
+              },
+              "last_update_utc": {
+                "type": "string"
+              },
+              "age_s": {
+                "type": "integer"
+              },
+              "source": {
+                "type": "string",
+                "description": "state (a command or a change of its state) or heartbeat."
+              }
+            }
+          }
+        }
+      }
+    },
+    "RulConfig": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "maxPoints",
+        "timeoutMs"
+      ],
+      "description": "What a signed-in client may read of the remaining-useful-life relay: whether an operator may use it and the two limits that size a request. Nothing else; closed (enabled false, 5000 points, 8000 ms) when the configuration is missing or damaged.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "True only when the relay is open to operators (rul.enabled, or HYDRA_UMC_RUL=1)."
+        },
+        "maxPoints": {
+          "type": "integer",
+          "minimum": 8,
+          "maximum": 100000,
+          "description": "Largest number of points the relay accepts in one request."
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 500,
+          "maximum": 60000,
+          "description": "How long the relay waits for the detector, in milliseconds."
+        }
+      }
+    },
+    "EcosystemHealth": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "generated_at_utc",
+        "available",
+        "summary",
+        "services",
+        "certificate",
+        "warnings"
+      ],
+      "description": "The health of the services of the ecosystem. Only on a server where ecosystemHealth.enabled is on (404 otherwise); for an operator or an administrator. The port, health path, unit and active state of a service are only in the answer to an administrator.",
+      "properties": {
+        "schema_version": {
+          "type": "string"
+        },
+        "generated_at_utc": {
+          "type": "string"
+        },
+        "available": {
+          "type": "boolean",
+          "description": "False when the sibling checkouts could not be scanned (no services then)."
+        },
+        "summary": {
+          "type": "object",
+          "required": [
+            "total",
+            "ok",
+            "degraded",
+            "down",
+            "unknown",
+            "drift"
+          ],
+          "properties": {
+            "total": {
+              "type": "integer"
+            },
+            "ok": {
+              "type": "integer"
+            },
+            "degraded": {
+              "type": "integer"
+            },
+            "down": {
+              "type": "integer"
+            },
+            "unknown": {
+              "type": "integer"
+            },
+            "drift": {
+              "type": "integer"
+            }
+          }
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "family",
+              "role",
+              "state",
+              "reason",
+              "version_expected",
+              "version_reported",
+              "drift",
+              "last_seen_utc",
+              "latency_ms"
+            ],
+            "description": "state is ok, degraded, down or unknown; reason is a short code the clients translate. version_expected comes from the manifest, version_reported from the HealthReport of the service; drift is true only when both are known and differ.",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "family": {
+                "type": "string",
+                "nullable": true
+              },
+              "role": {
+                "type": "string",
+                "nullable": true
+              },
+              "state": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "version_expected": {
+                "type": "string",
+                "nullable": true
+              },
+              "version_reported": {
+                "type": "string",
+                "nullable": true
+              },
+              "drift": {
+                "type": "boolean"
+              },
+              "last_seen_utc": {
+                "type": "string",
+                "nullable": true
+              },
+              "latency_ms": {
+                "type": "integer",
+                "nullable": true
+              },
+              "port": {
+                "type": "integer",
+                "nullable": true,
+                "description": "Administrators only."
+              },
+              "health_path": {
+                "type": "string",
+                "nullable": true,
+                "description": "Administrators only."
+              },
+              "systemd_unit": {
+                "type": "string",
+                "nullable": true,
+                "description": "Administrators only."
+              },
+              "active_state": {
+                "type": "string",
+                "nullable": true,
+                "description": "Administrators only."
+              }
+            }
+          }
+        },
+        "certificate": {
+          "type": "object",
+          "nullable": true,
+          "description": "The TLS certificate of this server; null when it runs without TLS. state is ok, expiring (fewer days left than warn_days), expired or unreadable.",
+          "properties": {
+            "state": {
+              "type": "string"
+            },
+            "not_after_utc": {
+              "type": "string",
+              "nullable": true
+            },
+            "days_left": {
+              "type": "integer",
+              "nullable": true
+            },
+            "warn_days": {
+              "type": "integer"
+            }
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "code"
+            ],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "service": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "ConnectionClientList": {
+      "type": "object",
+      "required": [
+        "clients"
+      ],
+      "properties": {
+        "clients": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/ConnectionClient"
+          }
+        }
+      }
+    },
+    "ConnectionEventList": {
+      "type": "object",
+      "required": [
+        "events"
+      ],
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/ConnectionEvent"
+          }
+        }
+      }
+    }
+  }
+}

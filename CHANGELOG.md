@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **The shapes of the answers of the inventory come from the SDK:** the 40 shapes that `tools/openapi_types.mjs` wrote by hand are now the file `tools/sdk/server.shapes.json`, a byte copy of `contracts/sources/server.shapes.json` of the SDK, and the module reads it (it refuses a file that is not a file of shapes). `tools/verify_sdk_contract.mjs` compares the copy with the SDK checkout whenever one is near and fails on a difference or on a missing copy; `docs/openapi.json` is unchanged byte for byte. New `tests/sdkShapes.test.ts`.
+
 ## [0.8.1.8] - A client can read whether the remaining-useful-life relay is open, the last contact of each service survives a restart and the route inventory is more exact
 
 - **A client can read whether the remaining-useful-life relay is open:** the new `GET /api/rul/config` (any signed-in account, read only) answers `{ enabled, maxPoints, timeoutMs }` and nothing else, so the card of the AI dashboard appears only when the server has `rul.enabled` on and sizes its request to `rul.maxPoints`. A missing or unreadable configuration gives the closed default (`enabled` false) instead of an error. Characterization and route tests in `tests/rulRelay.test.ts`, a live check in `tools/verify_local_ai_proxy_contract.mjs`, and the answer is typed in `docs/openapi.json`.

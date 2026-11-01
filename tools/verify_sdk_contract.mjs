@@ -109,6 +109,16 @@ export function compareClosedSchemas(name, sdkSchema, serverSchema) {
   return JSON.stringify(closedShape(sdkSchema)) === JSON.stringify(closedShape(serverSchema)) ? [] : [`schema ${name}: the server copy differs from the closed schema of the SDK`];
 }
 
+// The byte copy of the shapes of the answers that this server carries (tools/sdk/server.shapes.json) is the file of the SDK
+// (contracts/sources/server.shapes.json). An SDK that has no such file yet (an older checkout) leaves nothing to compare.
+export function compareShapesFile(sdkFile, vendoredFile = path.join(ROOT, "tools", "sdk", "server.shapes.json")) {
+  const sdkShapes = path.join(path.dirname(sdkFile), "..", "..", "sources", "server.shapes.json");
+  if (!fs.existsSync(sdkShapes)) return [];
+  if (!fs.existsSync(vendoredFile)) return [`${path.basename(vendoredFile)}: the SDK carries the shapes of the answers and this server has no copy of them`];
+  const clean = (file) => fs.readFileSync(file, "utf8").split("\r\n").join("\n");
+  return clean(sdkShapes) === clean(vendoredFile) ? [] : [`${path.basename(vendoredFile)}: differs from contracts/sources/server.shapes.json of the SDK (copy the file from the SDK checkout)`];
+}
+
 function generatedDocumentProblems(file, server) {
   const sdk = JSON.parse(fs.readFileSync(file, "utf8"));
   const problems = [...compareContracts(sdk, server), ...compareQueryParameters(sdk, server)];
@@ -134,6 +144,7 @@ function main() {
   const server = JSON.parse(fs.readFileSync(path.join(ROOT, "docs", "openapi.json"), "utf8"));
   const problems = compareContracts(sdk, server);
   for (const file of findGeneratedDocuments()) problems.push(...generatedDocumentProblems(file, server));
+  problems.push(...compareShapesFile(sdkFile));
   if (problems.length) {
     for (const p of problems) console.error(`  - ${p}`);
     console.error(`SDK_CONTRACT=FAIL ${problems.length} difference(s)`);
