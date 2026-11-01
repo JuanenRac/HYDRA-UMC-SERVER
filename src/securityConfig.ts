@@ -484,7 +484,13 @@ export interface SecuritySnapshot {
       stopAckTimeoutSeconds: { value: number; source: Source };
       /** Whether the deployment named the configuration file of the dispatcher; without it these two options cannot be changed here. */
       editable: boolean;
-      /** The dispatcher reads its file when it starts: a change reaches it on its next start. */
+      /**
+       * Whether the dispatcher has taken the file: "not_configured" (no address of the dispatcher, so it is asked nothing), "none" (nothing
+       * written since this server started), "pending" (asked, no answer yet), "applied" or "failed" (it did not take it: its previous values
+       * stay in force and it reads the file the next time it starts).
+       */
+      reload: "not_configured" | "none" | "pending" | "applied" | "failed";
+      /** True while the dispatcher has not taken the file: the change then reaches it on its next start. */
       appliesOnDispatcherRestart: boolean;
     };
   };
@@ -509,6 +515,10 @@ export interface SecurityConfigOptions {
   mqttActiveMode?: MqttMode;
   /** Whether the delivery of the stop requests started with this server (it changes only on a restart). */
   jobStopRelayActive?: boolean;
+  /** Asks the job dispatcher to read its configuration file again (called after the two replanning options were written). */
+  afterReplanWritten?: () => void;
+  /** What came of the last request to reload it. */
+  dispatcherReload?: () => "not_configured" | "none" | "pending" | "applied" | "failed";
   log?: (message: string) => void;
 }
 
@@ -621,7 +631,8 @@ export class SecurityConfig {
         allowUnconfirmed: { value: allow === true, source: stored ? "config" : "default" },
         stopAckTimeoutSeconds: { value: validTimeout(timeout) ? timeout : DEFAULT_STOP_ACK_TIMEOUT_SECONDS, source: stored ? "config" : "default" },
         editable: configFile !== "",
-        appliesOnDispatcherRestart: true,
+        reload: this.options.dispatcherReload?.() ?? "not_configured",
+        appliesOnDispatcherRestart: (this.options.dispatcherReload?.() ?? "not_configured") !== "applied",
       },
     };
   }
@@ -966,6 +977,7 @@ export class SecurityConfig {
       if (safetyPatch.publishGlobalStop === true) warnings.push("global_stop_published");
     }
 
+    let replanWritten = false;
     if (patch.jobDispatcher !== undefined) {
       const jd = patch.jobDispatcher;
       if (typeof jd !== "object" || jd === null || Array.isArray(jd)) throw new SecurityConfigError(400, "jobDispatcher must be an object");
@@ -1024,6 +1036,7 @@ export class SecurityConfig {
           throw new SecurityConfigError(409, error instanceof DispatcherConfigError ? error.message : "the configuration file of the dispatcher could not be written");
         }
         merged.replan = { ...wanted };
+        replanWritten = true;
         if (wanted.allowUnconfirmed) warnings.push("replan_unconfirmed_allowed");
       }
       next.jobDispatcher = merged;
@@ -1060,6 +1073,8 @@ export class SecurityConfig {
 
     this.options.save(next);
     this.file = next;
+    // the file is on disk and the settings are saved: now the dispatcher is asked to read it (the answer comes later)
+    if (replanWritten) this.options.afterReplanWritten?.();
     if (patch.mavlink !== undefined) this.mavlinkTouched = true;
     const snapshot = this.snapshot();
     if (patch.aiAccess !== undefined) log(`[SECURITY] ${actor} set the local AI relay access to ${snapshot.aiAccess.value}.`);

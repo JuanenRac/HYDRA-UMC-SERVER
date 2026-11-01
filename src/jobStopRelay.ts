@@ -117,6 +117,8 @@ export interface StopRelayDeps {
   stopRobot: (robotId: number) => boolean | Promise<boolean>;
   log: (line: string) => void;
   audit?: (event: { type: string; outcome: "ok" | "failed" | "refused"; robotId?: number; detail: Record<string, unknown> }) => void;
+  /** Called for every stop that was applied and that the dispatcher took as acknowledged: the proof that the robot stopped working on the job. */
+  onAcknowledged?: (jobId: string, dispatcherRobotId: string) => void;
 }
 
 export interface PassReport {
@@ -230,6 +232,11 @@ export class JobStopRelay {
         if (ack.status === 200 || ack.status === 409) {
           // 409: nothing is open for it any more (answered by another way or already sent back): the robot is stopped all the same.
           this.settled.set(request.jobId, request.robotId);
+          try {
+            this.deps.onAcknowledged?.(request.jobId, request.robotId);
+          } catch {
+            // keeping the proof is secondary: it never undoes the acknowledgement
+          }
           report.acknowledged.push(request.jobId);
           log(`[stop-relay] robot ${robotId} stopped for job ${request.jobId}; the dispatcher answered ${ack.status}`);
           audit?.({ type: "job-stop-relay", outcome: "ok", robotId, detail: { jobId: request.jobId, dispatcherRobotId: request.robotId, answer: ack.status } });

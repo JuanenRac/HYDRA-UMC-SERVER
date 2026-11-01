@@ -34,6 +34,8 @@ import { registerCameraRoutes } from "./routes/cameraRoutes";
 import { registerRobotRoutes } from "./routes/robotRoutes";
 import { registerCommandRoutes, ROBOT_COMMANDS, stoppedPlaybackState } from "./routes/commandRoutes";
 import { JobStopRelay, resolveStopRelay, type StopRelayFile } from "./jobStopRelay";
+import { OrchestratorTakeover, resolveTakeover, type TakeoverFile } from "./orchestratorTakeover";
+import { reloadDispatcher, resolveReload, type ReloadFile } from "./dispatcherReload";
 import { registerUpstreamRoutes } from "./routes/upstreamRoutes";
 import { realSettings, redactSettingsSecrets, setCameraCredentialsViaEnv } from "./serverPolicy";
 import { ensureSeedUser, findUser, verifyPassword } from "./users";
@@ -239,6 +241,7 @@ async function startServer() {
   // Off unless an administrator (or HYDRA_UMC_MQTT_BRIDGE) turns the MQTT bridge on: then the robots' state goes to the broker of the cell and, in "commands" mode, a command published there is carried out.
   let mqttBridge: MqttBridge | null = null;
   let jobStopRelay: JobStopRelay | null = null;
+  let orchestratorTakeover: OrchestratorTakeover | null = null;
   const livenessTracker = new RobotLivenessTracker();
   const hub = createWsHub({
     setSettings,
@@ -300,6 +303,12 @@ async function startServer() {
   // Who may use the local AI relay, whether the host information asks for a sign-in, and TLS: the
   // environment of the deployment wins, then what an administrator saved from the control app.
   const startupTls = resolveTls(securityEnvFrom(process.env), loadServerConfig());
+  // After the two replanning options are written into the file of the job dispatcher, it is asked to read the file again: see src/dispatcherReload.ts.
+  let dispatcherReloadState: "none" | "pending" | "applied" | "failed" = "none";
+  const dispatcherReloadSettings = () => {
+    const jd = (loadServerConfig() as { jobDispatcher?: { reload?: ReloadFile; stopRelay?: { url?: unknown } } }).jobDispatcher;
+    return resolveReload(process.env, jd?.reload, jd?.stopRelay?.url);
+  };
   const security = new SecurityConfig({
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
@@ -310,6 +319,20 @@ async function startServer() {
     tlsActive: startupTls.enabled,
     bleActiveMode: resolveBleMode(securityEnvFrom(process.env).bleGatt, loadServerConfig()).value,
     mqttActiveMode: resolveMqttMode(securityEnvFrom(process.env).mqtt?.mode, loadServerConfig()).value,
+    dispatcherReload: () => {
+      const resolved = dispatcherReloadSettings();
+      return !resolved.ok || resolved.settings.url === "" ? "not_configured" : dispatcherReloadState;
+    },
+    afterReplanWritten: () => {
+      const resolved = dispatcherReloadSettings();
+      if (!resolved.ok || resolved.settings.url === "") return;
+      dispatcherReloadState = "pending";
+      void reloadDispatcher({ settings: resolved.settings, fetch: (url, init) => fetch(url, init) }).then((outcome) => {
+        dispatcherReloadState = outcome.ok ? "applied" : "failed";
+        industrialLog(outcome.ok ? "[dispatcher] the job dispatcher read its configuration file again." : `[dispatcher] the job dispatcher did not take the new configuration (${outcome.reason}); it reads the file when it starts.`);
+        audit.record({ type: "job-dispatcher-reload", outcome: outcome.ok ? "ok" : "failed", detail: outcome.ok ? {} : { reason: outcome.reason } });
+      });
+    },
     jobStopRelayActive: (() => { const r = resolveStopRelay(process.env, (loadServerConfig() as { jobDispatcher?: { stopRelay?: StopRelayFile } }).jobDispatcher?.stopRelay); return r.ok && r.settings.enabled; })(),
     log: industrialLog,
   });
@@ -494,6 +517,21 @@ async function startServer() {
     }).then((gateway) => {
       bleGateway = gateway;
     });
+    // The hand-over of the missions to a standby orchestrator, with the proofs of the stops (off unless jobDispatcher.takeover.enabled or HYDRA_UMC_ORCH_TAKEOVER=1): see src/orchestratorTakeover.ts.
+    const takeoverResolution = resolveTakeover(process.env, (loadServerConfig() as { jobDispatcher?: { takeover?: TakeoverFile } }).jobDispatcher?.takeover);
+    if (!takeoverResolution.ok) {
+      industrialLog(`[takeover] NOT STARTED: ${takeoverResolution.error}`);
+    } else if (takeoverResolution.settings.enabled) {
+      orchestratorTakeover = new OrchestratorTakeover({
+        settings: takeoverResolution.settings,
+        fetch: (url, init) => fetch(url, init),
+        now: () => Date.now(),
+        log: industrialLog,
+        audit: (event) => audit.record({ type: event.type, outcome: event.outcome, detail: event.detail }),
+      });
+      orchestratorTakeover.start({ set: (fn, ms) => setTimeout(fn, ms), clear: (handle) => clearTimeout(handle as NodeJS.Timeout) });
+      industrialLog(`[takeover] ON: watching ${takeoverResolution.settings.primaryUrl}; the standby is ${takeoverResolution.settings.standbyUrl}`);
+    }
     // The delivery of the stop that the job dispatcher asks for (off unless jobDispatcher.stopRelay.enabled or HYDRA_UMC_JOB_STOP_RELAY=1): see src/jobStopRelay.ts.
     const relayResolution = resolveStopRelay(process.env, (loadServerConfig() as { jobDispatcher?: { stopRelay?: StopRelayFile } }).jobDispatcher?.stopRelay);
     if (!relayResolution.ok) {
@@ -508,6 +546,7 @@ async function startServer() {
         now: () => Date.now(),
         log: industrialLog,
         audit: (event) => audit.record({ type: event.type, outcome: event.outcome, robotId: event.robotId, detail: event.detail }),
+        onAcknowledged: (jobId, robotId) => orchestratorTakeover?.recordProof(jobId, robotId),
         stopRobot: (robotId) => {
           // The same stop as the single-robot "stop" command: no claim holds it back.
           for (const controller of getSettings()?.controllers ?? []) {
@@ -562,6 +601,7 @@ async function startServer() {
     void bleGateway?.stop().catch(() => undefined);
     void mqttBridge?.stop().catch(() => undefined);
     jobStopRelay?.stop();
+    orchestratorTakeover?.stop();
     try { connectionTracker().flush(); } catch { /* best-effort */ }
     closeLog();
     httpServer.close(() => process.exit(0));
