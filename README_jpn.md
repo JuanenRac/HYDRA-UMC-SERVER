@@ -20,14 +20,14 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/Framework-Express-000000.svg" alt="Framework">
   <img src="https://img.shields.io/badge/Language-TypeScript-3178C6.svg" alt="Language">
   <img src="https://img.shields.io/badge/Protocol-WebSocket-lightgrey.svg" alt="Protocol">
-  <img src="https://img.shields.io/badge/Tests-518%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-587%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.8.1.9-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
 
 ---
 
-> **誠実性チェック - 今日実際に動くもの:** Express + WebSocket のエンジン、その REST と WebSocket の面（58 パスに 63 の操作）、リフレッシュトークンのローテーションと scrypt を使う JWT サインイン、mDNS 探索、ロボットの予約とリビジョン、再生、そして CAN-OTA・テレメトリ・音声・ローカル AI サービス・コネクターハブへのリレーは実在し、テスト自身が起動するこのサーバー自体の実インスタンスに対して試験済みです（ユニットテスト 518 件と、28 本のエンドツーエンド契約スクリプトがすべて合格）。ハードウェアに近く、ここで検証していないもの：STM32H745 ボードを載せた実際の HYDRA-UMC CM5 への接続で、実コードですが API と契約の層でしか試していません。TLS、Bluetooth LE、MQTT ブリッジ、Prometheus と Grafana のスタックは実在し、任意で、既定はオフです。
+> **誠実性チェック - 今日実際に動くもの:** Express + WebSocket のエンジン、その REST と WebSocket の面（58 パスに 63 の操作）、リフレッシュトークンのローテーションと scrypt を使う JWT サインイン、mDNS 探索、ロボットの予約とリビジョン、再生、そして CAN-OTA・テレメトリ・音声・ローカル AI サービス・コネクターハブへのリレーは実在し、テスト自身が起動するこのサーバー自体の実インスタンスに対して試験済みです（ユニットテスト 587 件と、28 本のエンドツーエンド契約スクリプトがすべて合格）。ハードウェアに近く、ここで検証していないもの：STM32H745 ボードを載せた実際の HYDRA-UMC CM5 への接続で、実コードですが API と契約の層でしか試していません。TLS、Bluetooth LE、MQTT ブリッジ、Prometheus と Grafana のスタックは実在し、任意で、既定はオフです。
 
 ---
 
@@ -41,7 +41,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | バージョン | `0.8.1.9` |
 | 成熟度 | 機能する |
-| テスト | 518 (`npm run test:unit`) |
+| テスト | 587 (`npm run test:unit`) |
 | 技術 | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | 対象 | HYDRA-UMC セルの Raspberry Pi CM5 |
 | 実機での確認 | ベンチ環境で動作：上の正直さの確認に、どの部分が実機で動いたかが書かれています |
@@ -57,7 +57,7 @@ GPL-3.0-or-later - see LICENSE
 | 領域 | 状態 | ここでの意味 |
 |---|---|---|
 | ソフトウェア | 🟡 | 主な目的では動作します。足りない点は上の正直さの確認に書かれています |
-| テスト | 🟢 | 自動テスト 518 件。変更のたびに実行されます |
+| テスト | 🟢 | 自動テスト 587 件。変更のたびに実行されます |
 | 実機 | 🟡 | ベンチ環境で動作：上の正直さの確認に、どの部分が実機で動いたかが書かれています |
 | ドキュメント | 🟢 | 8 言語の README。変更のたびにマニフェストと照合されます |
 
@@ -211,7 +211,6 @@ CORS は、設定可能な許可リスト（`CORS_ALLOWED_ORIGINS`、下記「�
 
 - `HYDRA_UMC_HEALTH_OPEN=1`（`health.open`）- `GET /health` がサインインなしで最小限のヘルスレポート（バージョン、ホスト、件数なし）を返します。オフのときは `404` を返します。
 - `HYDRA_UMC_ECOSYSTEM_HEALTH=1`（`ecosystemHealth.enabled`）- `GET /api/ecosystem/health` がエコシステムのサービスの健全性を返します。オフのときは `404` を返します。
-- `HYDRA_UMC_PUSH=1`(`push.enabled`)- サーバーは、デバイストークンを登録した iPhone に Apple のプッシュサービス経由でプッシュ通知(作業完了、グローバル停止)を送ります。既定ではオフで、認証情報がなければ何もしません。認証情報はデプロイ環境からのみ読み込まれます:`HYDRA_UMC_APNS_KEY_FILE`(サーバーが動くディレクトリの外に置いた `.p8` キー)、`HYDRA_UMC_APNS_KEY_ID`、`HYDRA_UMC_APNS_TEAM_ID`、`HYDRA_UMC_APNS_TOPIC`(バンドル ID)。`data/server-config.json` には決して書かないでください。
 - `HYDRA_UMC_RUL=1`（`rul.enabled`）- AI ダッシュボードのカードの背後にある残存耐用年数の推定 `POST /api/ai/anomaly-detector/rul` を、管理者に加えてオペレーターにも開放します（このリクエストだけで、サイズと時間に上限があります）。オフのときは管理者だけが送れます。サインイン済みのクライアントは `GET /api/rul/config` で、開いているかどうかと 2 つの上限を読めます（AI ダッシュボードのカードは開いているときだけ表示されます）。
 - `HYDRA_UMC_SAFETY_PUBLISH_STOP=1`（`safety.publishGlobalStop`）- グローバル停止を MQTT ブリッジの `<プレフィックス>/safety/estop` にも保持付きの `SAFE_STOP` として通知します（`docs/GLOBAL_STOP.md` を参照）。
 - `HYDRA_UMC_JOB_STOP_RELAY=1`（`jobDispatcher.stopRelay.enabled`）- ジョブディスパッチャーが求める停止を届けます。サーバーは `GET /jobs/stop-requests` を読み、そこで指名されたロボットを（`jobDispatcher.stopRelay.robotMap` を通じて）停止し、その後にだけ `POST /jobs/stop-ack` を送ります。アドレス（`HYDRA_UMC_JOB_DISPATCHER_URL`）とトークン（`HYDRA_UMC_JOB_DISPATCHER_TOKEN`）は環境から、時間設定はファイルの同じセクションから読みます（`docs/JOB_STOP_RELAY.md` を参照）。既定ではオフです。
@@ -227,7 +226,6 @@ CORS は、設定可能な許可リスト（`CORS_ALLOWED_ORIGINS`、下記「�
 - **接続者：** `GET /api/connections/clients` と `GET /api/connections/events` は、HYDRA-UMC-SDK の閉じた契約 `ConnectionClient` と `ConnectionEvent` で応答します（初回確認、成功または失敗したサインイン、第 2 要素、サインアウト、終了したセッション）。管理者はすべての項目を、その他のアカウントは自分の分だけを見ます。パスワード、トークン、秘密情報は保存されません。
 - **生存信号：** `GET /api/robots/liveness` は、名簿の各ロボットについてサーバーに便りがあったか（`live`、`stale`、`unknown`、最後の便りからの経過時間付き）を返します。オペレーターが入れた内容しか記録しない `online` フラグを繰り返すものではありません。`data/server-config.json` の `liveness.staleAfterS` で上限を設定します（既定は 30 秒）。
 - **エコシステムの健全性：** `GET /api/ecosystem/health`（オペレーターまたは管理者。管理者が `ecosystemHealth.enabled` をオンにするまでは `404`）は、ポートまたは systemd ユニットを宣言しているサービスを `ok`、`degraded`、`down`、`unknown` で一覧にし、理由コード、各サービスが報告するバージョンとマニフェストのバージョンの比較（ずれ）、サーバーが最後に応答を受けた時刻、サーバー自身の TLS 証明書の残り日数、警告の一覧を返します。各サービスには短いタイムアウトで副作用なく問い合わせるため、停止した 1 つのサービスが他を隠すことはなく、ポート、ヘルスパス、ユニットが見えるのは管理者だけです。`data/server-config.json` の `ecosystemHealth.certWarnDays` と `ecosystemHealth.probeTimeoutMs` で、警告の期間（30 日）とサービスごとの待ち時間（1500 ms）を設定します。各サービスの最終接触は `data/ecosystem-health-last-seen.json` に保存され（アトミックに書き込まれ、`ecosystemHealth.lastSeenMaxEntries` と `ecosystemHealth.lastSeenSaveIntervalS` で上限が決まります）、再起動後も残ります。
-- **プッシュ通知:** `POST /api/push/devices` と `DELETE /api/push/devices/{token}`(サインイン済みの任意のアカウント、自分のデバイスのみ。`push.enabled` がオンになるまで `404`)は、iPhone のデバイストークンを言語とともに登録・削除します。`GET /api/admin/push`(管理者)は、プッシュサービスがオンか、認証情報が使えるか、使えない理由、登録された端末の数を返し、認証情報やトークンは決して返しません。通知は 8 言語で書かれています。詳細と Apple アカウントに必要なものは `docs/PUSH_NOTIFICATIONS.md` にあります。
 - `HYDRA_UMC_SERVER_PORT` - 待ち受けポート。共有の `PORT` より優先されます。`HYDRA_UMC_PORTS_REGISTRY`、`HYDRA_UMC_SDK_DIR` / `HYDRA_UMC_REQUIRE_SDK=1` は同じ表に記載されています。
 
 以下のアクセススイッチは、STUDIO と SUITE の Server Admin 画面が編集するものです。どれも同じ順序で決まります。まずデプロイの環境変数（画面ではロック表示）、次に管理者が `data/server-config.json` に保存した値、最後に保守的な既定値です。ほかのすべては上に挙げた変数が扱います。
@@ -261,7 +259,7 @@ npm run build && npm start  # one bundled file (build.sh and build.bat make a ve
 
 ## 🧪 テスト
 
-`npm run test:unit` で自動テスト 518 件を実行します。 さらに `npm test` は OpenAPI の確認と、このサーバーの実インスタンスに対する `tools/` の 28 本のエンドツーエンド契約スクリプトを実行します（探索、認証情報なし／ありのサインイン、本番ブートストラップ、ロボットのコマンドと所有、リフレッシュトークン、音声リレーとそのエラー経路、再生、全体停止、Bluetooth と MQTT のブリッジ、カメラメディア、AI とコネクターハブのリレー、閲覧者ロールなど）。すべて合格しており、ハードウェアは不要です。
+`npm run test:unit` で自動テスト 587 件を実行します。 さらに `npm test` は OpenAPI の確認と、このサーバーの実インスタンスに対する `tools/` の 28 本のエンドツーエンド契約スクリプトを実行します（探索、認証情報なし／ありのサインイン、本番ブートストラップ、ロボットのコマンドと所有、リフレッシュトークン、音声リレーとそのエラー経路、再生、全体停止、Bluetooth と MQTT のブリッジ、カメラメディア、AI とコネクターハブのリレー、閲覧者ロールなど）。すべて合格しており、ハードウェアは不要です。
 
 CI は `HYDRA_UMC_CI=1 python tools/ci_validate.py` を実行し、マニフェスト、文書、8 つの README、図を検査します。
 

@@ -20,14 +20,14 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/Framework-Express-000000.svg" alt="Framework">
   <img src="https://img.shields.io/badge/Language-TypeScript-3178C6.svg" alt="Language">
   <img src="https://img.shields.io/badge/Protocol-WebSocket-lightgrey.svg" alt="Protocol">
-  <img src="https://img.shields.io/badge/Tests-518%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-587%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.8.1.9-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
 
 ---
 
-> **Verificação de honestidade - o que realmente funciona hoje:** o motor Express + WebSocket, a sua superfície REST e WebSocket (63 operações em 58 caminhos), o início de sessão JWT com rotação do token de refresco e scrypt, a descoberta mDNS, as reservas e revisões de robôs, a reprodução, e os reencaminhamentos para CAN-OTA, telemetria, voz, os serviços de IA locais e o connector hub são reais e testados contra uma instância real deste mesmo servidor que os próprios testes arrancam: 518 testes unitários mais 28 scripts de contrato de ponta a ponta, todos a passar. O que toca no hardware e não é verificado aqui: a ligação a uma CM5 HYDRA-UMC real com uma placa STM32H745, código real exercitado só pela camada de API e contratos. TLS, Bluetooth LE, a ponte MQTT e a pilha Prometheus e Grafana são reais, opcionais e estão desligados por defeito.
+> **Verificação de honestidade - o que realmente funciona hoje:** o motor Express + WebSocket, a sua superfície REST e WebSocket (63 operações em 58 caminhos), o início de sessão JWT com rotação do token de refresco e scrypt, a descoberta mDNS, as reservas e revisões de robôs, a reprodução, e os reencaminhamentos para CAN-OTA, telemetria, voz, os serviços de IA locais e o connector hub são reais e testados contra uma instância real deste mesmo servidor que os próprios testes arrancam: 587 testes unitários mais 28 scripts de contrato de ponta a ponta, todos a passar. O que toca no hardware e não é verificado aqui: a ligação a uma CM5 HYDRA-UMC real com uma placa STM32H745, código real exercitado só pela camada de API e contratos. TLS, Bluetooth LE, a ponte MQTT e a pilha Prometheus e Grafana são reais, opcionais e estão desligados por defeito.
 
 ---
 
@@ -41,7 +41,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | Versão | `0.8.1.9` |
 | Maturidade | Funcional |
-| Testes | 518 (`npm run test:unit`) |
+| Testes | 587 (`npm run test:unit`) |
 | Tecnologia | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | Destino | O Raspberry Pi CM5 de uma célula HYDRA-UMC |
 | Em hardware real | Executado numa bancada de ensaio: a verificação de honestidade acima diz que partes correram em hardware real |
@@ -57,7 +57,7 @@ Cada linha é uma parte deste repositório e a luz diz até onde chega hoje. É 
 | Área | Estado | O que significa aqui |
 |---|---|---|
 | Software | 🟡 | Funciona para o seu propósito principal; a verificação de honestidade acima lista o que ainda falta |
-| Testes | 🟢 | 518 testes automáticos, executados a cada alteração |
+| Testes | 🟢 | 587 testes automáticos, executados a cada alteração |
 | Hardware real | 🟡 | Executado numa bancada de ensaio: a verificação de honestidade acima diz que partes correram em hardware real |
 | Documentação | 🟢 | README em oito idiomas, verificado contra o manifesto a cada alteração |
 
@@ -210,7 +210,6 @@ Dez opções alargam o que o servidor responde ou regista; todas arrancam com o 
 
 - `HYDRA_UMC_HEALTH_OPEN=1` (`health.open`) - `GET /health` responde sem iniciar sessão com um relatório de saúde mínimo (sem versão, anfitrião nem contagens); desativado, responde `404`.
 - `HYDRA_UMC_ECOSYSTEM_HEALTH=1` (`ecosystemHealth.enabled`) - `GET /api/ecosystem/health` responde com a saúde dos serviços do ecossistema; desativado, responde `404`.
-- `HYDRA_UMC_PUSH=1` (`push.enabled`) - o servidor envia notificações push (um trabalho terminado, uma paragem global) pelo serviço push da Apple aos iPhone que registaram o seu token de dispositivo. Desligado por predefinição; sem credenciais não faz nada. As credenciais só são lidas do ambiente da instalação: `HYDRA_UMC_APNS_KEY_FILE` (uma chave `.p8` guardada fora da pasta de onde corre o servidor), `HYDRA_UMC_APNS_KEY_ID`, `HYDRA_UMC_APNS_TEAM_ID` e `HYDRA_UMC_APNS_TOPIC` (o identificador do pacote). Nunca as ponha em `data/server-config.json`.
 - `HYDRA_UMC_RUL=1` (`rul.enabled`) - `POST /api/ai/anomaly-detector/rul`, a estimativa de vida útil restante por trás do cartão do painel de IA, fica aberta aos operadores além dos administradores (apenas esse pedido, com um limite de tamanho e de tempo); desativada, só um administrador a pode enviar. Um cliente com sessão iniciada lê se está aberta, com os seus dois limites, em `GET /api/rul/config` (o cartão do painel de IA só aparece se estiver).
 - `HYDRA_UMC_SAFETY_PUBLISH_STOP=1` (`safety.publishGlobalStop`) - uma paragem global também é anunciada na ponte MQTT como um `SAFE_STOP` retido em `<prefixo>/safety/estop` (ver `docs/GLOBAL_STOP.md`).
 - `HYDRA_UMC_JOB_STOP_RELAY=1` (`jobDispatcher.stopRelay.enabled`) - entrega a paragem que o despachante de trabalhos pede: o servidor lê `GET /jobs/stop-requests`, pára o robô aí nomeado (através de `jobDispatcher.stopRelay.robotMap`) e só depois envia `POST /jobs/stop-ack`; o endereço (`HYDRA_UMC_JOB_DISPATCHER_URL`) e o token (`HYDRA_UMC_JOB_DISPATCHER_TOKEN`) vêm do ambiente e os tempos da mesma secção do ficheiro (ver `docs/JOB_STOP_RELAY.md`). Desligado por predefinição.
@@ -226,7 +225,6 @@ Dez opções alargam o que o servidor responde ou regista; todas arrancam com o 
 - **Quem se liga:** `GET /api/connections/clients` e `GET /api/connections/events` respondem com os contratos fechados `ConnectionClient` e `ConnectionEvent` do HYDRA-UMC-SDK (primeira vez visto, entradas que correram bem ou falharam, segundo fator, saídas, sessões terminadas). Um administrador vê todas as entradas, qualquer outra conta só as suas; não se guarda nenhuma palavra-passe, token ou segredo.
 - **Sinal de vida:** `GET /api/robots/liveness` diz se o servidor teve notícias de cada robô da lista (`live`, `stale` ou `unknown`, com a idade da última notícia), em vez de repetir o indicador `online` que só regista o que um operador ativou; `liveness.staleAfterS` de `data/server-config.json` define o limite (30 s por omissão).
 - **Saúde do ecossistema:** `GET /api/ecosystem/health` (operador ou administrador; `404` até um administrador ativar `ecosystemHealth.enabled`) lista os serviços que declaram uma porta ou uma unidade systemd como `ok`, `degraded`, `down` ou `unknown`, com um código de motivo, a versão que cada um comunica face à versão do seu manifesto (desvio), quando o servidor teve notícias dele pela última vez, os dias que restam ao seu próprio certificado TLS e uma lista de avisos. Cada serviço é consultado com um limite de tempo curto e sem efeitos secundários, pelo que um serviço parado nunca esconde os outros, e só um administrador vê portas, caminhos de saúde e unidades. `ecosystemHealth.certWarnDays` e `ecosystemHealth.probeTimeoutMs` de `data/server-config.json` definem a janela de aviso (30 dias) e a espera por serviço (1500 ms). O último contacto de cada serviço é guardado em `data/ecosystem-health-last-seen.json` (escrita atómica e limitada por `ecosystemHealth.lastSeenMaxEntries` e `ecosystemHealth.lastSeenSaveIntervalS`), pelo que sobrevive a um reinício.
-- **Notificações push:** `POST /api/push/devices` e `DELETE /api/push/devices/{token}` (qualquer conta com sessão, só o próprio dispositivo; `404` até `push.enabled` estar ligado) registam o token de dispositivo de um iPhone, com a sua língua, e `GET /api/admin/push` (administrador) diz se o serviço push está ligado, se as suas credenciais servem e porque não, e quantos telefones estão registados, nunca as credenciais nem os tokens. As notificações estão escritas nas oito línguas. Os pormenores, e o que a conta Apple precisa, estão em `docs/PUSH_NOTIFICATIONS.md`.
 - `HYDRA_UMC_SERVER_PORT` - a porta de escuta; prevalece sobre o `PORT` partilhado. `HYDRA_UMC_PORTS_REGISTRY` e `HYDRA_UMC_SDK_DIR` / `HYDRA_UMC_REQUIRE_SDK=1` estão descritos na mesma tabela.
 
 Os interruptores de acesso abaixo são os que os ecrãs Server Admin do STUDIO e do SUITE editam. Cada um resolve-se pela mesma ordem: primeiro o ambiente da implantação (o ecrã mostra-o bloqueado), depois o que o administrador guardou em `data/server-config.json`, depois o valor por defeito conservador. As variáveis listadas acima cobrem tudo o resto.
@@ -260,7 +258,7 @@ O servidor escuta em `0.0.0.0:3000`; todo o seu estado vive em `data/`. Este rep
 
 ## 🧪 Testes
 
-518 testes automáticos correm com `npm run test:unit`. Além disso, `npm test` corre a verificação OpenAPI e 28 scripts de contrato de ponta a ponta em `tools/` contra uma instância real deste servidor (descoberta, início de sessão sem e com credenciais, arranque de produção, comandos e propriedade de robôs, tokens de refresco, reencaminhamento de voz e os seus caminhos de erro, reprodução, a paragem global, pontes Bluetooth e MQTT, multimédia das câmaras, os reencaminhamentos de IA e do connector-hub, papel de espectador e mais); todos passam. Nenhum precisa de hardware.
+587 testes automáticos correm com `npm run test:unit`. Além disso, `npm test` corre a verificação OpenAPI e 28 scripts de contrato de ponta a ponta em `tools/` contra uma instância real deste servidor (descoberta, início de sessão sem e com credenciais, arranque de produção, comandos e propriedade de robôs, tokens de refresco, reencaminhamento de voz e os seus caminhos de erro, reprodução, a paragem global, pontes Bluetooth e MQTT, multimédia das câmaras, os reencaminhamentos de IA e do connector-hub, papel de espectador e mais); todos passam. Nenhum precisa de hardware.
 
 A CI executa `HYDRA_UMC_CI=1 python tools/ci_validate.py`, que verifica o manifesto, os documentos, os oito README e as imagens.
 

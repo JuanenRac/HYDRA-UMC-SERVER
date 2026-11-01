@@ -20,14 +20,14 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/Framework-Express-000000.svg" alt="Framework">
   <img src="https://img.shields.io/badge/Language-TypeScript-3178C6.svg" alt="Language">
   <img src="https://img.shields.io/badge/Protocol-WebSocket-lightgrey.svg" alt="Protocol">
-  <img src="https://img.shields.io/badge/Tests-518%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-587%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.8.1.9-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
 
 ---
 
-> **Honesty check - what actually runs today:** the Express + WebSocket engine, its REST and WebSocket surface (63 operations in 58 paths), JWT sign-in with refresh-token rotation and scrypt, mDNS discovery, robot reservations and revisions, playback, and the relays to CAN-OTA, telemetry, voice, the local AI services and the connector hub are real and tested against a live instance of this same server that the tests start themselves: 518 unit tests plus 28 end-to-end contract scripts, all passing. What is hardware-adjacent and not verified here: the link to a real HYDRA-UMC CM5 with an STM32H745 board, which is real code exercised only through the API and contract layer. TLS, Bluetooth LE, the MQTT bridge and the Prometheus and Grafana stack are real, optional and off by default.
+> **Honesty check - what actually runs today:** the Express + WebSocket engine, its REST and WebSocket surface (63 operations in 58 paths), JWT sign-in with refresh-token rotation and scrypt, mDNS discovery, robot reservations and revisions, playback, and the relays to CAN-OTA, telemetry, voice, the local AI services and the connector hub are real and tested against a live instance of this same server that the tests start themselves: 587 unit tests plus 28 end-to-end contract scripts, all passing. What is hardware-adjacent and not verified here: the link to a real HYDRA-UMC CM5 with an STM32H745 board, which is real code exercised only through the API and contract layer. TLS, Bluetooth LE, the MQTT bridge and the Prometheus and Grafana stack are real, optional and off by default.
 
 ---
 
@@ -41,7 +41,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | Version | `0.8.1.9` |
 | Maturity | Functional |
-| Tests | 518 (`npm run test:unit`) |
+| Tests | 587 (`npm run test:unit`) |
 | Stack | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | Target | The Raspberry Pi CM5 of a HYDRA-UMC cell |
 | On real hardware | Run on a bench setup: the honesty check above says which parts ran on real hardware |
@@ -57,7 +57,7 @@ Each line is one part of this repository and the light says how far it is today.
 | Area | State | What it means here |
 |---|---|---|
 | Software | 🟡 | Works for its main purpose; the honesty check above lists what is still missing |
-| Tests | 🟢 | 518 automated tests, run on every change |
+| Tests | 🟢 | 587 automated tests, run on every change |
 | Real hardware | 🟡 | Run on a bench setup: the honesty check above says which parts ran on real hardware |
 | Documentation | 🟢 | README in eight languages, checked against the manifest on every change |
 
@@ -336,7 +336,6 @@ Ten options widen what the server answers or records; all start on the conservat
 
 - `HYDRA_UMC_HEALTH_OPEN=1` (`health.open`) - `GET /health` answers without a sign-in with a bare health report (no version, host or counts); off, it answers `404`.
 - `HYDRA_UMC_ECOSYSTEM_HEALTH=1` (`ecosystemHealth.enabled`) - `GET /api/ecosystem/health` answers with the health of the services of the ecosystem; off, it answers `404`.
-- `HYDRA_UMC_PUSH=1` (`push.enabled`) - the server sends push notifications (a job finished, a global stop) through the Apple push service to the iPhones that registered their device token. Off by default; with no credentials it does nothing. The credentials are only ever read from the environment of the deployment: `HYDRA_UMC_APNS_KEY_FILE` (a `.p8` key kept outside the directory the server runs from), `HYDRA_UMC_APNS_KEY_ID`, `HYDRA_UMC_APNS_TEAM_ID` and `HYDRA_UMC_APNS_TOPIC` (the bundle id). Never put them in `data/server-config.json`.
 - `HYDRA_UMC_RUL=1` (`rul.enabled`) - `POST /api/ai/anomaly-detector/rul`, the remaining-useful-life estimate behind the card of the AI dashboard, is open to operators as well as administrators (only that request, with a limit on its size and time); off, only an administrator may send it. A signed-in client reads whether it is open, with its two limits, from `GET /api/rul/config` (the card of the AI dashboard appears only when it is).
 - `HYDRA_UMC_SAFETY_PUBLISH_STOP=1` (`safety.publishGlobalStop`) - a global stop is also announced on the MQTT bridge as a retained `SAFE_STOP` on `<prefix>/safety/estop` (see `docs/GLOBAL_STOP.md`).
 - `HYDRA_UMC_JOB_STOP_RELAY=1` (`jobDispatcher.stopRelay.enabled`) - delivers the stop that the job dispatcher asks for: the server reads `GET /jobs/stop-requests`, stops the robot named there (through `jobDispatcher.stopRelay.robotMap`) and only then sends `POST /jobs/stop-ack`; the address (`HYDRA_UMC_JOB_DISPATCHER_URL`) and the token (`HYDRA_UMC_JOB_DISPATCHER_TOKEN`) come from the environment, the times from the same section of the file (see `docs/JOB_STOP_RELAY.md`). Off by default.
@@ -352,7 +351,6 @@ Ten options widen what the server answers or records; all start on the conservat
 - **Who connects:** `GET /api/connections/clients` and `GET /api/connections/events` answer in the closed `ConnectionClient` and `ConnectionEvent` contracts of HYDRA-UMC-SDK (first seen, sign-ins that worked or failed, second factor, sign-outs, ended sessions). An administrator sees every entry, any other account only its own; no password, token or secret is stored.
 - **Signal of life:** `GET /api/robots/liveness` says whether the server had news of each robot of the roster (`live`, `stale` or `unknown`, with the age of the last news), instead of repeating the `online` flag that only records what an operator switched on; `liveness.staleAfterS` of `data/server-config.json` sets the limit (30 s by default).
 - **Health of the ecosystem:** `GET /api/ecosystem/health` (operator or administrator; `404` until an administrator turns on `ecosystemHealth.enabled`) lists the services that declare a port or a systemd unit as `ok`, `degraded`, `down` or `unknown`, with a reason code, the version each one reports against the version of its manifest (drift), when the server last heard from it, the days left of its own TLS certificate and a list of warnings. Each service is asked with a short timeout and no side effect, so one dead service never hides the others, and only an administrator sees ports, health paths and units. `ecosystemHealth.certWarnDays` and `ecosystemHealth.probeTimeoutMs` of `data/server-config.json` set the warning window (30 days) and the wait for each service (1500 ms). The last contact of each service is kept in `data/ecosystem-health-last-seen.json` (written atomically and capped by `ecosystemHealth.lastSeenMaxEntries` and `ecosystemHealth.lastSeenSaveIntervalS`), so it survives a restart.
-- **Push notifications:** `POST /api/push/devices` and `DELETE /api/push/devices/{token}` (any signed-in account, its own device only; `404` until `push.enabled` is on) register the device token of an iPhone, with its language, and `GET /api/admin/push` (administrator) says whether the push service is switched on, whether its credentials are usable and why not, and how many phones are registered, never the credentials or the tokens. The notifications are written in the eight languages. The details, and what the Apple account needs, are in `docs/PUSH_NOTIFICATIONS.md`.
 - `HYDRA_UMC_SERVER_PORT` - the listen port; it wins over the shared `PORT`. `HYDRA_UMC_PORTS_REGISTRY` and `HYDRA_UMC_SDK_DIR` / `HYDRA_UMC_REQUIRE_SDK=1` are described in the same table.
 
 The access switches below are the ones the Server Admin screen of STUDIO and SUITE edits. Each one resolves in the same order: the environment of the deployment first (the screen shows it as locked), then what the administrator saved in `data/server-config.json`, then the conservative default. The variables listed above cover everything else.
@@ -386,7 +384,7 @@ The server listens on `0.0.0.0:3000`; all its state lives in `data/`. This repos
 
 ## 🧪 Testing
 
-518 automated tests run with `npm run test:unit`. On top of them `npm test` runs the OpenAPI check and 28 end-to-end contract scripts under `tools/` against a live instance of this server (discovery, sign-in without and with credentials, production bootstrap, robot commands and ownership, refresh tokens, voice relay and its error paths, playback, the global stop, Bluetooth and MQTT bridges, camera media, the AI and connector-hub relays, viewer role and more); all of them pass. None needs hardware.
+587 automated tests run with `npm run test:unit`. On top of them `npm test` runs the OpenAPI check and 28 end-to-end contract scripts under `tools/` against a live instance of this server (discovery, sign-in without and with credentials, production bootstrap, robot commands and ownership, refresh tokens, voice relay and its error paths, playback, the global stop, Bluetooth and MQTT bridges, camera media, the AI and connector-hub relays, viewer role and more); all of them pass. None needs hardware.
 
 The CI runs `HYDRA_UMC_CI=1 python tools/ci_validate.py`, which checks the manifest, the documents, the eight READMEs and the pictures.
 
