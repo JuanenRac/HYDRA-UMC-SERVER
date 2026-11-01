@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.8.1.9] - The job dispatcher options are edited in Server Admin and read again at once, the missions pass to a standby orchestrator with the proofs of the stops, off by default, and the admin panel has a Security tab
+
 - **The dispatcher reads its file again right after the server writes it:** after the two replanning options are written, the server calls `POST /admin/reload-config` of the dispatcher. The answer of `server-config` says whether it took it (`jobDispatcher.replan.reload`); a file the dispatcher refuses leaves its previous values in force. `appliesOnDispatcherRestart` is now true only while the dispatcher has not taken the file.
 
 - **The missions are handed over to a standby orchestrator with the proofs of the stops, off by default:** with `jobDispatcher.takeover.enabled` (or `HYDRA_UMC_ORCH_TAKEOVER=1`) the server keeps the last replica of the primary orchestrator and the stops that the relay acknowledged, and when the primary has been silent for `failuresBeforeTakeover` checks it sends the standby `POST /replica/takeover` with the replica and the proofs that still apply, once per outage. Nothing is delivered with a replica that is too old or none at all, a standby that refuses is not tried again, and the times and limits are in the settings file. See `docs/ORCHESTRATOR_TAKEOVER.md`.
