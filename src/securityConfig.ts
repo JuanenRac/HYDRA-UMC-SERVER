@@ -13,6 +13,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import tls from "node:tls";
+import { DispatcherConfigError, readReplanOptions, validTimeout, writeReplanOptions, DEFAULT_STOP_ACK_TIMEOUT_SECONDS } from "./dispatcherConfigFile";
 import { MQTT_MODES, mqttEnvFrom, resolveMqttMode, resolveMqttSettings, validMqttPrefix, validMqttUrl, type MqttEnv, type MqttFile, type MqttMode, type MqttSettings } from "./mqttBridge";
 
 export type AiAccess = "open" | "admin";
@@ -135,6 +136,25 @@ export interface SafetyFile {
   publishGlobalStop?: boolean;
 }
 
+/** The job dispatcher: the delivery of its stop requests (src/jobStopRelay.ts) and the options of its replanning (src/dispatcherConfigFile.ts). */
+export interface JobDispatcherFile {
+  /** The JSON configuration file the dispatcher reads when it starts. Set by the deployment; no request can change it. */
+  configFile?: string;
+  stopRelay?: {
+    enabled?: boolean;
+    /** The robot id the dispatcher uses -> the numeric id of the robot in this server. Other keys of this section (times, address) are kept as they are. */
+    robotMap?: Record<string, number>;
+    [other: string]: unknown;
+  };
+  replan?: {
+    allowUnconfirmed?: boolean;
+    stopAckTimeoutSeconds?: number;
+  };
+}
+
+export const MAX_ROBOT_MAP_ENTRIES = 1000;
+const ROBOT_MAP_KEY = /^[A-Za-z0-9._:-]{1,64}$/;
+
 export const DEFAULT_VOICE_MIN_CONFIDENCE = 0.6;
 export const MAVLINK_SIGNING_KEY_BYTES = 32;
 
@@ -153,6 +173,7 @@ export interface SecurityFile {
   ecosystemHealth?: EcosystemHealthFile;
   rul?: RulFile;
   safety?: SafetyFile;
+  jobDispatcher?: JobDispatcherFile;
   camera?: CameraFile;
   install?: InstallFile;
   websocket?: WebsocketFile;
@@ -183,6 +204,8 @@ export interface SecurityEnv {
   voiceRequireSignature?: string;
   cameraCredentialsViaEnv?: string;
   newInstallTls?: string;
+  jobStopRelay?: string;
+  jobDispatcherConfig?: string;
 }
 
 export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
@@ -210,6 +233,8 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     voiceRequireSignature: env.HYDRA_UMC_VOICE_CONFIRM_REQUIRE_SIGNATURE,
     cameraCredentialsViaEnv: env.HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV,
     newInstallTls: env.HYDRA_UMC_NEW_INSTALL_TLS,
+    jobStopRelay: env.HYDRA_UMC_JOB_STOP_RELAY,
+    jobDispatcherConfig: env.HYDRA_UMC_JOB_DISPATCHER_CONFIG,
   };
 }
 
@@ -300,6 +325,19 @@ export function resolveRul(env: string | undefined, file: SecurityFile): { value
   if (isSet(env)) return { value: env.trim() === "1", source: "env" };
   if (typeof file.rul?.enabled === "boolean") return { value: file.rul.enabled, source: "config" };
   return { value: false, source: "default" };
+}
+
+/** The delivery of the stop requests of the job dispatcher: only the exact word "1" in the environment switches it on; the default is off. */
+export function resolveJobStopRelay(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.jobDispatcher?.stopRelay?.enabled === "boolean") return { value: file.jobDispatcher.stopRelay.enabled, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** The configuration file of the dispatcher, from the deployment only (environment first, then the settings file). Empty: none. */
+export function resolveDispatcherConfigFile(env: string | undefined, file: SecurityFile): string {
+  if (isSet(env)) return env.trim();
+  return typeof file.jobDispatcher?.configFile === "string" ? file.jobDispatcher.configFile.trim() : "";
 }
 
 /** Announcing a global stop on the MQTT bridge: only the exact word "1" in the environment switches it on; the default is off. */
@@ -439,6 +477,17 @@ export interface SecuritySnapshot {
   ecosystemHealth: { enabled: { value: boolean; source: Source } };
   rul: { enabled: { value: boolean; source: Source } };
   safety: { publishGlobalStop: { value: boolean; source: Source } };
+  jobDispatcher: {
+    stopRelay: { enabled: { value: boolean; source: Source }; robotMap: Record<string, number>; activeEnabled: boolean; appliesOnRestart: boolean };
+    replan: {
+      allowUnconfirmed: { value: boolean; source: Source };
+      stopAckTimeoutSeconds: { value: number; source: Source };
+      /** Whether the deployment named the configuration file of the dispatcher; without it these two options cannot be changed here. */
+      editable: boolean;
+      /** The dispatcher reads its file when it starts: a change reaches it on its next start. */
+      appliesOnDispatcherRestart: boolean;
+    };
+  };
   camera: { open: { value: boolean; source: Source }; credentialsViaEnv: { value: boolean; source: Source } };
   install: { newInstallTls: { value: boolean; source: Source } };
   websocket: { allowQueryToken: { value: boolean; source: Source } };
@@ -458,6 +507,8 @@ export interface SecurityConfigOptions {
   bleActiveMode?: BleMode;
   /** The mode the MQTT bridge started with (it changes only on a restart). */
   mqttActiveMode?: MqttMode;
+  /** Whether the delivery of the stop requests started with this server (it changes only on a restart). */
+  jobStopRelayActive?: boolean;
   log?: (message: string) => void;
 }
 
@@ -539,6 +590,42 @@ export class SecurityConfig {
     return resolveVoiceRequireSignature(this.options.env.voiceRequireSignature, this.file).value;
   }
 
+  /** The map of robots of the delivery of the stop requests (read at every pass of the relay, so a change needs no restart). */
+  jobStopRobotMap(): Record<string, number> {
+    return { ...(this.file.jobDispatcher?.stopRelay?.robotMap ?? {}) };
+  }
+
+  private jobDispatcherSnapshot(): SecuritySnapshot["jobDispatcher"] {
+    const relay = resolveJobStopRelay(this.options.env.jobStopRelay, this.file);
+    const configFile = resolveDispatcherConfigFile(this.options.env.jobDispatcherConfig, this.file);
+    let allow = this.file.jobDispatcher?.replan?.allowUnconfirmed;
+    let timeout = this.file.jobDispatcher?.replan?.stopAckTimeoutSeconds;
+    if (configFile !== "") {
+      try {
+        const current = readReplanOptions(configFile);
+        allow = current.allowUnconfirmed;
+        timeout = current.stopAckTimeoutSeconds;
+      } catch {
+        // an unreadable file shows what this server last saved, and a write is refused until the file is fixed
+      }
+    }
+    const stored = typeof allow === "boolean" || validTimeout(timeout);
+    return {
+      stopRelay: {
+        enabled: relay,
+        robotMap: this.jobStopRobotMap(),
+        activeEnabled: this.options.jobStopRelayActive ?? false,
+        appliesOnRestart: relay.value !== (this.options.jobStopRelayActive ?? false),
+      },
+      replan: {
+        allowUnconfirmed: { value: allow === true, source: stored ? "config" : "default" },
+        stopAckTimeoutSeconds: { value: validTimeout(timeout) ? timeout : DEFAULT_STOP_ACK_TIMEOUT_SECONDS, source: stored ? "config" : "default" },
+        editable: configFile !== "",
+        appliesOnDispatcherRestart: true,
+      },
+    };
+  }
+
   /** Whether a global stop is also announced on the MQTT bridge (off unless an administrator turned it on). */
   globalStopPublished(): boolean {
     return resolveSafetyPublishStop(this.options.env.safetyPublishStop, this.file).value;
@@ -583,6 +670,7 @@ export class SecurityConfig {
       ecosystemHealth: { enabled: resolveEcosystemHealth(this.options.env.ecosystemHealth, this.file) },
       rul: { enabled: resolveRul(this.options.env.rul, this.file) },
       safety: { publishGlobalStop: resolveSafetyPublishStop(this.options.env.safetyPublishStop, this.file) },
+      jobDispatcher: this.jobDispatcherSnapshot(),
       camera: { open: resolveCameraOpen(this.options.env.cameraAuth, this.file), credentialsViaEnv: resolveCameraCredentialsViaEnv(this.options.env.cameraCredentialsViaEnv, this.file) },
       install: { newInstallTls: resolveNewInstallTls(this.options.env.newInstallTls, this.file) },
       websocket: { allowQueryToken: resolveWsQueryToken(this.options.env.wsQueryToken, this.file) },
@@ -620,7 +708,7 @@ export class SecurityConfig {
   /** Applies a change asked for by an administrator; returns the new state and the warnings to show. */
   update(patch: any, actor: string): { snapshot: SecuritySnapshot; warnings: string[]; appliesOnRestart: boolean } {
     const warnings: string[] = [];
-    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined };
+    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
     let appliesOnRestart = false;
     const log = this.options.log ?? (() => undefined);
     const lockedBy = (name: string) => new SecurityConfigError(409, `${name} is set in the environment of this server; remove it there to change it here`);
@@ -878,6 +966,69 @@ export class SecurityConfig {
       if (safetyPatch.publishGlobalStop === true) warnings.push("global_stop_published");
     }
 
+    if (patch.jobDispatcher !== undefined) {
+      const jd = patch.jobDispatcher;
+      if (typeof jd !== "object" || jd === null || Array.isArray(jd)) throw new SecurityConfigError(400, "jobDispatcher must be an object");
+      for (const key of Object.keys(jd)) if (key !== "stopRelay" && key !== "replan") throw new SecurityConfigError(400, `jobDispatcher.${key} cannot be changed here`);
+      const merged: JobDispatcherFile = { ...(next.jobDispatcher ?? {}) };
+      if (jd.stopRelay !== undefined) {
+        const sr = jd.stopRelay;
+        if (typeof sr !== "object" || sr === null || Array.isArray(sr)) throw new SecurityConfigError(400, "jobDispatcher.stopRelay must be an object");
+        for (const key of Object.keys(sr)) if (key !== "enabled" && key !== "robotMap") throw new SecurityConfigError(400, `jobDispatcher.stopRelay.${key} cannot be changed here`);
+        const relay = { ...(merged.stopRelay ?? {}) };
+        if (sr.enabled !== undefined) {
+          if (typeof sr.enabled !== "boolean") throw new SecurityConfigError(400, "jobDispatcher.stopRelay.enabled must be true or false");
+          if (resolveJobStopRelay(this.options.env.jobStopRelay, this.file).source === "env") throw lockedBy("HYDRA_UMC_JOB_STOP_RELAY");
+          relay.enabled = sr.enabled;
+          appliesOnRestart = true;
+          if (sr.enabled) warnings.push("job_stop_relay_on");
+        }
+        if (sr.robotMap !== undefined) {
+          const map = sr.robotMap;
+          if (typeof map !== "object" || map === null || Array.isArray(map)) throw new SecurityConfigError(400, "jobDispatcher.stopRelay.robotMap must be an object");
+          const entries = Object.entries(map);
+          if (entries.length > MAX_ROBOT_MAP_ENTRIES) throw new SecurityConfigError(400, `jobDispatcher.stopRelay.robotMap has at most ${MAX_ROBOT_MAP_ENTRIES} entries`);
+          const clean: Record<string, number> = {};
+          for (const [dispatcherId, serverId] of entries) {
+            if (!ROBOT_MAP_KEY.test(dispatcherId)) throw new SecurityConfigError(400, `jobDispatcher.stopRelay.robotMap: "${dispatcherId.slice(0, 64)}" is not a robot id of the dispatcher (1 to 64 characters: letters, digits, . _ : -)`);
+            if (typeof serverId !== "number" || !Number.isInteger(serverId) || serverId < 0) throw new SecurityConfigError(400, `jobDispatcher.stopRelay.robotMap: "${dispatcherId}" must map to a robot id of this server (a whole number, 0 or more)`);
+            clean[dispatcherId] = serverId;
+          }
+          relay.robotMap = clean;
+        }
+        merged.stopRelay = relay;
+      }
+      if (jd.replan !== undefined) {
+        const rp = jd.replan;
+        if (typeof rp !== "object" || rp === null || Array.isArray(rp)) throw new SecurityConfigError(400, "jobDispatcher.replan must be an object");
+        for (const key of Object.keys(rp)) if (key !== "allowUnconfirmed" && key !== "stopAckTimeoutSeconds") throw new SecurityConfigError(400, `jobDispatcher.replan.${key} cannot be changed here`);
+        if (rp.allowUnconfirmed !== undefined && typeof rp.allowUnconfirmed !== "boolean") throw new SecurityConfigError(400, "jobDispatcher.replan.allowUnconfirmed must be true or false");
+        if (rp.stopAckTimeoutSeconds !== undefined && !validTimeout(rp.stopAckTimeoutSeconds)) throw new SecurityConfigError(400, "jobDispatcher.replan.stopAckTimeoutSeconds must be a number greater than 0 and at most 86400");
+        const configFile = resolveDispatcherConfigFile(this.options.env.jobDispatcherConfig, this.file);
+        if (configFile === "") throw new SecurityConfigError(409, "the configuration file of the dispatcher is not set on this server (HYDRA_UMC_JOB_DISPATCHER_CONFIG or jobDispatcher.configFile); the replanning options cannot be changed here");
+        // The current values are those of the file the dispatcher will read; a field the request leaves out keeps them.
+        let current;
+        try {
+          current = readReplanOptions(configFile);
+        } catch (error) {
+          throw new SecurityConfigError(409, error instanceof DispatcherConfigError ? error.message : "the configuration file of the dispatcher cannot be read");
+        }
+        const wanted = {
+          allowUnconfirmed: rp.allowUnconfirmed ?? current.allowUnconfirmed,
+          stopAckTimeoutSeconds: rp.stopAckTimeoutSeconds ?? current.stopAckTimeoutSeconds,
+        };
+        // The file first: if it cannot be written nothing is saved here, so the two never disagree about a change that was refused.
+        try {
+          writeReplanOptions(configFile, wanted);
+        } catch (error) {
+          throw new SecurityConfigError(409, error instanceof DispatcherConfigError ? error.message : "the configuration file of the dispatcher could not be written");
+        }
+        merged.replan = { ...wanted };
+        if (wanted.allowUnconfirmed) warnings.push("replan_unconfirmed_allowed");
+      }
+      next.jobDispatcher = merged;
+    }
+
     if (patch.mavlink !== undefined) {
       const mavPatch = patch.mavlink;
       if (typeof mavPatch !== "object" || mavPatch === null || Array.isArray(mavPatch)) throw new SecurityConfigError(400, "mavlink must be an object");
@@ -957,6 +1108,10 @@ export class SecurityConfig {
     }
     if (patch.safety !== undefined) {
       log(`[SECURITY] ${actor} ${snapshot.safety.publishGlobalStop.value ? "allowed" : "forbade"} announcing a global stop on the MQTT bridge.`);
+    }
+    if (patch.jobDispatcher !== undefined) {
+      const jd = snapshot.jobDispatcher;
+      log(`[SECURITY] ${actor} set the job dispatcher options: delivery of its stop requests ${jd.stopRelay.enabled.value ? "ON" : "off"} (${Object.keys(jd.stopRelay.robotMap).length} robot(s) mapped; it applies on the next start), replanning without a confirmed stop ${jd.replan.allowUnconfirmed.value ? "ALLOWED" : "not allowed"}, wait for the confirmation ${jd.replan.stopAckTimeoutSeconds.value} s (the dispatcher reads this on its next start).`);
     }
     if (patch.mavlink !== undefined) {
       log(`[SECURITY] ${actor} set MAVLink signing ${snapshot.mavlink.signing ? "on" : "OFF"}${snapshot.mavlink.signing && snapshot.mavlink.signingAllowUnsigned.value ? " (unsigned messages still accepted)" : ""}; the bridge applies it on its next start.`);

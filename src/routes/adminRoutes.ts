@@ -11,6 +11,7 @@ import express from "express";
 import fs from "fs";
 import { WebSocket } from "ws";
 import { SecurityConfig, SecurityConfigError } from "../securityConfig";
+import type { AuditLog } from "../auditLog";
 import { listUsers, createUser, updateUser, deleteUser, isUserRole, type UserRole } from "../users";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
@@ -27,10 +28,12 @@ export interface AdminRouteDeps {
   saveServerConfig: (config: any) => void;
   /** The access options an administrator can change from the control app (AI relay, host information, TLS). */
   security: SecurityConfig;
+  /** The audit record: a change of the job dispatcher options (delivery of its stop requests, replanning) is written to it. */
+  audit?: Pick<AuditLog, "record">;
 }
 
 export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps): void {
-  const { authenticate, requireAdmin, asyncHandler, industrialLog, wsClients, logFile, getCurrentPort, loadServerConfig, saveServerConfig, security } = deps;
+  const { authenticate, requireAdmin, asyncHandler, industrialLog, wsClients, logFile, getCurrentPort, loadServerConfig, saveServerConfig, security, audit } = deps;
 
   // Account management - admin-only (requireAdmin, chained after
   // authenticate), backed by the users.ts module - lets an admin
@@ -131,14 +134,29 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
       saveServerConfig({ ...loadServerConfig(), port: portNum });
     }
     let security_result: ReturnType<SecurityConfig["update"]> | undefined;
-    const wantsSecurity = req.body && (req.body.aiAccess !== undefined || req.body.infoAuth !== undefined || req.body.tls !== undefined || req.body.ble !== undefined || req.body.mqtt !== undefined || req.body.voice !== undefined || req.body.mavlink !== undefined || req.body.robots !== undefined || req.body.connections !== undefined || req.body.health !== undefined || req.body.ecosystemHealth !== undefined || req.body.rul !== undefined || req.body.safety !== undefined || req.body.camera !== undefined || req.body.install !== undefined || req.body.websocket !== undefined || req.body.logging !== undefined);
+    const wantsSecurity = req.body && (req.body.aiAccess !== undefined || req.body.infoAuth !== undefined || req.body.tls !== undefined || req.body.ble !== undefined || req.body.mqtt !== undefined || req.body.voice !== undefined || req.body.mavlink !== undefined || req.body.robots !== undefined || req.body.connections !== undefined || req.body.health !== undefined || req.body.ecosystemHealth !== undefined || req.body.rul !== undefined || req.body.safety !== undefined || req.body.camera !== undefined || req.body.install !== undefined || req.body.websocket !== undefined || req.body.logging !== undefined || req.body.jobDispatcher !== undefined);
     if (wantsSecurity) {
       try {
         security_result = security.update(req.body, String((req as any).user?.username ?? "admin"));
       } catch (error) {
-        if (error instanceof SecurityConfigError) return res.status(error.status).json({ error: error.message });
+        if (error instanceof SecurityConfigError) {
+          if (req.body.jobDispatcher !== undefined) audit?.record({ type: "job-dispatcher-options", outcome: "refused", userId: (req as any).user?.id, username: (req as any).user?.username, ip: req.ip, detail: { status: error.status, reason: error.message } });
+          return res.status(error.status).json({ error: error.message });
+        }
         throw error;
       }
+    }
+    if (security_result && req.body.jobDispatcher !== undefined) {
+      const jd = security_result.snapshot.jobDispatcher;
+      audit?.record({
+        type: "job-dispatcher-options", outcome: "ok", userId: (req as any).user?.id, username: (req as any).user?.username, ip: req.ip,
+        detail: {
+          stopRelayEnabled: jd.stopRelay.enabled.value,
+          robotsMapped: Object.keys(jd.stopRelay.robotMap).length,
+          allowUnconfirmed: jd.replan.allowUnconfirmed.value,
+          stopAckTimeoutSeconds: jd.replan.stopAckTimeoutSeconds.value,
+        },
+      });
     }
     res.json({
       success: true,

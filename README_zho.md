@@ -214,6 +214,7 @@ CORS 通过一个可配置的白名单（`CORS_ALLOWED_ORIGINS`，见下文“�
 - `HYDRA_UMC_RUL=1`（`rul.enabled`）- AI 仪表板卡片背后的剩余使用寿命估算 `POST /api/ai/anomaly-detector/rul`，除管理员外也向操作员开放（仅限这一个请求，并限制其大小和时间）；关闭时只有管理员可以发送。已登录的客户端可通过 `GET /api/rul/config` 读取它是否开启及两项上限（只有开启时，AI 仪表板的卡片才会出现）。
 - `HYDRA_UMC_SAFETY_PUBLISH_STOP=1`（`safety.publishGlobalStop`）- 全局停止还会在 MQTT 桥的 `<前缀>/safety/estop` 上以保留的 `SAFE_STOP` 通告（见 `docs/GLOBAL_STOP.md`）。
 - `HYDRA_UMC_JOB_STOP_RELAY=1`（`jobDispatcher.stopRelay.enabled`）- 转交作业调度器请求的停止：服务器读取 `GET /jobs/stop-requests`，停止其中指明的机器人（通过 `jobDispatcher.stopRelay.robotMap`），之后才发送 `POST /jobs/stop-ack`；地址（`HYDRA_UMC_JOB_DISPATCHER_URL`）和令牌（`HYDRA_UMC_JOB_DISPATCHER_TOKEN`）来自环境，时间参数来自文件的同一小节（参见 `docs/JOB_STOP_RELAY.md`）。默认关闭。
+- `HYDRA_UMC_JOB_DISPATCHER_CONFIG=<文件>`（`jobDispatcher.configFile`）- 作业调度器启动时读取的 JSON 配置文件。设置后，管理员可在 Server Admin 中修改 `jobDispatcher.replan.allowUnconfirmed` 和 `jobDispatcher.replan.stopAckTimeoutSeconds`：服务器会校验它们，以原子方式只写入 `replan` 小节的这两个键（其他键保持不变；不是有效 JSON 的文件绝不会被覆盖），调度器在下次启动时采用。路径来自部署，绝不来自请求。停止请求转交的开关和机器人映射表在同一界面中编辑。
 - `HYDRA_UMC_CONNECTION_RECORD_ADDRESS=1`（`connections.recordAddress`）- 连接历史还会保留每个客户端的地址和用户代理，仅管理员可见。
 - `HYDRA_UMC_CAMERA_AUTH=open`（`camera.open`）- 无需票据的摄像头画面；默认需要票据。
 - `HYDRA_UMC_WS_QUERY_TOKEN=allow`（`websocket.allowQueryToken`）- WebSocket 地址中的令牌；默认被拒绝。

@@ -304,12 +304,13 @@ async function startServer() {
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
     save: (file) => {
-      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, rul, safety, camera, install, websocket, logging } = file;
-      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, rul, safety, camera, install, websocket, logging });
+      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, rul, safety, jobDispatcher, camera, install, websocket, logging } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, rul, safety, jobDispatcher, camera, install, websocket, logging });
     },
     tlsActive: startupTls.enabled,
     bleActiveMode: resolveBleMode(securityEnvFrom(process.env).bleGatt, loadServerConfig()).value,
     mqttActiveMode: resolveMqttMode(securityEnvFrom(process.env).mqtt?.mode, loadServerConfig()).value,
+    jobStopRelayActive: (() => { const r = resolveStopRelay(process.env, (loadServerConfig() as { jobDispatcher?: { stopRelay?: StopRelayFile } }).jobDispatcher?.stopRelay); return r.ok && r.settings.enabled; })(),
     log: industrialLog,
   });
   // Whether the history of connections keeps the address and user agent of a client (off unless an administrator turned it on).
@@ -317,7 +318,7 @@ async function startServer() {
 
   registerAdminRoutes(app, {
     authenticate, requireAdmin, asyncHandler, industrialLog, wsClients,
-    logFile: LOG_FILE, getCurrentPort, loadServerConfig, saveServerConfig, security,
+    logFile: LOG_FILE, getCurrentPort, loadServerConfig, saveServerConfig, security, audit,
   });
 
   registerSettingsRoutes(app, { authenticate, requireAdmin, loadFullSettingsFromDisk, applySettingsUpdate });
@@ -498,8 +499,11 @@ async function startServer() {
     if (!relayResolution.ok) {
       industrialLog(`[stop-relay] NOT STARTED: ${relayResolution.error}`);
     } else if (relayResolution.settings.enabled) {
+      // The map of robots is edited in Server Admin: it is read again at every pass, so a change needs no restart.
+      const relaySettings = relayResolution.settings;
+      Object.defineProperty(relaySettings, "robotMap", { get: () => security.jobStopRobotMap(), enumerable: true });
       jobStopRelay = new JobStopRelay({
-        settings: relayResolution.settings,
+        settings: relaySettings,
         fetch: (url, init) => fetch(url, init),
         now: () => Date.now(),
         log: industrialLog,

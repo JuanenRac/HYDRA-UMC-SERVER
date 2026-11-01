@@ -25,6 +25,10 @@ JOB-DISPATCHER  <--POST /jobs/stop-ack------  SERVER  (only after the stop was a
 - **No secret in the file.** The address is `HYDRA_UMC_JOB_DISPATCHER_URL` (or `jobDispatcher.stopRelay.url`) and the token is only `HYDRA_UMC_JOB_DISPATCHER_TOKEN`.
 - **Every outcome is audited** (`job-stop-relay`: stopped and acknowledged, refused, or failed).
 
+## Editing it
+
+An administrator edits the switch (`jobDispatcher.stopRelay.enabled`, applied on the next start of the server) and the robot map (read again at every pass, so it applies at once) in **Server Admin** of STUDIO and SUITE, or with `PUT /api/admin/server-config`. The map is validated (an id of 1 to 64 letters, digits and `. _ : -`; a whole number of 0 or more; at most 1000 entries) and every change is logged and recorded in the audit record as `job-dispatcher-options`. The same screen edits the two options of the replanning of the dispatcher (`allowUnconfirmed`, `stopAckTimeoutSeconds`); the server writes them into the dispatcher configuration file named by `HYDRA_UMC_JOB_DISPATCHER_CONFIG`, and the dispatcher reads them on its next start.
+
 ## The section of the file
 
 ```json
