@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **TypeScript 7:** the type checker is the native TypeScript 7 compiler; the typecheck, the unit tests, the OpenAPI check and the bundle pass with it.
+
 - **Push notifications to the iPhones, off by default:** `POST /api/push/devices` and `DELETE /api/push/devices/{token}` register and remove the device token of a phone (with its language) and `GET /api/admin/push` tells an administrator whether the service is on and whether its credentials are usable, never the credentials or the tokens. When `push.enabled` is on (Server Admin, the configuration file or `HYDRA_UMC_PUSH=1`) the server tells the registered phones, through the Apple push service and in their language, when a job finishes and when a global stop is issued. The credentials of the Apple account come only from the environment (`HYDRA_UMC_APNS_KEY_FILE`, `HYDRA_UMC_APNS_KEY_ID`, `HYDRA_UMC_APNS_TEAM_ID`, `HYDRA_UMC_APNS_TOPIC`), the key file must be outside the directory the server runs from, and nothing of it is ever logged or returned. Tested against a simulated push service; see `docs/PUSH_NOTIFICATIONS.md` for what the Apple account needs.
 ## [0.8.1.9] - The job dispatcher options are edited in Server Admin and read again at once, the missions pass to a standby orchestrator with the proofs of the stops, off by default, and the admin panel has a Security tab
 
