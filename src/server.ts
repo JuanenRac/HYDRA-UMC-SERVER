@@ -32,7 +32,8 @@ import { registerSystemRoutes } from "./routes/systemRoutes";
 import { registerAdminRoutes } from "./routes/adminRoutes";
 import { registerCameraRoutes } from "./routes/cameraRoutes";
 import { registerRobotRoutes } from "./routes/robotRoutes";
-import { registerCommandRoutes, ROBOT_COMMANDS } from "./routes/commandRoutes";
+import { registerCommandRoutes, ROBOT_COMMANDS, stoppedPlaybackState } from "./routes/commandRoutes";
+import { JobStopRelay, resolveStopRelay, type StopRelayFile } from "./jobStopRelay";
 import { registerUpstreamRoutes } from "./routes/upstreamRoutes";
 import { realSettings, redactSettingsSecrets, setCameraCredentialsViaEnv } from "./serverPolicy";
 import { ensureSeedUser, findUser, verifyPassword } from "./users";
@@ -237,6 +238,7 @@ async function startServer() {
   let bleGateway: BleGateway | null = null;
   // Off unless an administrator (or HYDRA_UMC_MQTT_BRIDGE) turns the MQTT bridge on: then the robots' state goes to the broker of the cell and, in "commands" mode, a command published there is carried out.
   let mqttBridge: MqttBridge | null = null;
+  let jobStopRelay: JobStopRelay | null = null;
   const livenessTracker = new RobotLivenessTracker();
   const hub = createWsHub({
     setSettings,
@@ -491,6 +493,36 @@ async function startServer() {
     }).then((gateway) => {
       bleGateway = gateway;
     });
+    // The delivery of the stop that the job dispatcher asks for (off unless jobDispatcher.stopRelay.enabled or HYDRA_UMC_JOB_STOP_RELAY=1): see src/jobStopRelay.ts.
+    const relayResolution = resolveStopRelay(process.env, (loadServerConfig() as { jobDispatcher?: { stopRelay?: StopRelayFile } }).jobDispatcher?.stopRelay);
+    if (!relayResolution.ok) {
+      industrialLog(`[stop-relay] NOT STARTED: ${relayResolution.error}`);
+    } else if (relayResolution.settings.enabled) {
+      jobStopRelay = new JobStopRelay({
+        settings: relayResolution.settings,
+        fetch: (url, init) => fetch(url, init),
+        now: () => Date.now(),
+        log: industrialLog,
+        audit: (event) => audit.record({ type: event.type, outcome: event.outcome, robotId: event.robotId, detail: event.detail }),
+        stopRobot: (robotId) => {
+          // The same stop as the single-robot "stop" command: no claim holds it back.
+          for (const controller of getSettings()?.controllers ?? []) {
+            const robot = controller.robots?.find((r: any) => r.id === robotId);
+            if (!robot) continue;
+            robot.playbackState = stoppedPlaybackState(robot.playbackState);
+            arming.disarm(robotId);
+            stopServerPlayback(robotId);
+            broadcastRobotDelta([{ controllerId: controller.id, robotId, patch: { playbackState: robot.playbackState } }], getSettings());
+            void queueSettingsWrite(getSettings()).catch(() => undefined);
+            onClaimsChanged();
+            return true;
+          }
+          return false;
+        },
+      });
+      jobStopRelay.start({ set: (fn, ms) => setTimeout(fn, ms), clear: (handle) => clearTimeout(handle as NodeJS.Timeout) });
+      industrialLog(`[stop-relay] ON: delivering the stop requests of ${relayResolution.settings.url} every ${relayResolution.settings.pollSeconds} s`);
+    }
     mqttBridge = startMqttBridge({
       settings: security.mqtt(),
       env: securityEnvFrom(process.env).mqtt ?? {},
@@ -525,6 +557,7 @@ async function startServer() {
     for (const key of cameraProcesses.keys()) stopCameraProcess(key);
     void bleGateway?.stop().catch(() => undefined);
     void mqttBridge?.stop().catch(() => undefined);
+    jobStopRelay?.stop();
     try { connectionTracker().flush(); } catch { /* best-effort */ }
     closeLog();
     httpServer.close(() => process.exit(0));

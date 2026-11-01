@@ -213,6 +213,7 @@ CORS は、設定可能な許可リスト（`CORS_ALLOWED_ORIGINS`、下記「�
 - `HYDRA_UMC_ECOSYSTEM_HEALTH=1`（`ecosystemHealth.enabled`）- `GET /api/ecosystem/health` がエコシステムのサービスの健全性を返します。オフのときは `404` を返します。
 - `HYDRA_UMC_RUL=1`（`rul.enabled`）- AI ダッシュボードのカードの背後にある残存耐用年数の推定 `POST /api/ai/anomaly-detector/rul` を、管理者に加えてオペレーターにも開放します（このリクエストだけで、サイズと時間に上限があります）。オフのときは管理者だけが送れます。サインイン済みのクライアントは `GET /api/rul/config` で、開いているかどうかと 2 つの上限を読めます（AI ダッシュボードのカードは開いているときだけ表示されます）。
 - `HYDRA_UMC_SAFETY_PUBLISH_STOP=1`（`safety.publishGlobalStop`）- グローバル停止を MQTT ブリッジの `<プレフィックス>/safety/estop` にも保持付きの `SAFE_STOP` として通知します（`docs/GLOBAL_STOP.md` を参照）。
+- `HYDRA_UMC_JOB_STOP_RELAY=1`（`jobDispatcher.stopRelay.enabled`）- ジョブディスパッチャーが求める停止を届けます。サーバーは `GET /jobs/stop-requests` を読み、そこで指名されたロボットを（`jobDispatcher.stopRelay.robotMap` を通じて）停止し、その後にだけ `POST /jobs/stop-ack` を送ります。アドレス（`HYDRA_UMC_JOB_DISPATCHER_URL`）とトークン（`HYDRA_UMC_JOB_DISPATCHER_TOKEN`）は環境から、時間設定はファイルの同じセクションから読みます（`docs/JOB_STOP_RELAY.md` を参照）。既定ではオフです。
 - `HYDRA_UMC_CONNECTION_RECORD_ADDRESS=1`（`connections.recordAddress`）- 接続履歴に各クライアントのアドレスとユーザーエージェントも残し、管理者だけに表示します。
 - `HYDRA_UMC_CAMERA_AUTH=open`（`camera.open`）- チケットなしのカメラ映像。既定ではチケットが必要です。
 - `HYDRA_UMC_WS_QUERY_TOKEN=allow`（`websocket.allowQueryToken`）- WebSocket アドレス内のトークン。既定では拒否されます。

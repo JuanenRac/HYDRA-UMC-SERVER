@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **The stop that the job dispatcher asks for is delivered, off by default:** with `jobDispatcher.stopRelay.enabled` (or `HYDRA_UMC_JOB_STOP_RELAY=1`) the server reads `GET /jobs/stop-requests` of the dispatcher, stops the robot named there through the map `jobDispatcher.stopRelay.robotMap` (the same stop as the `stop` command, which no reservation holds back) and only then sends `POST /jobs/stop-ack`. A stop that could not be applied, a robot that is not in the map, an expired or too old request are never acknowledged, so the dispatcher keeps the job `unknown` unless its own `replan.allow_unconfirmed` is on. The times and limits are in the file, the address and the token in the environment, a wrong setting stops the relay from starting, and every outcome is audited. See `docs/JOB_STOP_RELAY.md`.
+
 - **The shapes of the answers of the inventory come from the SDK:** the 40 shapes that `tools/openapi_types.mjs` wrote by hand are now the file `tools/sdk/server.shapes.json`, a byte copy of `contracts/sources/server.shapes.json` of the SDK, and the module reads it (it refuses a file that is not a file of shapes). `tools/verify_sdk_contract.mjs` compares the copy with the SDK checkout whenever one is near and fails on a difference or on a missing copy; `docs/openapi.json` is unchanged byte for byte. New `tests/sdkShapes.test.ts`.
 
 ## [0.8.1.8] - A client can read whether the remaining-useful-life relay is open, the last contact of each service survives a restart and the route inventory is more exact

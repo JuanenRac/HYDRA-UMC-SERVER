@@ -58,7 +58,7 @@ export interface CommandRouteDeps {
 }
 
 /** The playback state a stopped robot ends in; shared by the single-robot "stop" and the global stop so they can never disagree. */
-function stoppedPlaybackState(previous: any): Record<string, unknown> {
+export function stoppedPlaybackState(previous: any): Record<string, unknown> {
   return { ...previous, isPlaying: false, playing: false, activeStep: -1, isPaused: false, paused: false, requestPause: false, requestStop: true, isFinished: false, finished: false };
 }
 
