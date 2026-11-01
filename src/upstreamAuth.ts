@@ -29,6 +29,8 @@ export const SERVICE_TOKEN_VARIABLES: Readonly<Record<string, readonly string[]>
   "anomaly-detector": ["HYDRA_UMC_ANOMALY_TOKEN"],
   // the data lake has a token per role; this server only reads, so its read token, then the one for every role
   datalake: ["HYDRA_UMC_DATALAKE_READ_TOKEN", "HYDRA_UMC_DATALAKE_TOKEN"],
+  // the job dispatcher reads its token from this variable; the semantic planner asks for none
+  "job-dispatcher": ["JOB_DISPATCHER_TOKEN"],
 };
 
 /** The first line of a token file, trimmed; empty when it cannot be read. */

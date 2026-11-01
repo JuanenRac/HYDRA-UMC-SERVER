@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { aiAccessAdminOnly, isForwardable, READ_ONLY_SERVICE_PATHS, registerLocalAiRoutes } from "../src/routes/localAiRoutes.ts";
+import { aiAccessAdminOnly, EXACT_SERVICE_REQUESTS, isForwardable, READ_ONLY_SERVICE_PATHS, registerLocalAiRoutes } from "../src/routes/localAiRoutes.ts";
 
 function chainFor(deps: { adminOnly?: boolean }) {
   let chain: any[] = [];
@@ -54,6 +54,27 @@ test("the data lake is reached read-only: a read of a listed path, nothing else"
   for (const path of ["/ingest", "/ingest/batch", "/retention", "/retention/apply", "/", "/query/", "/Query", "/query/../retention"]) {
     assert.equal(isForwardable("datalake", "GET", path), false, path);
   }
+});
+
+test("the planner and the dispatcher are reached only for the exact requests listed: the dry run of a plan and the estimates", () => {
+  for (const request of EXACT_SERVICE_REQUESTS["semantic-planner"]) {
+    const [method, path] = request.split(" ");
+    assert.equal(isForwardable("semantic-planner", method, path), true, request);
+  }
+  for (const [method, path] of [["GET", "/plan/simulate"], ["POST", "/release"], ["POST", "/propose"], ["POST", "/plan/simulate/"], ["DELETE", "/plan/simulate"], ["POST", "/health"], ["POST", "/Plan/simulate"]]) {
+    assert.equal(isForwardable("semantic-planner", method, path), false, `${method} ${path}`);
+  }
+  assert.equal(isForwardable("job-dispatcher", "GET", "/dispatch/eta"), true);
+  assert.equal(isForwardable("job-dispatcher", "GET", "/health"), true);
+  for (const [method, path] of [["POST", "/dispatch"], ["POST", "/jobs/submit"], ["GET", "/jobs"], ["POST", "/dispatch/eta"], ["POST", "/robots"], ["POST", "/jobs/stop-ack"], ["GET", "/dispatch/eta/../jobs"], ["PUT", "/dispatch/eta"]]) {
+    assert.equal(isForwardable("job-dispatcher", method, path), false, `${method} ${path}`);
+  }
+});
+
+test("the data lake window statistics can be probed for, and nothing of the downsampling is opened", () => {
+  assert.equal(isForwardable("datalake", "GET", "/windows"), true);
+  for (const path of ["/rollups", "/downsample", "/downsample/apply"]) assert.equal(isForwardable("datalake", "GET", path), false, path);
+  assert.equal(isForwardable("datalake", "POST", "/windows"), false);
 });
 
 test("the other services are forwarded as they always were", () => {

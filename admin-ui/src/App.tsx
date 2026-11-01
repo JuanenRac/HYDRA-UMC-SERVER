@@ -17,17 +17,19 @@
 // project's own CHANGELOG.md for that gap, tracked, not silently dropped).
 // =============================================================================
 import { useCallback, useEffect, useState } from 'react';
-import { Cpu, FileText, Info, LogOut, Server, Settings, Users } from 'lucide-react';
+import { Cpu, FileText, Info, LogOut, Server, Settings, ShieldCheck, Users } from 'lucide-react';
 import { apiFetch, ApiError, getToken, setToken } from './api';
+import { detectLanguage, translate } from './i18n';
 import { LoginScreen } from './LoginScreen';
 import { DevicesTab } from './tabs/DevicesTab';
 import { LogsTab } from './tabs/LogsTab';
 import { ConfigTab } from './tabs/ConfigTab';
+import { SecurityTab } from './tabs/SecurityTab';
 import { UsersTab } from './tabs/UsersTab';
 import { AboutTab } from './tabs/AboutTab';
 
 export type Role = 'admin' | 'operator';
-type Tab = 'devices' | 'logs' | 'config' | 'users' | 'about';
+type Tab = 'devices' | 'logs' | 'config' | 'security' | 'users' | 'about';
 
 /** Decodes the JWT payload without verifying it - display purposes only (username/role for the header), never a trust boundary. Every real authorization decision happens server-side, same as every other client in this ecosystem. */
 function decodeTokenPayload(token: string): { username?: string; role?: Role } | null {
@@ -88,6 +90,7 @@ export function App() {
     { id: 'devices', label: 'Devices', icon: Cpu },
     { id: 'logs', label: 'Logs', icon: FileText },
     { id: 'config', label: 'Config', icon: Settings },
+    { id: 'security', label: translate(detectLanguage(null, navigator.language), 'tab'), icon: ShieldCheck, adminOnly: true },
     { id: 'users', label: 'Users', icon: Users, adminOnly: true },
     { id: 'about', label: 'About', icon: Info },
   ];
@@ -141,6 +144,7 @@ export function App() {
           {tab === 'devices' && <DevicesTab onAuthError={handleAuthError} />}
           {tab === 'logs' && <LogsTab onAuthError={handleAuthError} />}
           {tab === 'config' && <ConfigTab onAuthError={handleAuthError} isAdmin={isAdmin} />}
+          {tab === 'security' && <SecurityTab onAuthError={handleAuthError} isAdmin={isAdmin} />}
           {tab === 'users' && isAdmin && <UsersTab onAuthError={handleAuthError} currentUsername={identity.username} />}
           {tab === 'about' && <AboutTab />}
         </main>

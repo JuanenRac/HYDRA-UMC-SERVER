@@ -93,11 +93,24 @@ export function rulBodyError(body: unknown, serialized: string, settings: RulSet
  * this relay, so everything but a read of the listed paths is refused before it is forwarded.
  */
 export const READ_ONLY_SERVICE_PATHS: Readonly<Record<string, readonly string[]>> = {
-  datalake: ["/health", "/query", "/aggregate", "/stats", "/stats/range", "/series"],
+  // "/windows" is there so that a client can tell whether the window statistics are switched on (the data lake answers 404 when they are not)
+  datalake: ["/health", "/query", "/aggregate", "/stats", "/stats/range", "/series", "/windows"],
+};
+
+/**
+ * The services of which a client may reach only a few exact requests (method and path), because the rest of what they offer moves things or
+ * changes their state. The plan simulation of the semantic planner never executes anything (its answer says so); the dispatcher is read
+ * for its estimates only. Whatever else is asked of them is refused here before it is forwarded.
+ */
+export const EXACT_SERVICE_REQUESTS: Readonly<Record<string, readonly string[]>> = {
+  "semantic-planner": ["GET /health", "POST /plan/simulate"],
+  "job-dispatcher": ["GET /health", "GET /dispatch/eta"],
 };
 
 /** Is this request allowed to go to the service? Services not in READ_ONLY_SERVICE_PATHS are forwarded as they always were. */
 export function isForwardable(service: string, method: string, upstreamPath: string): boolean {
+  const exact = EXACT_SERVICE_REQUESTS[service];
+  if (exact) return exact.includes(`${method} ${upstreamPath}`);
   const allowed = READ_ONLY_SERVICE_PATHS[service];
   if (!allowed) return true;
   return (method === "GET" || method === "HEAD") && allowed.includes(upstreamPath);
@@ -140,6 +153,9 @@ export function registerLocalAiRoutes(app: express.Express, deps: { authenticate
     "anomaly-detector": 8097,
     // the data lake behind the dashboard of the AI summaries: reads only (see READ_ONLY_SERVICE_PATHS)
     datalake: 8095,
+    // the dry run of a plan (off in the planner until its own switch is on) and the estimates of the dispatcher (off until its own -eta): only the exact requests of EXACT_SERVICE_REQUESTS
+    "semantic-planner": 8109,
+    "job-dispatcher": 8090,
   };
 
   app.all("/api/ai/:service/*rest", authenticate, aiAccess, async (req, res) => {
@@ -152,7 +168,8 @@ export function registerLocalAiRoutes(app: express.Express, deps: { authenticate
     const restSegments = req.params.rest;
     const upstreamPath = "/" + (Array.isArray(restSegments) ? restSegments.join("/") : String(restSegments ?? ""));
     if (!isForwardable(req.params.service, req.method, upstreamPath)) {
-      return res.status(403).json({ error: `Access denied: '${req.params.service}' is reached read-only through this server (${READ_ONLY_SERVICE_PATHS[req.params.service].join(", ")})` });
+      const offered = EXACT_SERVICE_REQUESTS[req.params.service] ?? READ_ONLY_SERVICE_PATHS[req.params.service];
+      return res.status(403).json({ error: `Access denied: '${req.params.service}' is reached through this server only for ${offered.join(", ")}` });
     }
     const rul = deps.rul?.();
     const rulOpen = rul?.enabled === true;

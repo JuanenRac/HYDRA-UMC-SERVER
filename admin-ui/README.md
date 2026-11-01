@@ -37,10 +37,19 @@ files have to STUDIO itself, just split into its own directory/build
 because it's served from a different URL prefix (`/admin`) than STUDIO
 (`/`). Tracked in the parent repo's own `CHANGELOG.md`.
 
-## Scope note: English only
+## Security tab
 
-Unlike every other UI in this ecosystem (which ships English + Spanish +
-French + Italian + German + Japanese + Chinese), this admin panel is
+Administrators only. It shows the nine access switches of `GET`/`PUT /api/admin/server-config` (`health.open`, `safety.publishGlobalStop`,
+`connections.recordAddress`, `camera.open`, `websocket.allowQueryToken`, `logging.redactSecrets`, `voice.requireSignature`,
+`camera.credentialsViaEnv`, `install.newInstallTls`) and the job dispatcher options (the delivery of its stop requests with its robot map, and the two
+options of its replanning). Each switch shows where its value comes from; one fixed by the environment of the server is locked; the value that lowers
+the protection asks for a confirmation; only what changed is sent. The logic is in `src/securityModel.ts` and is checked by the server tests.
+
+## Scope note: English only (except the Security tab)
+
+The Security tab speaks the eight languages of the ecosystem (the language of the browser, English when it is not one of them; the sentences are in
+`src/i18n.ts`). Unlike it, and unlike every other UI in this ecosystem (which ships English + Spanish +
+French + Italian + German + Japanese + Chinese + Portuguese), the rest of this admin panel is
 English-only for now.
 This is a real gap, not an oversight silently left undocumented - it's a
 low-traffic internal tool (server administration, not day-to-day robot
