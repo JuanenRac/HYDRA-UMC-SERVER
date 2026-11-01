@@ -876,6 +876,14 @@ The server keeps a list of the clients that sign in (a Studio or Suite session, 
 - The answer is exactly `{ "enabled": false, "maxPoints": 5000, "timeoutMs": 8000 }` and nothing else: `enabled` is `true` only when `rul.enabled` is on (Server Admin, `PUT /api/admin/server-config`, or `HYDRA_UMC_RUL=1`; the same switch the relay enforces), `maxPoints` is `rul.maxPoints` (8 to 100000) and `timeoutMs` is `rul.timeoutMs` (500 to 60000), both read from the `rul` block of `data/server-config.json`. No body limit, no path, no token and no address of the detector is part of it. It is sent with `Cache-Control: no-store`.
 - Fail-closed: when the configuration is missing, cannot be read or holds a value that is not valid, the answer is the closed default above (`enabled` false, 5000 points, 8000 ms) instead of an error, so a client never has to guess. A server that predates the route answers `404`; a client treats that, an error and a timeout as "closed".
 
+### 2r. Push notifications: `POST /api/push/devices`, `DELETE /api/push/devices/{token}`, `GET /api/admin/push`
+
+- `POST /api/push/devices` (any signed-in account) with `{ "token": "<hexadecimal device token>", "platform": "ios", "locale": "en" }` registers the phone for the account and answers `{ "registered": true }`; `locale` is one of the eight languages of the apps (`en`, `es`, `de`, `fr`, `it`, `ja`, `zh`, `pt`; English when absent). The same token registered again moves to the account that registered it last. `400` for a token that is not hexadecimal, a platform other than `ios` or an unknown language; `409` when the server already keeps `push.maxDevices` tokens.
+- `DELETE /api/push/devices/{token}` (any signed-in account) removes a token and answers `{ "removed": true }` (`false` when it was not there or belongs to another account; an administrator can remove any).
+- Both answer `404` with no body while `push.enabled` is off, as if the routes did not exist.
+- `GET /api/admin/push` (`admin` only) answers `{ "enabled": false, "configured": false, "problem": "missing", "devices": 0, "sandbox": false, "events": { "jobFinished": true, "globalStop": true } }`: whether the service is on, whether its credentials are usable (`problem` is `null` or `missing`, `invalid`, `key-in-repo`, `key-unreadable`), how many tokens are kept and which events are sent. It never returns a credential or a token.
+- The server sends the notification of a job that finished by itself and of a global stop to every registered phone, in its language, through the Apple push service. The credentials come only from the environment (`HYDRA_UMC_APNS_*`); see `docs/PUSH_NOTIFICATIONS.md`.
+
 ## 3. Live sync: `WebSocket /ws`
 
 Connect with `new WebSocket("ws://<host>:3000/ws", ["hydra.bearer", "<JWT_TOKEN>"])`

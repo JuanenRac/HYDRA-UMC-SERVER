@@ -17,6 +17,7 @@ import { JogSequence, parseSequence } from "../jogSequence";
 import { ifMatchAgrees, robotRevision } from "../serverPolicy";
 import { applyTableMove, planTableMove, type TablePlan } from "../tableCommand";
 import { EDIT_COMMANDS, cleanPoints, editAffectedIds, planRobotEdit } from "../robotEdit";
+import { emitPush } from "../pushNotifications";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
@@ -171,6 +172,7 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
       (failedCount ? `, ${failedCount} FAILED` : ""),
     );
     robotCommandsTotal.inc({ command: "stop-all" });
+    emitPush("global-stop");
     audit?.record({
       type: "stop-all", outcome: failedCount === 0 ? "ok" : "failed", userId: user?.id, username: user?.username, ip: req.ip,
       detail: { stoppedCount, failedCount, reservedByOthers },

@@ -15,9 +15,9 @@ function makeConfig(env: any = {}, initial: SecurityFile = {}) {
   return { config, stored: () => stored };
 }
 
-test("the nine switches are exactly the ones the server reports, each on its conservative value by default", () => {
+test("the ten switches are exactly the ones the server reports, each on its conservative value by default", () => {
   const states = readSwitches(makeConfig().config.snapshot());
-  assert.equal(states.length, 9);
+  assert.equal(states.length, 10);
   assert.deepEqual(states.map((s) => s.def.id), SWITCHES.map((s) => s.id));
   for (const state of states) {
     assert.equal(state.source, "default", state.def.id);

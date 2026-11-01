@@ -61,6 +61,9 @@ export const RESPONSES = {
   "GET /health": ref("HealthReport"),
   "GET /api/robots/liveness": ref("RobotLiveness"),
   "GET /api/ecosystem/health": ref("EcosystemHealth"),
+  "POST /api/push/devices": ref("PushDeviceRegistered"),
+  "DELETE /api/push/devices/{token}": ref("PushDeviceRemoved"),
+  "GET /api/admin/push": ref("PushStatus"),
   "GET /api/rul/config": ref("RulConfig"),
   "POST /api/robot/{id}/heartbeat": ref("Success"),
   "POST /api/robot/{id}/claim": ref("Reservation"),
@@ -113,6 +116,7 @@ export const REQUESTS = {
   "POST /api/integrations/test-connection": { required: ["host", "port"], fields: { host: str, port: int } },
   "POST /api/camera/discover-rtsp-path": { required: ["host"], fields: { host: str, port: int, username: str, password: str } },
   "POST /api/camera/{id}/ptz": { required: ["host"], fields: { host: str, port: int, username: str, password: str, channel: int, pan: num, tilt: num, zoom: num } },
+  "POST /api/push/devices": { required: ["token", "platform"], fields: { token: str, platform: { type: "string", enum: ["ios"] }, locale: { type: "string", enum: ["en", "es", "de", "fr", "it", "ja", "zh", "pt"] } } },
   "POST /api/robot/{id}/command": { required: ["command"], fields: { command: str, params: { type: "object" }, seq: int } },
 };
 
@@ -120,11 +124,16 @@ export const REQUESTS = {
 export const EXTRA_STATUSES = {
   // 404 while ecosystemHealth.enabled is off (as if the route did not exist), 403 for a viewer.
   "GET /api/ecosystem/health": [403, 404],
+  // 404 while push.enabled is off (as if the route did not exist).
+  "POST /api/push/devices": [404],
+  "DELETE /api/push/devices/{token}": [404],
 };
 
 // "METHOD /path" -> status codes whose answer has no body at all (a switch that is off answers a bare 404).
 export const EMPTY_BODY_STATUSES = {
   "GET /api/ecosystem/health": [404],
+  "POST /api/push/devices": [404],
+  "DELETE /api/push/devices/{token}": [404],
 };
 
 export const errorResponse = ref("Error");

@@ -5,6 +5,8 @@
 // =============================================================================
 // The server-authoritative playback engine and the robot reservation helpers, moved out
 // of server.ts unchanged.
+import { emitPush } from "./pushNotifications";
+
 export interface PlaybackDeps {
   getSettings: () => any;
   queueSettingsWrite: (payload: any) => Promise<void>;
@@ -181,6 +183,7 @@ export function createPlayback(deps: PlaybackDeps) {
         queueSettingsWrite(getSettings());
         broadcastRobotDelta([{ controllerId: cId, robotId, patch: { playbackState: r.playbackState } }], getSettings());
         stopServerPlayback(robotId);
+        emitPush("job-finished", { robotName: typeof r.name === "string" ? r.name : undefined });
         return;
       }
 

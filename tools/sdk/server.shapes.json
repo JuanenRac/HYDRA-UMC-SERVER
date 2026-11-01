@@ -1267,6 +1267,83 @@
           }
         }
       }
+    },
+    "PushDeviceRegistered": {
+      "type": "object",
+      "required": [
+        "registered"
+      ],
+      "properties": {
+        "registered": {
+          "type": "boolean"
+        }
+      }
+    },
+    "PushDeviceRemoved": {
+      "type": "object",
+      "required": [
+        "removed"
+      ],
+      "properties": {
+        "removed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "PushStatus": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "configured",
+        "problem",
+        "devices",
+        "sandbox",
+        "events"
+      ],
+      "description": "The state of the push notifications of the server, for an administrator. It tells whether the credentials of the Apple push service are usable and why not, never the credentials or the device tokens.",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "configured": {
+          "type": "boolean"
+        },
+        "problem": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "missing",
+            "key-in-repo",
+            "key-unreadable",
+            "invalid",
+            null
+          ]
+        },
+        "devices": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sandbox": {
+          "type": "boolean"
+        },
+        "events": {
+          "type": "object",
+          "required": [
+            "jobFinished",
+            "globalStop"
+          ],
+          "properties": {
+            "jobFinished": {
+              "type": "boolean"
+            },
+            "globalStop": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
     }
   }
 }

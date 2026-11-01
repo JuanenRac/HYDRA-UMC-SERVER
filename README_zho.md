@@ -211,6 +211,7 @@ CORS 通过一个可配置的白名单（`CORS_ALLOWED_ORIGINS`，见下文“�
 
 - `HYDRA_UMC_HEALTH_OPEN=1`（`health.open`）- `GET /health` 无需登录即可返回精简的健康报告（不含版本、主机或计数）；关闭时返回 `404`。
 - `HYDRA_UMC_ECOSYSTEM_HEALTH=1`（`ecosystemHealth.enabled`）- `GET /api/ecosystem/health` 返回生态系统各服务的健康状况；关闭时返回 `404`。
+- `HYDRA_UMC_PUSH=1`(`push.enabled`)- 服务器通过 Apple 推送服务,向已注册设备令牌的 iPhone 发送推送通知(作业完成、全局停止)。默认关闭;没有凭据时什么也不做。凭据只从部署环境读取:`HYDRA_UMC_APNS_KEY_FILE`(存放在服务器运行目录之外的 `.p8` 密钥)、`HYDRA_UMC_APNS_KEY_ID`、`HYDRA_UMC_APNS_TEAM_ID` 和 `HYDRA_UMC_APNS_TOPIC`(Bundle ID)。切勿写入 `data/server-config.json`。
 - `HYDRA_UMC_RUL=1`（`rul.enabled`）- AI 仪表板卡片背后的剩余使用寿命估算 `POST /api/ai/anomaly-detector/rul`，除管理员外也向操作员开放（仅限这一个请求，并限制其大小和时间）；关闭时只有管理员可以发送。已登录的客户端可通过 `GET /api/rul/config` 读取它是否开启及两项上限（只有开启时，AI 仪表板的卡片才会出现）。
 - `HYDRA_UMC_SAFETY_PUBLISH_STOP=1`（`safety.publishGlobalStop`）- 全局停止还会在 MQTT 桥的 `<前缀>/safety/estop` 上以保留的 `SAFE_STOP` 通告（见 `docs/GLOBAL_STOP.md`）。
 - `HYDRA_UMC_JOB_STOP_RELAY=1`（`jobDispatcher.stopRelay.enabled`）- 转交作业调度器请求的停止：服务器读取 `GET /jobs/stop-requests`，停止其中指明的机器人（通过 `jobDispatcher.stopRelay.robotMap`），之后才发送 `POST /jobs/stop-ack`；地址（`HYDRA_UMC_JOB_DISPATCHER_URL`）和令牌（`HYDRA_UMC_JOB_DISPATCHER_TOKEN`）来自环境，时间参数来自文件的同一小节（参见 `docs/JOB_STOP_RELAY.md`）。默认关闭。
@@ -226,6 +227,7 @@ CORS 通过一个可配置的白名单（`CORS_ALLOWED_ORIGINS`，见下文“�
 - **谁在连接：** `GET /api/connections/clients` 和 `GET /api/connections/events` 以 HYDRA-UMC-SDK 的封闭契约 `ConnectionClient` 和 `ConnectionEvent` 作答（首次见到、成功或失败的登录、第二因素、登出、已结束的会话）。管理员能看到全部条目，其他账号只能看到自己的；不保存密码、令牌或机密。
 - **生存信号：** `GET /api/robots/liveness` 说明服务器是否收到名册中每个机器人的消息（`live`、`stale` 或 `unknown`，并带最后一条消息的时长），而不是重复只记录操作员所开关内容的 `online` 标志；`data/server-config.json` 的 `liveness.staleAfterS` 设定上限（默认 30 秒）。
 - **生态系统健康：** `GET /api/ecosystem/health`（操作员或管理员；在管理员开启 `ecosystemHealth.enabled` 之前返回 `404`）会把声明了端口或 systemd 单元的服务列为 `ok`、`degraded`、`down` 或 `unknown`，并给出原因代码、各服务上报的版本与其清单版本的对比（偏差）、服务器最后一次收到其响应的时间、服务器自身 TLS 证书的剩余天数以及警告列表。每个服务都以较短的超时且无副作用地查询，因此一个宕机的服务不会遮住其他服务，只有管理员能看到端口、健康路径和单元。`data/server-config.json` 中的 `ecosystemHealth.certWarnDays` 与 `ecosystemHealth.probeTimeoutMs` 设置警告窗口（30 天）和每个服务的等待时间（1500 毫秒）。每个服务的最后一次联系时间保存在 `data/ecosystem-health-last-seen.json` 中（原子写入，并由 `ecosystemHealth.lastSeenMaxEntries` 和 `ecosystemHealth.lastSeenSaveIntervalS` 设定上限），因此重启后仍然保留。
+- **推送通知:** `POST /api/push/devices` 和 `DELETE /api/push/devices/{token}`(任何已登录账户,仅限自己的设备;在 `push.enabled` 打开之前返回 `404`)用于登记和删除 iPhone 的设备令牌及其语言,`GET /api/admin/push`(管理员)会说明推送服务是否开启、凭据是否可用及原因、已登记的手机数量,绝不返回凭据或令牌。通知以八种语言编写。详情以及 Apple 账户所需的内容见 `docs/PUSH_NOTIFICATIONS.md`。
 - `HYDRA_UMC_SERVER_PORT` - 监听端口；优先于共享的 `PORT`。`HYDRA_UMC_PORTS_REGISTRY` 以及 `HYDRA_UMC_SDK_DIR` / `HYDRA_UMC_REQUIRE_SDK=1` 在同一张表中说明。
 
 以下访问开关就是 STUDIO 和 SUITE 的 Server Admin 画面所编辑的那些。每一项都按相同顺序决定：先是部署环境变量（画面中显示为锁定），然后是管理员保存在 `data/server-config.json` 中的值，最后是保守的默认值。其余一切由上面列出的变量涵盖。

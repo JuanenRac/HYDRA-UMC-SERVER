@@ -78,6 +78,24 @@ export interface HealthFile {
   open?: boolean;
 }
 
+/**
+ * Push notifications to the phones that registered a device token (src/pushNotifications.ts). The credentials of the
+ * Apple push service (key, key id, team id, bundle) are NEVER read from this file: only from the environment of the
+ * deployment (HYDRA_UMC_APNS_*), or from a key file outside the repository named there.
+ */
+export interface PushFile {
+  /** Whether the server sends push notifications at all (default: no). */
+  enabled?: boolean;
+  /** Use the sandbox host of the Apple push service (default: no). Not a security switch: read from the file only. */
+  sandbox?: boolean;
+  /** Tell the phones that a job finished (default: yes once push is on). Read from the file only. */
+  notifyJobFinished?: boolean;
+  /** Tell the phones that a global stop was issued (default: yes once push is on). Read from the file only. */
+  notifyGlobalStop?: boolean;
+  /** How many device tokens the server keeps (1 to 10000; 500 by default). Read from the file only. */
+  maxDevices?: number;
+}
+
 /** The health of the ecosystem in one answer (GET /api/ecosystem/health, src/ecosystemHealth.ts). */
 export interface EcosystemHealthFile {
   /** Whether the route answers (default: no; a signed-in client then gets 404). */
@@ -171,6 +189,7 @@ export interface SecurityFile {
   connections?: ConnectionsFile;
   health?: HealthFile;
   ecosystemHealth?: EcosystemHealthFile;
+  push?: PushFile;
   rul?: RulFile;
   safety?: SafetyFile;
   jobDispatcher?: JobDispatcherFile;
@@ -196,6 +215,7 @@ export interface SecurityEnv {
   connectionRecordAddress?: string;
   healthOpen?: string;
   ecosystemHealth?: string;
+  push?: string;
   rul?: string;
   safetyPublishStop?: string;
   cameraAuth?: string;
@@ -225,6 +245,7 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     connectionRecordAddress: env.HYDRA_UMC_CONNECTION_RECORD_ADDRESS,
     healthOpen: env.HYDRA_UMC_HEALTH_OPEN,
     ecosystemHealth: env.HYDRA_UMC_ECOSYSTEM_HEALTH,
+    push: env.HYDRA_UMC_PUSH,
     rul: env.HYDRA_UMC_RUL,
     safetyPublishStop: env.HYDRA_UMC_SAFETY_PUBLISH_STOP,
     cameraAuth: env.HYDRA_UMC_CAMERA_AUTH,
@@ -317,6 +338,13 @@ export function resolveHealthOpen(env: string | undefined, file: SecurityFile): 
 export function resolveEcosystemHealth(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
   if (isSet(env)) return { value: env.trim() === "1", source: "env" };
   if (typeof file.ecosystemHealth?.enabled === "boolean") return { value: file.ecosystemHealth.enabled, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** Push notifications: only the exact word "1" in the environment switches them on; the default is off. */
+export function resolvePush(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.push?.enabled === "boolean") return { value: file.push.enabled, source: "config" };
   return { value: false, source: "default" };
 }
 
@@ -475,6 +503,7 @@ export interface SecuritySnapshot {
   connections: { recordAddress: { value: boolean; source: Source } };
   health: { open: { value: boolean; source: Source } };
   ecosystemHealth: { enabled: { value: boolean; source: Source } };
+  push: { enabled: { value: boolean; source: Source } };
   rul: { enabled: { value: boolean; source: Source } };
   safety: { publishGlobalStop: { value: boolean; source: Source } };
   jobDispatcher: {
@@ -563,6 +592,11 @@ export class SecurityConfig {
   /** Whether GET /health answers without a sign-in (off unless an administrator turned it on). */
   healthOpen(): boolean {
     return resolveHealthOpen(this.options.env.healthOpen, this.file).value;
+  }
+
+  /** Whether the server sends push notifications (off unless an administrator turned it on). */
+  pushEnabled(): boolean {
+    return resolvePush(this.options.env.push, this.file).value;
   }
 
   /** Whether GET /api/ecosystem/health answers (off unless an administrator turned it on). */
@@ -679,6 +713,7 @@ export class SecurityConfig {
       connections: { recordAddress: resolveConnectionRecordAddress(this.options.env.connectionRecordAddress, this.file) },
       health: { open: resolveHealthOpen(this.options.env.healthOpen, this.file) },
       ecosystemHealth: { enabled: resolveEcosystemHealth(this.options.env.ecosystemHealth, this.file) },
+      push: { enabled: resolvePush(this.options.env.push, this.file) },
       rul: { enabled: resolveRul(this.options.env.rul, this.file) },
       safety: { publishGlobalStop: resolveSafetyPublishStop(this.options.env.safetyPublishStop, this.file) },
       jobDispatcher: this.jobDispatcherSnapshot(),
@@ -719,7 +754,7 @@ export class SecurityConfig {
   /** Applies a change asked for by an administrator; returns the new state and the warnings to show. */
   update(patch: any, actor: string): { snapshot: SecuritySnapshot; warnings: string[]; appliesOnRestart: boolean } {
     const warnings: string[] = [];
-    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
+    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, push: this.file.push ? { ...this.file.push } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
     let appliesOnRestart = false;
     const log = this.options.log ?? (() => undefined);
     const lockedBy = (name: string) => new SecurityConfigError(409, `${name} is set in the environment of this server; remove it there to change it here`);
@@ -892,6 +927,19 @@ export class SecurityConfig {
         merged.enabled = ecoPatch.enabled;
       }
       next.ecosystemHealth = merged;
+    }
+
+    if (patch.push !== undefined) {
+      const pushPatch = patch.push;
+      if (typeof pushPatch !== "object" || pushPatch === null || Array.isArray(pushPatch)) throw new SecurityConfigError(400, "push must be an object");
+      const merged: PushFile = { ...(next.push ?? {}) };
+      if (pushPatch.enabled !== undefined) {
+        if (typeof pushPatch.enabled !== "boolean") throw new SecurityConfigError(400, "push.enabled must be true or false");
+        if (resolvePush(this.options.env.push, this.file).source === "env") throw lockedBy("HYDRA_UMC_PUSH");
+        merged.enabled = pushPatch.enabled;
+      }
+      next.push = merged;
+      if (pushPatch.enabled === true) warnings.push("push_enabled");
     }
 
     if (patch.rul !== undefined) {
@@ -1114,6 +1162,9 @@ export class SecurityConfig {
     }
     if (patch.health !== undefined) {
       log(`[SECURITY] ${actor} ${snapshot.health.open.value ? "opened" : "closed"} GET /health to clients that are not signed in.`);
+    }
+    if (patch.push !== undefined) {
+      log(`[SECURITY] ${actor} turned the push notifications to the registered phones ${snapshot.push.enabled.value ? "on" : "off"}.`);
     }
     if (patch.ecosystemHealth !== undefined) {
       log(`[SECURITY] ${actor} turned the health of the ecosystem (GET /api/ecosystem/health) ${snapshot.ecosystemHealth.enabled.value ? "on" : "off"}.`);

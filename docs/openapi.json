@@ -1268,6 +1268,83 @@
             }
           }
         }
+      },
+      "PushDeviceRegistered": {
+        "type": "object",
+        "required": [
+          "registered"
+        ],
+        "properties": {
+          "registered": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PushDeviceRemoved": {
+        "type": "object",
+        "required": [
+          "removed"
+        ],
+        "properties": {
+          "removed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PushStatus": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "configured",
+          "problem",
+          "devices",
+          "sandbox",
+          "events"
+        ],
+        "description": "The state of the push notifications of the server, for an administrator. It tells whether the credentials of the Apple push service are usable and why not, never the credentials or the device tokens.",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "configured": {
+            "type": "boolean"
+          },
+          "problem": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "missing",
+              "key-in-repo",
+              "key-unreadable",
+              "invalid",
+              null
+            ]
+          },
+          "devices": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sandbox": {
+            "type": "boolean"
+          },
+          "events": {
+            "type": "object",
+            "required": [
+              "jobFinished",
+              "globalStop"
+            ],
+            "properties": {
+              "jobFinished": {
+                "type": "boolean"
+              },
+              "globalStop": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -1393,6 +1470,33 @@
             }
           }
         ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/push": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/admin/push",
+        "description": "Requires a signed-in account with the admin role.",
+        "x-access": "admin",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushStatus"
+                }
+              }
+            }
+          }
+        },
         "security": [
           {
             "bearerAuth": []
@@ -3089,6 +3193,134 @@
             "schema": {
               "type": "string"
             }
+          }
+        ]
+      }
+    },
+    "/api/push/devices": {
+      "post": {
+        "tags": [
+          "push"
+        ],
+        "summary": "POST /api/push/devices",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushDeviceRegistered"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. No body."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token",
+                  "platform"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  },
+                  "platform": {
+                    "type": "string",
+                    "enum": [
+                      "ios"
+                    ]
+                  },
+                  "locale": {
+                    "type": "string",
+                    "enum": [
+                      "en",
+                      "es",
+                      "de",
+                      "fr",
+                      "it",
+                      "ja",
+                      "zh",
+                      "pt"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/push/devices/{token}": {
+      "delete": {
+        "tags": [
+          "push"
+        ],
+        "summary": "DELETE /api/push/devices/{token}",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushDeviceRemoved"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. No body."
+          }
+        },
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
           }
         ]
       }

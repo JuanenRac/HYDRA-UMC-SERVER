@@ -55,6 +55,9 @@ import { registerAuthRoutes } from "./routes/auth";
 import { registerConnectionRoutes } from "./routes/connectionRoutes";
 import { registerLivenessRoutes } from "./routes/livenessRoutes";
 import { makeEcosystemHealthGate, registerEcosystemHealthRoutes } from "./routes/ecosystemHealthRoutes";
+import { makePushGate, registerPushRoutes } from "./routes/pushRoutes";
+import { PushDevices, PushService } from "./pushNotifications";
+import type { PushFile } from "./securityConfig";
 import { LastSeenMemory, collectEcosystemHealth } from "./ecosystemHealth";
 import { RobotLivenessTracker } from "./robotLiveness";
 import { connectionTracker, setRecordAddress } from "./connections";
@@ -313,8 +316,8 @@ async function startServer() {
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
     save: (file) => {
-      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, rul, safety, jobDispatcher, camera, install, websocket, logging } = file;
-      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, rul, safety, jobDispatcher, camera, install, websocket, logging });
+      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, push, rul, safety, jobDispatcher, camera, install, websocket, logging } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, push, rul, safety, jobDispatcher, camera, install, websocket, logging });
     },
     tlsActive: startupTls.enabled,
     bleActiveMode: resolveBleMode(securityEnvFrom(process.env).bleGatt, loadServerConfig()).value,
@@ -434,6 +437,15 @@ async function startServer() {
   // The health of the services of the ecosystem in one answer, behind a switch of Server Admin (off by default: 404).
   const ecosystemHealthMemory = new LastSeenMemory({ file: path.join(process.cwd(), "data", "ecosystem-health-last-seen.json") });
   const ecosystemHealthConfig = () => (loadServerConfig() as { ecosystemHealth?: { certWarnDays?: unknown; probeTimeoutMs?: unknown; lastSeenMaxEntries?: unknown; lastSeenSaveIntervalS?: unknown } }).ecosystemHealth;
+  // Push notifications to the phones that registered a device token: off by default; the credentials of the Apple push service come
+  // from the environment only (src/pushNotifications.ts).
+  const pushConfig = () => (loadServerConfig() as { push?: PushFile }).push;
+  const pushDevices = new PushDevices({
+    file: path.join(process.cwd(), "data", "push-devices.json"),
+    maxDevices: () => { const n = Number(pushConfig()?.maxDevices); return Number.isInteger(n) && n >= 1 && n <= 10000 ? n : 500; },
+  });
+  const pushService = new PushService({ enabled: () => security.pushEnabled(), config: pushConfig, devices: pushDevices, env: () => process.env, log: industrialLog });
+  registerPushRoutes(app, { authenticate, requireAdmin, pushGate: makePushGate(() => security.pushEnabled()), devices: pushDevices, status: () => pushService.status(), audit });
   registerEcosystemHealthRoutes(app, {
     authenticate, requireOperator,
     ecosystemHealthGate: makeEcosystemHealthGate(() => security.ecosystemHealthEnabled()),
