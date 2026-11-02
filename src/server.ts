@@ -53,6 +53,7 @@ import { startBle } from "./ble/start";
 import type { BleGateway } from "./ble/bleGateway";
 import { issueMediaTicket, mediaTicketKey, verifyMediaTicket } from "./mediaTickets";
 import { registerAuthRoutes } from "./routes/auth";
+import { makeTrustedNetworksGate } from "./trustedNetworks";
 import { registerConnectionRoutes } from "./routes/connectionRoutes";
 import { registerLivenessRoutes } from "./routes/livenessRoutes";
 import { makeBridgeGatewayGate, registerBridgeRoutes } from "./routes/bridgeRoutes";
@@ -171,6 +172,10 @@ async function startServer() {
   const smallJson = express.json({ limit: "1mb" });
   const LARGE_BODY_ROUTES = new Set(["/api/settings", "/api/upload-work", "/api/models/submit"]);
   app.use((req, res, next) => (LARGE_BODY_ROUTES.has(req.path) ? largeJson : smallJson)(req, res, next));
+
+  // Trusted networks (off unless an administrator turned them on, see src/trustedNetworks.ts): from outside the house and its VPN the
+  // server refuses to be administered. The settings and the audit log are read when a request arrives, so a change applies at once.
+  app.use(makeTrustedNetworksGate(() => security.trustedNetworks(), { record: (entry) => { audit.record(entry as any); } }));
 
   // Create data directory if it doesn't exist
   const dataPath = path.join(process.cwd(), "data");
@@ -302,7 +307,7 @@ async function startServer() {
 
   registerStaticRoutes(app, { dataPath });
 
-  registerAuthRoutes(app);
+  registerAuthRoutes(app, { trustedNetworks: () => security.trustedNetworks() });
   registerConnectionRoutes(app);
   registerTotpRoutes(app);
 
@@ -319,8 +324,8 @@ async function startServer() {
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
     save: (file) => {
-      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, bridgeGateway, push, rul, safety, jobDispatcher, camera, install, websocket, logging } = file;
-      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, bridgeGateway, push, rul, safety, jobDispatcher, camera, install, websocket, logging });
+      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging });
     },
     tlsActive: startupTls.enabled,
     bleActiveMode: resolveBleMode(securityEnvFrom(process.env).bleGatt, loadServerConfig()).value,

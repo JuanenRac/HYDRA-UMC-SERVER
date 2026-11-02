@@ -11,6 +11,7 @@ import { issueRefreshToken, consumeRefreshToken, revokeRefreshToken } from "../r
 import { authFailuresTotal } from "../metrics";
 import { totpStore } from "../totp";
 import { connectionTracker, identify, originOf, type Sighting } from "../connections";
+import { outsideNeedsSecondFactor, type TrustedNetworksSettings } from "../trustedNetworks";
 import { JWT_SECRET, JWT_EXPIRES_IN, asyncHandler, loginRateLimiter, refreshRateLimiter } from "../auth";
 
 /** Who is asking, as the history of connections describes a client (never a secret: kind, version, address and agent only). */
@@ -24,7 +25,15 @@ function tell(note: () => void): void {
   try { note(); } catch { /* the history is a convenience */ }
 }
 
-export function registerAuthRoutes(app: express.Express): void {
+/** What the sign-in routes need from the rest of the server (optional: without it nothing changes). */
+export interface AuthRouteDeps {
+  /** The trusted networks in force (src/trustedNetworks.ts); read on every request. */
+  trustedNetworks?: () => TrustedNetworksSettings;
+}
+
+const NEEDS_SECOND_FACTOR = { error: "from outside the house, signing in needs the second factor turned on for this account: turn it on from the house network or the VPN first", code: "second-factor-required", needs: "vpn" };
+
+export function registerAuthRoutes(app: express.Express, deps: AuthRouteDeps = {}): void {
   app.post("/api/login", loginRateLimiter, asyncHandler(async (req, res) => {
     const { username, password } = req.body || {};
     if (typeof username !== "string" || typeof password !== "string") {
@@ -45,6 +54,13 @@ export function registerAuthRoutes(app: express.Express): void {
     // An account that turned on the second factor needs a current code (or an unused recovery code) as well. Accounts
     // that did not turn it on sign in exactly as before.
     const factor = totpStore();
+    // From outside the trusted networks (when that option is on) only an account with the second factor may sign in.
+    const networks = deps.trustedNetworks?.();
+    if (networks && outsideNeedsSecondFactor(networks, req.ip, factor.enabled(effectiveId(user)))) {
+      authFailuresTotal.inc({ reason: "outside_without_second_factor" });
+      tell(() => connectionTracker().refused(sightingOf(req, user.username), "second_factor_failed", true));
+      return res.status(403).json(NEEDS_SECOND_FACTOR);
+    }
     if (factor.enabled(effectiveId(user))) {
       const wait = factor.waitFor(effectiveId(user));
       if (wait > 0) return res.status(429).set("Retry-After", String(wait)).json({ error: "Too many wrong codes - please wait before trying again.", totpRequired: true });
@@ -105,6 +121,12 @@ export function registerAuthRoutes(app: express.Express): void {
         tell(() => connectionTracker().endedClient(clientId, "session_expired", sightingOf(req)));
       }
       return res.status(401).json({ error: "Invalid or expired refresh token" });
+    }
+    // A renewal from outside is held to the same rule as a sign-in from outside.
+    const networks = deps.trustedNetworks?.();
+    if (networks && outsideNeedsSecondFactor(networks, req.ip, totpStore().enabled(effectiveId(result.user)))) {
+      authFailuresTotal.inc({ reason: "outside_without_second_factor" });
+      return res.status(403).json(NEEDS_SECOND_FACTOR);
     }
     const token = jwt.sign(
       { username: result.user.username, role: result.user.role, tokenVersion: effectiveTokenVersion(result.user), id: effectiveId(result.user) },

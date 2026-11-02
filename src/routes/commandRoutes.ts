@@ -14,6 +14,7 @@ import { claimConflict, readControllerId, type ClaimConflict } from "../claimPol
 import type { JogArming, SafetyLimits } from "../safetyLimits";
 import type { AuditLog } from "../auditLog";
 import { JogSequence, parseSequence } from "../jogSequence";
+import { resolveHome } from "../modelHome";
 import { ifMatchAgrees, robotRevision } from "../serverPolicy";
 import { applyTableMove, planTableMove, type TablePlan } from "../tableCommand";
 import { EDIT_COMMANDS, cleanPoints, editAffectedIds, planRobotEdit } from "../robotEdit";
@@ -326,12 +327,12 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     }
 
     // A table move is one jog of the table: it needs the same arming.
-    if ((command === "jog" || command === "table" || command === "joints") && safety?.get().jog.armRequired && !arming?.isArmed(robotId, (req as any).user.id, callerController)) {
+    if ((command === "jog" || command === "table" || command === "joints" || command === "reset") && safety?.get().jog.armRequired && !arming?.isArmed(robotId, (req as any).user.id, callerController)) {
       return res.status(403).json({ error: "the jog is not armed for this robot: arm it first (POST /api/robot/:id/jog-arm)", code: "jog-not-armed" });
     }
     // A client that numbers its motion commands (`seq`) is protected from a jog that arrives after the stop sent later than it.
     const rawSeq = (req.body as any)?.seq;
-    if (rawSeq !== undefined && command !== "stop" && (command === "jog" || command === "table" || command === "joints")) {
+    if (rawSeq !== undefined && command !== "stop" && (command === "jog" || command === "table" || command === "joints" || command === "reset")) {
       const seq = parseSequence(rawSeq);
       if (seq === null) {
         return res.status(400).json({ error: "seq must be an integer from 1 up", code: "invalid-sequence" });
@@ -359,6 +360,19 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
       const plan = planTableMove(targetRobot, params, safety?.jogFor(targetRobot.model) ?? { maxAmount: 1000, maxAbsolute: 1000 });
       if (!plan.ok) return res.status(400).json({ error: plan.error, code: plan.code });
       tablePlan = plan;
+    }
+
+    // A reset of the arm goes to the home pose of the model of EACH robot it reaches (combined robots may be of different models);
+    // every one is checked against the range of its joints before any of them is changed, so a refusal moves nothing.
+    const homeByRobot = new Map<number, unknown>();
+    if (command === "reset" && params?.target !== "xytable") {
+      const members: any[] = [];
+      getSettings().controllers.forEach((c: any) => (c.robots ?? []).forEach((r: any) => { if (affectedIds.includes(r.id)) members.push(r); }));
+      for (const member of members) {
+        const verdict = resolveHome(member.model, params?.joints);
+        if (!verdict.ok) return res.status(verdict.status).json({ error: verdict.error, code: verdict.code });
+        homeByRobot.set(member.id, verdict.joints);
+      }
     }
 
     // The edits of one robot are checked as a whole before anything is changed.
@@ -624,17 +638,11 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
             case "reset": {
               const target = params?.target === "xytable" ? "xytable" : "robot";
               if (target === "robot") {
+                // The joints are the home pose of THIS robot's model (src/modelHome.ts), already checked against
+                // the range of its joints before anything was changed (see the check before the loop): the
+                // generic formula is no longer used here.
                 robot.pos = { x: 0, y: 0, z: 0, a: 0, b: 0, c: 0, tx: robot.pos?.tx, ty: robot.pos?.ty, trz: robot.pos?.trz };
-                // Same client-supplied-joints trust level as "jog" above
-                // (see that case's own comment) - the server has no
-                // per-model IK of its own, so a caller-supplied home pose
-                // (STUDIO's homePoseFor(robot.model)) is validated and
-                // trusted the same way; calculateJoints() is the fallback
-                // for any caller that doesn't send one.
-                const JOINT_KEYS_RESET = ["j1", "j2", "j3", "j4", "j5", "j6"];
-                const j = params?.joints;
-                const hasValidJoints = j && typeof j === "object" && JOINT_KEYS_RESET.every((k) => typeof j[k] === "number" && Number.isFinite(j[k]));
-                robot.joints = hasValidJoints ? { j1: j.j1, j2: j.j2, j3: j.j3, j4: j.j4, j5: j.j5, j6: j.j6 } : calculateJoints(robot.pos);
+                robot.joints = { ...(homeByRobot.get(robot.id) as object) };
                 patch = { pos: robot.pos, joints: robot.joints };
               } else if (robot.hasXYTable && robot.xyTable) {
                 robot.pos = { ...robot.pos, tx: 0, ty: 0 };

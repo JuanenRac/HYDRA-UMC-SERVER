@@ -82,3 +82,41 @@ the login rate-limiter left enabled, and ideally `TLS_CERT_PATH`/
 `TLS_KEY_PATH` configured so credentials never travel in clear text.
 See the root `.env.example` and [`REMOTE_API.md`](REMOTE_API.md) for
 how to set each of those.
+
+## Telling the house from outside: trusted networks (optional, off by default)
+
+A VPN keeps the server inside the house network, but it cannot stop a port that was opened by mistake. The server can
+also tell, request by request, where an address comes from. The option is **off by default**: turn it on from Server Admin
+(Security, "trusted networks"), with `HYDRA_UMC_TRUSTED_NETWORKS=1`, or with `"trustedNetworks": { "enabled": true }` in
+`data/server-config.json`. The rest is read from that file:
+
+```json
+"trustedNetworks": {
+  "enabled": true,
+  "local": ["192.168.0.0/24"],
+  "vpn": ["10.66.0.0/24"],
+  "outside": "operate",
+  "outsideRequiresSecondFactor": true
+}
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `local` | the private ranges and the loopback | Ranges (CIDR) that count as the house. A list replaces the default. |
+| `vpn` | none | Ranges of the VPN (the address of the WireGuard or Tailscale subnet); they count as the house. |
+| `outside` | `operate` | What a request from any other address may do: `operate` (everything but administering) or `view` (only looking, stopping and its own sign-in). |
+| `outsideRequiresSecondFactor` | `true` | From outside, only an account that has the second factor on can sign in or renew its session. |
+
+While the option is on:
+
+* From outside, `/api/admin`, `/api/users`, `/api/system`, the service control, the integrations, work uploads, model
+  submissions, saving the settings and the commands to the machine bridges answer `403` with `code: "remote-policy"`
+  and `needs: "vpn"`, and the refusal is written in the audit log. A stop is never refused.
+* With `outside: "view"` the robot commands other than stop and disable are refused too.
+* A sign-in from outside by an account without the second factor answers `403` (`second-factor-required`) after the
+  password was checked; turn the factor on from the house or the VPN first.
+* A range that is not an address range is ignored (the trusted area only ever gets smaller) and counted in the
+  Server Admin snapshot (`invalidEntries`).
+* The address is the one of the connection. Behind a reverse proxy every request looks like the proxy's own, which is in the
+  house: use the VPN, not a proxy, to reach the server from outside, and check the setting from a phone on mobile data.
+

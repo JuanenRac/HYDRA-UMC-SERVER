@@ -112,6 +112,8 @@ export interface EcosystemHealthFile {
 
 /** The gateway to the machine bridges (GET /api/bridges, POST /api/bridges/:name/cmd/:verb, src/bridgeGateway.ts). */
 import type { BridgeGatewayFile } from "./bridgeGateway";
+import { resolveTrustedNetworks, type TrustedNetworksFile, type TrustedNetworksSettings } from "./trustedNetworks";
+export type { TrustedNetworksFile };
 export type { BridgeGatewayFile };
 
 /** The remaining-useful-life relay (POST /api/ai/anomaly-detector/rul, src/routes/localAiRoutes.ts). */
@@ -195,6 +197,8 @@ export interface SecurityFile {
   ecosystemHealth?: EcosystemHealthFile;
   bridgeGateway?: BridgeGatewayFile;
   push?: PushFile;
+  /** Where a request comes from and what is asked of it (src/trustedNetworks.ts). */
+  trustedNetworks?: TrustedNetworksFile;
   rul?: RulFile;
   safety?: SafetyFile;
   jobDispatcher?: JobDispatcherFile;
@@ -222,6 +226,7 @@ export interface SecurityEnv {
   ecosystemHealth?: string;
   bridgeGateway?: string;
   push?: string;
+  trustedNetworks?: string;
   rul?: string;
   safetyPublishStop?: string;
   cameraAuth?: string;
@@ -253,6 +258,7 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     ecosystemHealth: env.HYDRA_UMC_ECOSYSTEM_HEALTH,
     bridgeGateway: env.HYDRA_UMC_BRIDGE_GATEWAY,
     push: env.HYDRA_UMC_PUSH,
+    trustedNetworks: env.HYDRA_UMC_TRUSTED_NETWORKS,
     rul: env.HYDRA_UMC_RUL,
     safetyPublishStop: env.HYDRA_UMC_SAFETY_PUBLISH_STOP,
     cameraAuth: env.HYDRA_UMC_CAMERA_AUTH,
@@ -359,6 +365,13 @@ export function resolveBridgeGateway(env: string | undefined, file: SecurityFile
 export function resolvePush(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
   if (isSet(env)) return { value: env.trim() === "1", source: "env" };
   if (typeof file.push?.enabled === "boolean") return { value: file.push.enabled, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** Trusted networks (administering only from the house or the VPN): only the exact word "1" in the environment switches it on; the default is off. */
+export function resolveTrustedNetworksEnabled(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.trustedNetworks?.enabled === "boolean") return { value: file.trustedNetworks.enabled, source: "config" };
   return { value: false, source: "default" };
 }
 
@@ -519,6 +532,8 @@ export interface SecuritySnapshot {
   ecosystemHealth: { enabled: { value: boolean; source: Source } };
   bridgeGateway: { enabled: { value: boolean; source: Source } };
   push: { enabled: { value: boolean; source: Source } };
+  /** The switch, and what the configuration file says about the rest (read only here: the ranges are edited in the file). */
+  trustedNetworks: { enabled: { value: boolean; source: Source }; outside: "operate" | "view"; outsideRequiresSecondFactor: boolean; localRanges: number; vpnRanges: number; invalidEntries: number };
   rul: { enabled: { value: boolean; source: Source } };
   safety: { publishGlobalStop: { value: boolean; source: Source } };
   jobDispatcher: {
@@ -612,6 +627,11 @@ export class SecurityConfig {
   /** Whether the gateway to the machine bridges answers (off unless an administrator turned it on). */
   bridgeGatewayEnabled(): boolean {
     return resolveBridgeGateway(this.options.env.bridgeGateway, this.file).value;
+  }
+
+  /** The trusted networks in force (the option is off unless an administrator turned it on). */
+  trustedNetworks(): TrustedNetworksSettings {
+    return resolveTrustedNetworks(resolveTrustedNetworksEnabled(this.options.env.trustedNetworks, this.file).value, this.file.trustedNetworks);
   }
 
   /** Whether the server sends push notifications (off unless an administrator turned it on). */
@@ -735,6 +755,17 @@ export class SecurityConfig {
       ecosystemHealth: { enabled: resolveEcosystemHealth(this.options.env.ecosystemHealth, this.file) },
       bridgeGateway: { enabled: resolveBridgeGateway(this.options.env.bridgeGateway, this.file) },
       push: { enabled: resolvePush(this.options.env.push, this.file) },
+      trustedNetworks: (() => {
+        const settings = this.trustedNetworks();
+        return {
+          enabled: resolveTrustedNetworksEnabled(this.options.env.trustedNetworks, this.file),
+          outside: settings.outside,
+          outsideRequiresSecondFactor: settings.outsideRequiresSecondFactor,
+          localRanges: settings.local.length,
+          vpnRanges: settings.vpn.length,
+          invalidEntries: settings.invalid.length,
+        };
+      })(),
       rul: { enabled: resolveRul(this.options.env.rul, this.file) },
       safety: { publishGlobalStop: resolveSafetyPublishStop(this.options.env.safetyPublishStop, this.file) },
       jobDispatcher: this.jobDispatcherSnapshot(),
@@ -775,7 +806,7 @@ export class SecurityConfig {
   /** Applies a change asked for by an administrator; returns the new state and the warnings to show. */
   update(patch: any, actor: string): { snapshot: SecuritySnapshot; warnings: string[]; appliesOnRestart: boolean } {
     const warnings: string[] = [];
-    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, bridgeGateway: this.file.bridgeGateway ? { ...this.file.bridgeGateway } : undefined, push: this.file.push ? { ...this.file.push } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
+    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, bridgeGateway: this.file.bridgeGateway ? { ...this.file.bridgeGateway } : undefined, push: this.file.push ? { ...this.file.push } : undefined, trustedNetworks: this.file.trustedNetworks ? { ...this.file.trustedNetworks } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
     let appliesOnRestart = false;
     const log = this.options.log ?? (() => undefined);
     const lockedBy = (name: string) => new SecurityConfigError(409, `${name} is set in the environment of this server; remove it there to change it here`);
@@ -974,6 +1005,19 @@ export class SecurityConfig {
       }
       next.push = merged;
       if (pushPatch.enabled === true) warnings.push("push_enabled");
+    }
+
+    if (patch.trustedNetworks !== undefined) {
+      const netPatch = patch.trustedNetworks;
+      if (typeof netPatch !== "object" || netPatch === null || Array.isArray(netPatch)) throw new SecurityConfigError(400, "trustedNetworks must be an object");
+      const merged: TrustedNetworksFile = { ...(next.trustedNetworks ?? {}) };
+      if (netPatch.enabled !== undefined) {
+        if (typeof netPatch.enabled !== "boolean") throw new SecurityConfigError(400, "trustedNetworks.enabled must be true or false");
+        if (resolveTrustedNetworksEnabled(this.options.env.trustedNetworks, this.file).source === "env") throw lockedBy("HYDRA_UMC_TRUSTED_NETWORKS");
+        merged.enabled = netPatch.enabled;
+      }
+      next.trustedNetworks = merged;
+      if (netPatch.enabled === true) warnings.push("trusted_networks_on");
     }
 
     if (patch.rul !== undefined) {
@@ -1205,6 +1249,9 @@ export class SecurityConfig {
     }
     if (patch.bridgeGateway !== undefined) {
       log(`[SECURITY] ${actor} turned the gateway to the machine bridges (GET /api/bridges, POST /api/bridges/:name/cmd/:verb) ${snapshot.bridgeGateway.enabled.value ? "on" : "off"}.`);
+    }
+    if (patch.trustedNetworks !== undefined) {
+      log(`[SECURITY] ${actor} turned the trusted networks ${snapshot.trustedNetworks.enabled.value ? "ON (administering the server and signing in without the second factor are refused from outside the listed networks)" : "off"}.`);
     }
     if (patch.rul !== undefined) {
       log(`[SECURITY] ${actor} turned the remaining-useful-life relay for operators (POST /api/ai/anomaly-detector/rul) ${snapshot.rul.enabled.value ? "on" : "off"}.`);

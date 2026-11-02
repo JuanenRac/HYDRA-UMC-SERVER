@@ -3256,6 +3256,16 @@
               }
             }
           },
+          "403": {
+            "description": "Signed in but not allowed. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limited. The body is documented in docs/REMOTE_API.md.",
             "content": {
@@ -3663,6 +3673,16 @@
           },
           "401": {
             "description": "Not signed in or token rejected. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in but not allowed. The body is documented in docs/REMOTE_API.md.",
             "content": {
               "application/json": {
                 "schema": {

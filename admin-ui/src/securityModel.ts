@@ -37,6 +37,7 @@ export const SWITCHES: readonly SwitchDef[] = [
   { id: 'voice.requireSignature', section: 'voice', key: 'requireSignature', riskyWhen: null, label: 'sw_voice_signature', warning: null, confirm: null, warningCode: null },
   { id: 'camera.credentialsViaEnv', section: 'camera', key: 'credentialsViaEnv', riskyWhen: false, label: 'sw_camera_env', warning: 'warn_camera_env', confirm: 'confirm_install', warningCode: 'camera_credentials_in_arguments' },
   { id: 'push.enabled', section: 'push', key: 'enabled', riskyWhen: null, label: 'sw_push', warning: 'warn_push', confirm: null, warningCode: 'push_enabled' },
+  { id: 'trustedNetworks.enabled', section: 'trustedNetworks', key: 'enabled', riskyWhen: null, label: 'sw_trusted_networks', warning: 'warn_trusted_networks', confirm: null, warningCode: 'trusted_networks_on' },
   { id: 'install.newInstallTls', section: 'install', key: 'newInstallTls', riskyWhen: false, label: 'sw_install_tls', warning: 'warn_install_tls', confirm: 'confirm_install', warningCode: 'new_install_tls_off' },
 ];
 

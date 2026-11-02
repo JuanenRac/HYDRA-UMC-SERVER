@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **Trusted networks, off by default:** an administrator can turn on (Server Admin, the configuration file or `HYDRA_UMC_TRUSTED_NETWORKS=1`) a rule that tells the house and its VPN (the private ranges or the ranges listed in `data/server-config.json`) from any other address. From outside, administering the server is refused (`403`, `remote-policy`), the policy `view` also refuses every command but a stop, and only accounts with the second factor can sign in or renew a session. Refusals are audited, a damaged range only makes the trusted area smaller, and nothing changes while the option is off. The Security tab of the admin panel shows the switch in the eight languages. See `docs/REMOTE_ACCESS_VPN.md`.
+
+- **HOME / RESET is held to the rules of the jog:** the `reset` command now needs the jog armed where the administrator requires it, is ordered by `seq` like the jog, and sends the arm to the home pose of the model of each robot it reaches (the table the control programs share) instead of a formula that fits only the generic robot. A pose that is not that home pose answers `400` (`home-pose-mismatch`), one with a joint outside its range answers `422` (`home-out-of-limits`), and a refused reset moves nothing.
+
 ## [0.8.2.0] - A gateway to the machine bridges and push notifications to the iPhones, both off by default, and TypeScript 7
 
 - **A gateway to the machine bridges, off by default:** `GET /api/bridges`, `GET /api/bridges/{name}/state` and `POST /api/bridges/{name}/cmd/{verb}` read the retained state of a bridge from the broker and publish a command on its topic, waiting for its answer. Behind the switch `bridgeGateway.enabled` (`HYDRA_UMC_BRIDGE_GATEWAY=1`; off, the routes answer a bare `404`), only a bridge that announced itself can be addressed, only the verbs of a list (`status`, `stop`, `pause`, `resume` by default; never `job`) are accepted, the pace is limited (a stop never waits) and every command is audited without its parameters. See `docs/REMOTE_API.md` section 2s.

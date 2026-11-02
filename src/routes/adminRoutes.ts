@@ -134,7 +134,7 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
       saveServerConfig({ ...loadServerConfig(), port: portNum });
     }
     let security_result: ReturnType<SecurityConfig["update"]> | undefined;
-    const wantsSecurity = req.body && (req.body.aiAccess !== undefined || req.body.infoAuth !== undefined || req.body.tls !== undefined || req.body.ble !== undefined || req.body.mqtt !== undefined || req.body.voice !== undefined || req.body.mavlink !== undefined || req.body.robots !== undefined || req.body.connections !== undefined || req.body.health !== undefined || req.body.ecosystemHealth !== undefined || req.body.push !== undefined || req.body.rul !== undefined || req.body.safety !== undefined || req.body.camera !== undefined || req.body.install !== undefined || req.body.websocket !== undefined || req.body.logging !== undefined || req.body.jobDispatcher !== undefined);
+    const wantsSecurity = req.body && (req.body.aiAccess !== undefined || req.body.infoAuth !== undefined || req.body.tls !== undefined || req.body.ble !== undefined || req.body.mqtt !== undefined || req.body.voice !== undefined || req.body.mavlink !== undefined || req.body.robots !== undefined || req.body.connections !== undefined || req.body.health !== undefined || req.body.ecosystemHealth !== undefined || req.body.push !== undefined || req.body.trustedNetworks !== undefined || req.body.rul !== undefined || req.body.safety !== undefined || req.body.camera !== undefined || req.body.install !== undefined || req.body.websocket !== undefined || req.body.logging !== undefined || req.body.jobDispatcher !== undefined);
     if (wantsSecurity) {
       try {
         security_result = security.update(req.body, String((req as any).user?.username ?? "admin"));
