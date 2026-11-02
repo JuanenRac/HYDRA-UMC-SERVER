@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.8.2.0] - A gateway to the machine bridges and push notifications to the iPhones, both off by default, and TypeScript 7
+
 - **A gateway to the machine bridges, off by default:** `GET /api/bridges`, `GET /api/bridges/{name}/state` and `POST /api/bridges/{name}/cmd/{verb}` read the retained state of a bridge from the broker and publish a command on its topic, waiting for its answer. Behind the switch `bridgeGateway.enabled` (`HYDRA_UMC_BRIDGE_GATEWAY=1`; off, the routes answer a bare `404`), only a bridge that announced itself can be addressed, only the verbs of a list (`status`, `stop`, `pause`, `resume` by default; never `job`) are accepted, the pace is limited (a stop never waits) and every command is audited without its parameters. See `docs/REMOTE_API.md` section 2s.
 
 - **TypeScript 7:** the type checker is the native TypeScript 7 compiler; the typecheck, the unit tests, the OpenAPI check and the bundle pass with it.
