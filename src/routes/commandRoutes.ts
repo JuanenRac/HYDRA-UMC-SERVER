@@ -123,6 +123,11 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     robotEnableAllowed,
   } = deps;
   const jogSequence = deps.jogSequence ?? new JogSequence();
+  // The audit record of the motion commands: discrete ones (play, pause, stop, trajectory, table, speed, tool, valve, pump) are always recorded; a stream of
+  // jog-like ones (jog, jogStep, joints, reset) is recorded at most once per account and robot every audit.motionIntervalSeconds (0 = not recorded).
+  const MOTION_DISCRETE = new Set(["play", "pause", "stop", "trajectory", "table", "speed", "tool", "valve", "pump"]);
+  const MOTION_STREAM = new Set(["jog", "jogStep", "joints", "reset"]);
+  const lastStreamAudit = new Map<string, number>();
 
   // GLOBAL STOP: one call stops every robot, whoever reserved it, and switches every valve and pump off. A safety stop is never blocked by a reservation
   // (same rule as the single-robot "stop"), needs no confirmation and no parameters, and is open to every signed-in account: the role model only has "admin"
@@ -831,6 +836,27 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     // with no effect. src/metrics.ts's own hydra_robot_commands_total,
     // exposed on GET /metrics.
     robotCommandsTotal.inc({ command: commandMetricLabel(command) });
+
+    if (audit && (MOTION_DISCRETE.has(command) || MOTION_STREAM.has(command))) {
+      const who = (req as any).user;
+      let record = MOTION_DISCRETE.has(command);
+      if (!record) {
+        const everyMs = (safety?.get().audit.motionIntervalSeconds ?? 0) * 1000;
+        const key = `${robotId}:${who?.id ?? ""}`;
+        const now = Date.now();
+        if (everyMs > 0 && now - (lastStreamAudit.get(key) ?? 0) >= everyMs) {
+          if (lastStreamAudit.size > 1000) lastStreamAudit.clear();
+          lastStreamAudit.set(key, now);
+          record = true;
+        }
+      }
+      if (record) {
+        const detail: Record<string, unknown> = { command };
+        if (command === "trajectory" && Array.isArray(params?.points)) detail.points = params.points.length;
+        if (tablePlan) { detail.x = tablePlan.x; detail.y = tablePlan.y; }
+        audit.record({ type: "robot-motion", outcome: "ok", userId: who?.id, username: who?.username, controllerId: callerController, ip: req.ip, robotId, detail });
+      }
+    }
 
     await queueSettingsWrite(getSettings());
     broadcastRobotDelta(deltas, getSettings());

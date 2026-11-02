@@ -28,7 +28,7 @@ export interface SafetyConfig {
   temperature: { default: TemperatureLimits; models: Record<string, Partial<TemperatureLimits>> };
   claims: { requireControllerId: boolean };
   /** The audit record of the changes that matter (GET /api/audit). On by default; the environment may lock it off. */
-  audit: { enabled: boolean };
+  audit: { enabled: boolean; motionIntervalSeconds: number };
 }
 
 export const HARD_LIMITS = {
@@ -36,6 +36,8 @@ export const HARD_LIMITS = {
   jogMaxAbsolute: 10000,
   armTtlMs: { min: 1000, max: 600_000 },
   bedMaxC: 300,
+  /** How often a stream of jog commands of one account on one robot is recorded (0 = the stream is not recorded; the discrete commands always are). */
+  auditMotionIntervalSeconds: { min: 0, max: 3600 },
 } as const;
 
 export function defaultSafetyConfig(): SafetyConfig {
@@ -43,7 +45,7 @@ export function defaultSafetyConfig(): SafetyConfig {
     jog: { armRequired: false, armTtlMs: 60_000, default: { maxAmount: 100, maxAbsolute: 1000 }, models: {} },
     temperature: { default: { bedMaxC: 110 }, models: {} },
     claims: { requireControllerId: false },
-    audit: { enabled: true },
+    audit: { enabled: true, motionIntervalSeconds: 10 },
   };
 }
 
@@ -124,10 +126,17 @@ export function mergeSafetyConfig(current: SafetyConfig, patch: any): SafetyConf
     }
   }
   if (body.audit !== undefined) {
-    const a = section("audit", body.audit, ["enabled"]);
+    const a = section("audit", body.audit, ["enabled", "motionIntervalSeconds"]);
     if (a.enabled !== undefined) {
       if (typeof a.enabled !== "boolean") throw new SafetyLimitsError("audit.enabled must be true or false");
-      next.audit = { enabled: a.enabled };
+      next.audit.enabled = a.enabled;
+    }
+    if (a.motionIntervalSeconds !== undefined) {
+      const r = HARD_LIMITS.auditMotionIntervalSeconds;
+      if (typeof a.motionIntervalSeconds !== "number" || !Number.isInteger(a.motionIntervalSeconds) || a.motionIntervalSeconds < r.min || a.motionIntervalSeconds > r.max) {
+        throw new SafetyLimitsError(`audit.motionIntervalSeconds must be a whole number between ${r.min} and ${r.max}`);
+      }
+      next.audit.motionIntervalSeconds = a.motionIntervalSeconds;
     }
   }
   return next;

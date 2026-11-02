@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **The motion commands are in the audit record:** play, pause, stop, trajectory, table, speed, tool, valve and pump are recorded as `robot-motion` with the account, the controller, the address and the robot, and a stream of jogs is recorded at most once per account and robot every `audit.motionIntervalSeconds` seconds (10 by default, 0 leaves the stream out, set in the safety limits)
+
 ## [0.8.2.2] - A relay of the tier plan of the data lake for administrators, the dead-man of the presence of the operator that lowers the speed when the heartbeat is lost, and screenshots of Server Admin in the README
 
 - **Relay of the tier plan of the data lake for administrators (`GET` / `PUT /api/telemetry/downsample-plan`):** the editor of Studio reads and saves the plan of the data lake through the server, which presents the administration token of the data lake (`HYDRA_UMC_DATALAKE_ADMIN_TOKEN`, else `HYDRA_UMC_DATALAKE_TOKEN`) and returns the status and body it receives, so the validation, the confirmation of deletion and the hash check stay in the data lake. `404` when the data lake has the option off, `503` when it is not configured. Checked against a stand-in data lake by the telemetry relay contract.
