@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **The README shows screenshots of Server Admin** (security, user accounts and server configuration), taken against a throw-away server with a made-up administrator by `tools/capture_screenshots.mjs`; the list and the captions in the eight languages are in `docs/screenshots.json`.
+
 ## [0.8.2.1] - Signed tickets for the information routes, a Home Assistant device for every robot and the trusted networks switch
 
 - **Signed tickets for the information routes, off by default:** with the option `infoTickets.enabled` (or `HYDRA_UMC_INFO_TICKETS=1`) on and the information routes closed by `HYDRA_UMC_INFO_AUTH=required`, `POST /api/info/ticket` gives a signed-in account a ticket for the address (`?ticket=`) that opens `/metrics`, the system metrics, the supervisor, the ecosystem status and the model catalogue for a scraper or a dashboard that cannot send a token. The ticket is signed with a key of its own (a camera ticket does not open these routes, nor the reverse), lives 300 seconds, and only an administrator can ask for longer, up to `infoTickets.maxTtlSeconds` of the configuration file. Off, the route answers `404` and a ticket is ignored.

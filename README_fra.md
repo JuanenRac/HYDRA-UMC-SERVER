@@ -153,6 +153,28 @@ refactoring gratuit :
   peut être hébergé ailleurs, joignable par le réseau exactement comme
   les autres clients distants de cette même API.
 
+## 🖼️ Captures d'écran
+
+Capturées sur un banc d'essai avec des données d'exemple fictives et sans installation réelle derrière.
+
+<p align="center">
+  <img src="images/screenshots/security.png" alt="Sécurité" width="100%">
+</p>
+
+<p align="center"><em>Sécurité : chaque interrupteur de protection du serveur avec sa valeur prudente par défaut et l'origine de sa valeur, et les options du répartiteur de travaux.</em></p>
+
+<p align="center">
+  <img src="images/screenshots/users.png" alt="Comptes utilisateur" width="100%">
+</p>
+
+<p align="center"><em>Comptes utilisateur : les comptes du serveur avec leur rôle et le formulaire pour en créer un nouveau comme opérateur, observateur ou administrateur.</em></p>
+
+<p align="center">
+  <img src="images/screenshots/config.png" alt="Configuration du serveur" width="100%">
+</p>
+
+<p align="center"><em>Configuration du serveur : le nom que le serveur montre à ses clients et son port d'écoute, avec le bouton de redémarrage.</em></p>
+
 ## ✨ Fonctionnalités
 
 ### Données et Persistance
@@ -505,7 +527,7 @@ HYDRA-UMC-SERVER/
 ├── admin-ui/                  Panneau d'administration Vite/React séparé pour CE serveur lui-même
 ├── data/                      État d'exécution - settings, users, logs, fichiers de travail, points enregistrés
 ├── docs/                      documents du projet
-├── images/                    Médias et diagrammes
+├── images/                    Bannière et captures du README
 ├── systemd/                   unité de service
 ├── tools/                     outils du projet et vérifications de la CI
 ├── tests/                     tests automatiques

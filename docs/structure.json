@@ -408,24 +408,24 @@
         {
           "name": "images/",
           "desc": {
-            "en": "Media and diagrams",
-            "es": "Medios y diagramas",
-            "de": "Medien und Diagramme",
-            "fr": "Médias et diagrammes",
-            "it": "Media e diagrammi",
-            "ja": "メディアと図版",
-            "zh": "媒体与图示",
-            "pt": "Multimédia e diagramas"
+            "en": "README banner and screenshots",
+            "es": "Banner y capturas del README",
+            "de": "README-Banner und Screenshots",
+            "fr": "Bannière et captures du README",
+            "it": "Banner e schermate del README",
+            "ja": "README のバナーとスクリーンショット",
+            "zh": "README 横幅和截图",
+            "pt": "Faixa e capturas de ecrã do README"
           },
           "tree_desc": {
-            "en": "Media and diagrams",
-            "es": "Medios y diagramas",
-            "de": "Medien und Diagramme",
-            "fr": "Médias et diagrammes",
-            "it": "Media e diagrammi",
-            "ja": "メディアと図版",
-            "zh": "媒体与图示",
-            "pt": "Multimédia e diagramas"
+            "en": "README banner and screenshots",
+            "es": "Banner y capturas del README",
+            "de": "README-Banner und Screenshots",
+            "fr": "Bannière et captures du README",
+            "it": "Banner e schermate del README",
+            "ja": "README のバナーとスクリーンショット",
+            "zh": "README 横幅和截图",
+            "pt": "Faixa e capturas de ecrã do README"
           }
         },
         {

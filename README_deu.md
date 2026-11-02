@@ -156,6 +156,28 @@ kein Refactoring um seiner selbst willen:
   das Netzwerk genau wie die anderen entfernten Clients dieser selben
   API.
 
+## 🖼️ Screenshots
+
+Aufgenommen auf einem Prüfstand mit erfundenen Beispieldaten und ohne eine echte Anlage dahinter.
+
+<p align="center">
+  <img src="images/screenshots/security.png" alt="Sicherheit" width="100%">
+</p>
+
+<p align="center"><em>Sicherheit: jeder Schutzschalter des Servers mit seinem vorsichtigen Standardwert und der Herkunft seines Wertes sowie die Optionen des Job-Dispatchers.</em></p>
+
+<p align="center">
+  <img src="images/screenshots/users.png" alt="Benutzerkonten" width="100%">
+</p>
+
+<p align="center"><em>Benutzerkonten: die Konten des Servers mit ihrer Rolle und das Formular, um ein neues als Bediener, Betrachter oder Administrator anzulegen.</em></p>
+
+<p align="center">
+  <img src="images/screenshots/config.png" alt="Serverkonfiguration" width="100%">
+</p>
+
+<p align="center"><em>Serverkonfiguration: der Name, den der Server seinen Clients zeigt, und sein Listen-Port, mit der Schaltfläche zum Neustart.</em></p>
+
 ## ✨ Funktionen
 
 ### Daten und Persistenz
@@ -508,7 +530,7 @@ HYDRA-UMC-SERVER/
 ├── admin-ui/                  Eigenständiges Vite/React-Admin-Panel für DIESEN Server selbst
 ├── data/                      Laufzeitzustand - Settings, Users, Logs, Arbeitsdateien, gespeicherte Punkte
 ├── docs/                      Dokumente des Projekts
-├── images/                    Medien und Diagramme
+├── images/                    README-Banner und Screenshots
 ├── systemd/                   Dienst-Unit
 ├── tools/                     Projektwerkzeuge und CI-Prüfungen
 ├── tests/                     automatische Tests

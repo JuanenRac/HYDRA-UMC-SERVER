@@ -102,6 +102,28 @@ Separar o motor do painel web foi uma decisão deliberada, não uma refatoraçã
 - **Ciclos de vida independentes.** A interface web pode ser reimplantada, reiniciada ou trocada a quente por uma versão mais recente sem tocar neste processo - sem tempo de paragem do controlo dos robôs só para publicar uma correção de interface.
 - **Alojamento flexível.** Este servidor foi pensado para correr no (ou mesmo ao lado do) hardware que controla; o cliente que o apresenta pode estar alojado em qualquer outro lugar, acessível pela rede exatamente como os outros clientes remotos desta mesma API.
 
+## 🖼️ Capturas de ecrã
+
+Capturadas numa bancada de testes com dados de exemplo inventados e sem qualquer instalação real por trás.
+
+<p align="center">
+  <img src="images/screenshots/security.png" alt="Segurança" width="100%">
+</p>
+
+<p align="center"><em>Segurança: cada interruptor de proteção do servidor com o seu valor conservador por omissão e de onde vem o seu valor, e as opções do despachante de trabalhos.</em></p>
+
+<p align="center">
+  <img src="images/screenshots/users.png" alt="Contas de utilizador" width="100%">
+</p>
+
+<p align="center"><em>Contas de utilizador: as contas do servidor com o seu papel e o formulário para criar uma nova como operador, observador ou administrador.</em></p>
+
+<p align="center">
+  <img src="images/screenshots/config.png" alt="Configuração do servidor" width="100%">
+</p>
+
+<p align="center"><em>Configuração do servidor: o nome que o servidor mostra aos seus clientes e a sua porta de escuta, com o botão de reinício.</em></p>
+
 ## ✨ Funcionalidades
 
 ### Dados e persistência
@@ -342,7 +364,7 @@ HYDRA-UMC-SERVER/
 ├── admin-ui/                  Painel de administração Vite/React separado para ESTE servidor
 ├── data/                      Estado em execução - definições, utilizadores, registos, ficheiros de trabalho, pontos guardados
 ├── docs/                      documentos do projeto
-├── images/                    Multimédia e diagramas
+├── images/                    Faixa e capturas de ecrã do README
 ├── systemd/                   unidade de serviço
 ├── tools/                     ferramentas do projeto e verificações da CI
 ├── tests/                     testes automáticos

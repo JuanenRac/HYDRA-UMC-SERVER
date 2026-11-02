@@ -151,6 +151,28 @@ refactorización porque sí:
   alojarse en cualquier otro sitio, alcanzable por red exactamente igual
   que los demás clientes remotos de esta misma API.
 
+## 🖼️ Capturas de pantalla
+
+Capturadas en un banco de pruebas con datos de ejemplo inventados y sin ninguna instalación real detrás.
+
+<p align="center">
+  <img src="images/screenshots/security.png" alt="Seguridad" width="100%">
+</p>
+
+<p align="center"><em>Seguridad: cada interruptor de protección del servidor con su valor conservador por defecto y de dónde viene su valor, y las opciones del despachador de trabajos.</em></p>
+
+<p align="center">
+  <img src="images/screenshots/users.png" alt="Cuentas de usuario" width="100%">
+</p>
+
+<p align="center"><em>Cuentas de usuario: las cuentas del servidor con su rol y el formulario para crear una nueva como operador, observador o administrador.</em></p>
+
+<p align="center">
+  <img src="images/screenshots/config.png" alt="Configuración del servidor" width="100%">
+</p>
+
+<p align="center"><em>Configuración del servidor: el nombre que el servidor muestra a sus clientes y su puerto de escucha, con el botón de reinicio.</em></p>
+
 ## ✨ Funciones
 
 ### Datos y Persistencia
@@ -502,7 +524,7 @@ HYDRA-UMC-SERVER/
 ├── admin-ui/                  Panel de administración Vite/React independiente para ESTE servidor
 ├── data/                      Estado en ejecución - settings, users, logs, archivos de trabajo, puntos guardados
 ├── docs/                      documentos del proyecto
-├── images/                    Medios y diagramas
+├── images/                    Banner y capturas del README
 ├── systemd/                   unidad de servicio
 ├── tools/                     herramientas del proyecto y comprobaciones del CI
 ├── tests/                     pruebas automáticas

@@ -1,0 +1,73 @@
+{
+  "screens": [
+    {
+      "file": "security.png",
+      "alt": {
+        "en": "Security",
+        "es": "Seguridad",
+        "fr": "Sécurité",
+        "it": "Sicurezza",
+        "de": "Sicherheit",
+        "zh": "安全",
+        "ja": "セキュリティ",
+        "pt": "Segurança"
+      },
+      "caption": {
+        "en": "Security: every protection switch of the server with its conservative default and where its value comes from, and the options of the job dispatcher.",
+        "es": "Seguridad: cada interruptor de protección del servidor con su valor conservador por defecto y de dónde viene su valor, y las opciones del despachador de trabajos.",
+        "fr": "Sécurité : chaque interrupteur de protection du serveur avec sa valeur prudente par défaut et l'origine de sa valeur, et les options du répartiteur de travaux.",
+        "it": "Sicurezza: ogni interruttore di protezione del server con il suo valore prudente predefinito e da dove viene il suo valore, e le opzioni del dispatcher dei lavori.",
+        "de": "Sicherheit: jeder Schutzschalter des Servers mit seinem vorsichtigen Standardwert und der Herkunft seines Wertes sowie die Optionen des Job-Dispatchers.",
+        "zh": "安全：服务器的每个保护开关及其保守的默认值和取值来源，以及作业调度器的选项。",
+        "ja": "セキュリティ：サーバーの各保護スイッチと、その保守的な既定値および値の出所、ジョブディスパッチャーのオプション。",
+        "pt": "Segurança: cada interruptor de proteção do servidor com o seu valor conservador por omissão e de onde vem o seu valor, e as opções do despachante de trabalhos."
+      }
+    },
+    {
+      "file": "users.png",
+      "alt": {
+        "en": "User accounts",
+        "es": "Cuentas de usuario",
+        "fr": "Comptes utilisateur",
+        "it": "Account utente",
+        "de": "Benutzerkonten",
+        "zh": "用户账户",
+        "ja": "ユーザーアカウント",
+        "pt": "Contas de utilizador"
+      },
+      "caption": {
+        "en": "User accounts: the accounts of the server with their role, and the form to create a new one as operator, viewer or administrator.",
+        "es": "Cuentas de usuario: las cuentas del servidor con su rol y el formulario para crear una nueva como operador, observador o administrador.",
+        "fr": "Comptes utilisateur : les comptes du serveur avec leur rôle et le formulaire pour en créer un nouveau comme opérateur, observateur ou administrateur.",
+        "it": "Account utente: gli account del server con il loro ruolo e il modulo per crearne uno nuovo come operatore, osservatore o amministratore.",
+        "de": "Benutzerkonten: die Konten des Servers mit ihrer Rolle und das Formular, um ein neues als Bediener, Betrachter oder Administrator anzulegen.",
+        "zh": "用户账户：服务器的账户及其角色，以及以操作员、查看者或管理员身份创建新账户的表单。",
+        "ja": "ユーザーアカウント：サーバーのアカウントとその役割、オペレーター・閲覧者・管理者として新規作成するフォーム。",
+        "pt": "Contas de utilizador: as contas do servidor com o seu papel e o formulário para criar uma nova como operador, observador ou administrador."
+      }
+    },
+    {
+      "file": "config.png",
+      "alt": {
+        "en": "Server configuration",
+        "es": "Configuración del servidor",
+        "fr": "Configuration du serveur",
+        "it": "Configurazione del server",
+        "de": "Serverkonfiguration",
+        "zh": "服务器配置",
+        "ja": "サーバー設定",
+        "pt": "Configuração do servidor"
+      },
+      "caption": {
+        "en": "Server configuration: the name the server shows to its clients and its listen port, with the restart button.",
+        "es": "Configuración del servidor: el nombre que el servidor muestra a sus clientes y su puerto de escucha, con el botón de reinicio.",
+        "fr": "Configuration du serveur : le nom que le serveur montre à ses clients et son port d'écoute, avec le bouton de redémarrage.",
+        "it": "Configurazione del server: il nome che il server mostra ai suoi client e la sua porta di ascolto, con il pulsante di riavvio.",
+        "de": "Serverkonfiguration: der Name, den der Server seinen Clients zeigt, und sein Listen-Port, mit der Schaltfläche zum Neustart.",
+        "zh": "服务器配置：服务器向客户端显示的名称及其监听端口，以及重启按钮。",
+        "ja": "サーバー設定：サーバーがクライアントに表示する名前とリッスンポート、再起動ボタン。",
+        "pt": "Configuração do servidor: o nome que o servidor mostra aos seus clientes e a sua porta de escuta, com o botão de reinício."
+      }
+    }
+  ]
+}

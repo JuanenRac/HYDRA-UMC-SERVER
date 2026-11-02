@@ -102,6 +102,28 @@ HYDRA-UMC SERVER 是驱动 HYDRA-UMC 多机器人微工厂单元的独立后端�
 - **独立的生命周期。** 网页 UI 可以重新部署、重启，或热替换为更新的构建版本，而完全不影响本进程——发布 UI 修复无需任何机器人控制停机时间。
 - **灵活的托管方式。** 本服务器旨在运行于它所控制的硬件上（或紧邻其旁）；而渲染它的客户端则可以完全托管于其他任何地方，通过网络访问，与该 API 的其他远程客户端完全一致。
 
+## 🖼️ 屏幕截图
+
+在测试台上使用虚构的示例数据截取，背后没有真实的安装。
+
+<p align="center">
+  <img src="images/screenshots/security.png" alt="安全" width="100%">
+</p>
+
+<p align="center"><em>安全：服务器的每个保护开关及其保守的默认值和取值来源，以及作业调度器的选项。</em></p>
+
+<p align="center">
+  <img src="images/screenshots/users.png" alt="用户账户" width="100%">
+</p>
+
+<p align="center"><em>用户账户：服务器的账户及其角色，以及以操作员、查看者或管理员身份创建新账户的表单。</em></p>
+
+<p align="center">
+  <img src="images/screenshots/config.png" alt="服务器配置" width="100%">
+</p>
+
+<p align="center"><em>服务器配置：服务器向客户端显示的名称及其监听端口，以及重启按钮。</em></p>
+
 ## ✨ 功能
 
 ### 数据与持久化
@@ -343,7 +365,7 @@ HYDRA-UMC-SERVER/
 ├── admin-ui/                  为本服务器自身独立提供的 Vite/React 管理面板
 ├── data/                      运行时状态——设置、用户、日志、工作文件、已保存的点位
 ├── docs/                      项目文档
-├── images/                    媒体与图示
+├── images/                    README 横幅和截图
 ├── systemd/                   服务单元
 ├── tools/                     项目工具和 CI 检查
 ├── tests/                     自动测试
