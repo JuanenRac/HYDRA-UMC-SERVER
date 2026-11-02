@@ -69,6 +69,37 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
     }
   }
 
+  // The tier plan of the data lake (GET/PUT /downsample/plan there; they exist only when the operator started the data lake with
+  // --downsample-admin). Administrators only: the server presents the administration token of the data lake, which no client ever
+  // sees. The body is forwarded as it is and the answer (status included) comes back as it is: the validation, the confirmation of
+  // deletion and the hash check belong to the data lake. A data lake without the option answers 404, which the screen reads as "off".
+  async function relayDatalakePlan(res: express.Response, method: "GET" | "PUT", body: unknown, preview: boolean) {
+    if (!DATALAKE_URL) {
+      return res.status(503).json({ error: "HYDRA-UMC-DATALAKE is not configured on this Server", available: false });
+    }
+    try {
+      const upstream = await fetch(`${DATALAKE_URL}/downsample/plan${preview ? "?preview=1" : ""}`, {
+        method,
+        headers: { ...upstreamHeaders("datalake-admin"), ...(method === "PUT" ? { "content-type": "application/json" } : {}) },
+        body: method === "PUT" ? JSON.stringify(body ?? {}) : undefined,
+        signal: AbortSignal.timeout(DATALAKE_TIMEOUT_MS),
+      });
+      const answer = await upstream.json().catch(() => null);
+      return res.status(upstream.status).json(answer && typeof answer === "object" ? answer : { error: "HYDRA-UMC-DATALAKE answered without a JSON body" });
+    } catch (error) {
+      const timedOut = error instanceof DOMException && error.name === "TimeoutError";
+      return res.status(503).json({ error: timedOut ? "HYDRA-UMC-DATALAKE timed out" : "HYDRA-UMC-DATALAKE is unavailable" });
+    }
+  }
+
+  app.get("/api/telemetry/downsample-plan", authenticate, requireAdmin, async (req, res) => {
+    await relayDatalakePlan(res, "GET", undefined, false);
+  });
+
+  app.put("/api/telemetry/downsample-plan", authenticate, requireAdmin, async (req, res) => {
+    await relayDatalakePlan(res, "PUT", req.body, req.query.preview === "1");
+  });
+
   app.get("/api/telemetry/query", authenticate, async (req, res) => {
     await proxyToDatalake(res, "/query", req.query as Record<string, unknown>);
   });

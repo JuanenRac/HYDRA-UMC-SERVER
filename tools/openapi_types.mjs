@@ -53,6 +53,8 @@ export const RESPONSES = {
   "GET /api/ecosystem/status": ref("EcosystemStatus"),
   "GET /api/telemetry/query": ref("Passthrough"),
   "GET /api/telemetry/aggregate": ref("Passthrough"),
+  "GET /api/telemetry/downsample-plan": ref("Passthrough"),
+  "PUT /api/telemetry/downsample-plan": ref("Passthrough"),
   "GET /api/adapters": ref("Passthrough"),
   "GET /api/adapters/{adapterId}": ref("Passthrough"),
   "GET /api/hardware/canota/version": ref("Passthrough"),

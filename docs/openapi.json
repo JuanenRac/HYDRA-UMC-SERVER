@@ -5092,6 +5092,68 @@
         ]
       }
     },
+    "/api/telemetry/downsample-plan": {
+      "get": {
+        "tags": [
+          "telemetry"
+        ],
+        "summary": "GET /api/telemetry/downsample-plan",
+        "description": "Requires a signed-in account with the admin role.",
+        "x-access": "admin",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Passthrough"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "telemetry"
+        ],
+        "summary": "PUT /api/telemetry/downsample-plan",
+        "description": "Requires a signed-in account with the admin role.",
+        "x-access": "admin",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Passthrough"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "preview",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/telemetry/query": {
       "get": {
         "tags": [

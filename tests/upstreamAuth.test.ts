@@ -41,6 +41,12 @@ test("the data lake presents its read token, else the one for every role", () =>
   assert.equal(tokenForService("datalake", { HYDRA_UMC_DATALAKE_ADMIN_TOKEN: "admin-only-token-12" }, read), "");
 });
 
+test("the tier plan of the data lake uses its administration token, else the one for every role", () => {
+  assert.equal(tokenForService("datalake-admin", { HYDRA_UMC_DATALAKE_ADMIN_TOKEN: "admin-only-token-12", HYDRA_UMC_DATALAKE_TOKEN: "shared-token-12345" }, read), "admin-only-token-12");
+  assert.equal(tokenForService("datalake-admin", { HYDRA_UMC_DATALAKE_TOKEN: "shared-token-12345" }, read), "shared-token-12345");
+  assert.equal(tokenForService("datalake-admin", { HYDRA_UMC_DATALAKE_READ_TOKEN: "read-token-1234567" }, read), "");
+});
+
 test("an unknown service has no token", () => {
   assert.equal(tokenForService("not-a-service", { HYDRA_UMC_VLA_ENGINE_TOKEN: "x".repeat(20) }, read), "");
 });

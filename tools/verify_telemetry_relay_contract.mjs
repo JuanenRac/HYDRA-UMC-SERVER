@@ -61,9 +61,25 @@ async function waitFor(url, startupError = () => undefined, headers = {}) {
 // prove an upstream failure surfaces as a clean error, not a crash.
 function startDatalakeStub() {
   const seenQueries = [];
+  const planCalls = [];
   let forceFailure = false;
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, "http://127.0.0.1");
+    if (url.pathname === "/downsample/plan") {
+      let raw = "";
+      req.on("data", (chunk) => { raw += chunk; });
+      req.on("end", () => {
+        planCalls.push({ method: req.method, search: url.search, authorization: req.headers.authorization ?? "", body: raw });
+        if (req.method === "PUT" && raw.includes("incoherent")) {
+          res.writeHead(422, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "x", code: "incoherent_plan", details: ["tiers[0] (a/*): bucket must not be longer than raw"] }));
+          return;
+        }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify(req.method === "GET" ? { plan: { tiers: [], delete: false }, hash: "h" } : { saved: true, hash: "h2" }));
+      });
+      return;
+    }
     seenQueries.push(`${url.pathname}${url.search}`);
     if (forceFailure) {
       res.writeHead(500, { "content-type": "application/json" });
@@ -79,7 +95,7 @@ function startDatalakeStub() {
       res.writeHead(404).end();
     }
   });
-  return { server, seenQueries, setForceFailure: (v) => { forceFailure = v; } };
+  return { server, seenQueries, planCalls, setForceFailure: (v) => { forceFailure = v; } };
 }
 
 async function main() {
@@ -152,6 +168,8 @@ async function main() {
         HYDRA_UMC_BOOTSTRAP_ADMIN_USERNAME: ADMIN.username,
         HYDRA_UMC_BOOTSTRAP_ADMIN_PASSWORD: ADMIN.password,
         HYDRA_UMC_DATALAKE_URL: `http://127.0.0.1:${stubPort}`,
+        HYDRA_UMC_DATALAKE_ADMIN_TOKEN: "contract-admin-token-123456",
+        HYDRA_UMC_DATALAKE_READ_TOKEN: "contract-read-token-1234567",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -194,6 +212,30 @@ async function main() {
     assert(stub.seenQueries.some((q) => q.startsWith("/aggregate?") && q.includes("bucketMs=1000")),
       `proxy did not forward the real aggregate params to Datalake, saw: ${JSON.stringify(stub.seenQueries)}`);
 
+    // The tier plan: administrators only, relayed with the administration token (never the read token), status and body kept.
+    const planUrl = `http://127.0.0.1:${serverPortWithDatalake}/api/telemetry/downsample-plan`;
+    assert.equal((await fetch(planUrl)).status, 401);
+    const planGet = await fetch(planUrl, { headers: authorization });
+    assert.equal(planGet.status, 200);
+    assert.equal((await planGet.json()).hash, "h");
+    const planPut = await fetch(`${planUrl}?preview=1`, {
+      method: "PUT",
+      headers: { ...authorization, "content-type": "application/json" },
+      body: JSON.stringify({ plan: { tiers: [], delete: false }, expectedHash: "h" }),
+    });
+    assert.equal(planPut.status, 200);
+    const planBad = await fetch(planUrl, {
+      method: "PUT",
+      headers: { ...authorization, "content-type": "application/json" },
+      body: JSON.stringify({ plan: { tiers: [{ kind: "incoherent" }] } }),
+    });
+    assert.equal(planBad.status, 422);
+    assert.equal((await planBad.json()).code, "incoherent_plan");
+    assert(stub.planCalls.length === 3 && stub.planCalls.every((c) => c.authorization === "Bearer contract-admin-token-123456"),
+      `the plan relay did not present the administration token: ${JSON.stringify(stub.planCalls)}`);
+    assert.equal(stub.planCalls[1].search, "?preview=1");
+    assert(stub.planCalls[1].body.includes("expectedHash"));
+
     // A real upstream failure must surface as a clean, forwarded error, not
     // a 500 that hides what actually went wrong.
     stub.setForceFailure(true);
@@ -205,7 +247,7 @@ async function main() {
     const failedBody = await failedResponse.json();
     assert.equal(failedBody.error, "stub datalake failure");
 
-    console.log("SERVER_TELEMETRY_RELAY_CONTRACT=PASS unconfigured=1 auth=1 query=1 aggregate=1 upstream_failure=1");
+    console.log("SERVER_TELEMETRY_RELAY_CONTRACT=PASS unconfigured=1 auth=1 query=1 aggregate=1 upstream_failure=1 plan=1");
   } catch (error) {
     throw new Error(`${error instanceof Error ? error.message : error}\nServer startup output:\n${logs || "<no output>"}`);
   } finally {
