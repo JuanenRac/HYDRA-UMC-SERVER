@@ -53,7 +53,7 @@ import { startBle } from "./ble/start";
 import type { BleGateway } from "./ble/bleGateway";
 import { issueMediaTicket, mediaTicketKey, verifyMediaTicket } from "./mediaTickets";
 import { registerAuthRoutes } from "./routes/auth";
-import { makeTrustedNetworksGate } from "./trustedNetworks";
+import { classify as classifyAddress, makeTrustedNetworksGate } from "./trustedNetworks";
 import { registerConnectionRoutes } from "./routes/connectionRoutes";
 import { registerLivenessRoutes } from "./routes/livenessRoutes";
 import { makeBridgeGatewayGate, registerBridgeRoutes } from "./routes/bridgeRoutes";
@@ -528,7 +528,10 @@ async function startServer() {
     console.log(`[TLS] HTTPS/WSS enabled - cert: ${TLS_CERT_PATH}, key: ${TLS_KEY_PATH}, SHA-256 fingerprint: ${certFingerprint(TLS_CERT_PATH ?? null) ?? "unknown"}`);
   }
 
-  attachWebSocketServer(httpServer, { wsClients, getSettings, applySettingsUpdate, WS_QUERY_TOKEN_ALLOWED });
+  attachWebSocketServer(httpServer, {
+    wsClients, getSettings, applySettingsUpdate, WS_QUERY_TOKEN_ALLOWED,
+    adminWriteAllowed: (address) => { const networks = security.trustedNetworks(); return !networks.enabled || classifyAddress(address, networks) === "local"; },
+  });
 
   httpServer.listen(PORT, "0.0.0.0", () => {
     const serverName = realSettings(getSettings())?.serverName || "HYDRA-UMC STUDIO";

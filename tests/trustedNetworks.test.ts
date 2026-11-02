@@ -220,3 +220,64 @@ test("sign-in over HTTP: from outside an account without the factor is turned aw
     fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 });
+
+test("over the WebSocket an administrator overwrites the settings from the house, and is refused from outside while the option is on", async () => {
+  const { default: fs } = await import("node:fs");
+  const { default: os } = await import("node:os");
+  const { default: path } = await import("node:path");
+  const { default: http } = await import("node:http");
+  const { default: jwt } = await import("jsonwebtoken");
+  const { WebSocket } = await import("ws");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hydra-umc-trusted-ws-"));
+  const originalCwd = process.cwd();
+  process.chdir(dir);
+  const server = http.createServer();
+  let wss: import("ws").WebSocketServer | undefined;
+  try {
+    const { createUser, findUser, effectiveId, effectiveTokenVersion } = await import("../src/users");
+    const { attachWebSocketServer } = await import("../src/ws");
+    const { JWT_SECRET } = await import("../src/auth");
+    await createUser("root", "another-long-password", "admin");
+    const user = findUser("root")!;
+    const token = jwt.sign({ username: "root", role: "admin", tokenVersion: effectiveTokenVersion(user), id: effectiveId(user) }, JWT_SECRET, { expiresIn: "5m" });
+    let settings = resolveTrustedNetworks(false, undefined);
+    const applied: unknown[] = [];
+    wss = attachWebSocketServer(server, {
+      wsClients: new Set(),
+      getSettings: () => ({ controllers: [] }),
+      applySettingsUpdate: async (payload: unknown) => { applied.push(payload); },
+      WS_QUERY_TOKEN_ALLOWED: false,
+      adminWriteAllowed: (address) => !settings.enabled || classify(address, settings) === "local",
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as import("node:net").AddressInfo).port;
+    const send = (payload: unknown) => new Promise<string[]>((resolve, reject) => {
+      const socket = new WebSocket(`ws://127.0.0.1:${port}/ws`, ["hydra.bearer", token]);
+      const heard: string[] = [];
+      socket.on("message", (raw) => heard.push(raw.toString()));
+      socket.on("open", () => { socket.send(JSON.stringify({ type: "settings", payload })); setTimeout(() => { socket.close(); resolve(heard); }, 400); });
+      socket.on("error", reject);
+    });
+    // option off: as before
+    await send({ controllers: [{ id: "c1", robots: [] }] });
+    assert.equal(applied.length, 1);
+    // on, and the client is on the loopback, which is outside when the house is another range: refused
+    settings = resolveTrustedNetworks(true, { local: ["192.0.2.0/24"] });
+    const heard = await send({ controllers: [{ id: "c2", robots: [] }] });
+    assert.equal(applied.length, 1);
+    assert.ok(heard.some((text) => text.includes("remote-policy")), heard.join(" | "));
+    // on, and the client is in the house: accepted
+    settings = resolveTrustedNetworks(true, { local: ["127.0.0.0/8"] });
+    await send({ controllers: [{ id: "c3", robots: [] }] });
+    assert.equal(applied.length, 2);
+  } finally {
+    for (const client of wss?.clients ?? []) client.terminate();
+    wss?.close();
+    // importing the server modules starts the discovery announcer (a UDP socket); it would keep this process alive
+    (await import("../src/runtime")).bonjour.destroy();
+    server.close();
+    server.closeAllConnections?.();
+    process.chdir(originalCwd);
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+});

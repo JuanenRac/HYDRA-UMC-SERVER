@@ -112,6 +112,7 @@ While the option is on:
 * From outside, `/api/admin`, `/api/users`, `/api/system`, the service control, the integrations, work uploads, model
   submissions, saving the settings and the commands to the machine bridges answer `403` with `code: "remote-policy"`
   and `needs: "vpn"`, and the refusal is written in the audit log. A stop is never refused.
+  Overwriting the settings over the WebSocket is refused from outside too (the message answers the same code).
 * With `outside: "view"` the robot commands other than stop and disable are refused too.
 * A sign-in from outside by an account without the second factor answers `403` (`second-factor-required`) after the
   password was checked; turn the factor on from the house or the VPN first.

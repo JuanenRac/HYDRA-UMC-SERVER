@@ -147,6 +147,8 @@ export function attachWebSocketServer(
     getSettings: () => any;
     applySettingsUpdate: (payload: any, originatorWs?: WebSocket) => Promise<unknown>;
     WS_QUERY_TOKEN_ALLOWED: boolean | (() => boolean);
+    /** Whether a connection from this address may overwrite the settings (false: the trusted networks keep that for the house and the VPN). Optional: without it every administrator may. */
+    adminWriteAllowed?: (address: string | undefined) => boolean;
   },
 ) {
   const { wsClients, getSettings, applySettingsUpdate } = deps;
@@ -265,6 +267,11 @@ export function attachWebSocketServer(
               ws.send(JSON.stringify({ error: "Access denied: admin privileges required" }));
               return;
             }
+            // The trusted networks (off by default) refuse to be administered from outside the house and the VPN: the same rule as the REST route.
+            if (deps.adminWriteAllowed && !deps.adminWriteAllowed(req.socket?.remoteAddress)) {
+              ws.send(JSON.stringify({ error: "this is only possible from the house or over the VPN", code: "remote-policy", needs: "vpn" }));
+              return;
+            }
             await applySettingsUpdate(msg.payload, ws); // Skip originator to avoid echo
           }
         } catch (e) {
@@ -319,4 +326,5 @@ export function attachWebSocketServer(
     }
   }, HEARTBEAT_INTERVAL_MS);
   heartbeatTimer.unref();
+  return wss;
 }
