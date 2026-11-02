@@ -221,7 +221,6 @@ export class BridgeGateway {
         if (this.pending.get(key) === resolver) this.pending.delete(key);
         resolve({ timedOut: true });
       }, settings.commandTimeoutMs);
-      timer.unref?.();
       const resolver = (value: unknown) => {
         clearTimeout(timer);
         resolve({ timedOut: false, value });
