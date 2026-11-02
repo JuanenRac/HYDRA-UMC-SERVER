@@ -110,6 +110,10 @@ export interface EcosystemHealthFile {
   lastSeenSaveIntervalS?: number;
 }
 
+/** The gateway to the machine bridges (GET /api/bridges, POST /api/bridges/:name/cmd/:verb, src/bridgeGateway.ts). */
+import type { BridgeGatewayFile } from "./bridgeGateway";
+export type { BridgeGatewayFile };
+
 /** The remaining-useful-life relay (POST /api/ai/anomaly-detector/rul, src/routes/localAiRoutes.ts). */
 export interface RulFile {
   /** Whether an operator may ask the anomaly detector for a remaining-useful-life estimate through the relay (default: no; only an administrator may then). */
@@ -189,6 +193,7 @@ export interface SecurityFile {
   connections?: ConnectionsFile;
   health?: HealthFile;
   ecosystemHealth?: EcosystemHealthFile;
+  bridgeGateway?: BridgeGatewayFile;
   push?: PushFile;
   rul?: RulFile;
   safety?: SafetyFile;
@@ -215,6 +220,7 @@ export interface SecurityEnv {
   connectionRecordAddress?: string;
   healthOpen?: string;
   ecosystemHealth?: string;
+  bridgeGateway?: string;
   push?: string;
   rul?: string;
   safetyPublishStop?: string;
@@ -245,6 +251,7 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     connectionRecordAddress: env.HYDRA_UMC_CONNECTION_RECORD_ADDRESS,
     healthOpen: env.HYDRA_UMC_HEALTH_OPEN,
     ecosystemHealth: env.HYDRA_UMC_ECOSYSTEM_HEALTH,
+    bridgeGateway: env.HYDRA_UMC_BRIDGE_GATEWAY,
     push: env.HYDRA_UMC_PUSH,
     rul: env.HYDRA_UMC_RUL,
     safetyPublishStop: env.HYDRA_UMC_SAFETY_PUBLISH_STOP,
@@ -338,6 +345,13 @@ export function resolveHealthOpen(env: string | undefined, file: SecurityFile): 
 export function resolveEcosystemHealth(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
   if (isSet(env)) return { value: env.trim() === "1", source: "env" };
   if (typeof file.ecosystemHealth?.enabled === "boolean") return { value: file.ecosystemHealth.enabled, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** The gateway to the machine bridges: only the exact word "1" in the environment switches it on; the default is off. */
+export function resolveBridgeGateway(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.bridgeGateway?.enabled === "boolean") return { value: file.bridgeGateway.enabled, source: "config" };
   return { value: false, source: "default" };
 }
 
@@ -503,6 +517,7 @@ export interface SecuritySnapshot {
   connections: { recordAddress: { value: boolean; source: Source } };
   health: { open: { value: boolean; source: Source } };
   ecosystemHealth: { enabled: { value: boolean; source: Source } };
+  bridgeGateway: { enabled: { value: boolean; source: Source } };
   push: { enabled: { value: boolean; source: Source } };
   rul: { enabled: { value: boolean; source: Source } };
   safety: { publishGlobalStop: { value: boolean; source: Source } };
@@ -592,6 +607,11 @@ export class SecurityConfig {
   /** Whether GET /health answers without a sign-in (off unless an administrator turned it on). */
   healthOpen(): boolean {
     return resolveHealthOpen(this.options.env.healthOpen, this.file).value;
+  }
+
+  /** Whether the gateway to the machine bridges answers (off unless an administrator turned it on). */
+  bridgeGatewayEnabled(): boolean {
+    return resolveBridgeGateway(this.options.env.bridgeGateway, this.file).value;
   }
 
   /** Whether the server sends push notifications (off unless an administrator turned it on). */
@@ -713,6 +733,7 @@ export class SecurityConfig {
       connections: { recordAddress: resolveConnectionRecordAddress(this.options.env.connectionRecordAddress, this.file) },
       health: { open: resolveHealthOpen(this.options.env.healthOpen, this.file) },
       ecosystemHealth: { enabled: resolveEcosystemHealth(this.options.env.ecosystemHealth, this.file) },
+      bridgeGateway: { enabled: resolveBridgeGateway(this.options.env.bridgeGateway, this.file) },
       push: { enabled: resolvePush(this.options.env.push, this.file) },
       rul: { enabled: resolveRul(this.options.env.rul, this.file) },
       safety: { publishGlobalStop: resolveSafetyPublishStop(this.options.env.safetyPublishStop, this.file) },
@@ -754,7 +775,7 @@ export class SecurityConfig {
   /** Applies a change asked for by an administrator; returns the new state and the warnings to show. */
   update(patch: any, actor: string): { snapshot: SecuritySnapshot; warnings: string[]; appliesOnRestart: boolean } {
     const warnings: string[] = [];
-    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, push: this.file.push ? { ...this.file.push } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
+    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, bridgeGateway: this.file.bridgeGateway ? { ...this.file.bridgeGateway } : undefined, push: this.file.push ? { ...this.file.push } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
     let appliesOnRestart = false;
     const log = this.options.log ?? (() => undefined);
     const lockedBy = (name: string) => new SecurityConfigError(409, `${name} is set in the environment of this server; remove it there to change it here`);
@@ -927,6 +948,19 @@ export class SecurityConfig {
         merged.enabled = ecoPatch.enabled;
       }
       next.ecosystemHealth = merged;
+    }
+
+    if (patch.bridgeGateway !== undefined) {
+      const gatewayPatch = patch.bridgeGateway;
+      if (typeof gatewayPatch !== "object" || gatewayPatch === null || Array.isArray(gatewayPatch)) throw new SecurityConfigError(400, "bridgeGateway must be an object");
+      const merged: BridgeGatewayFile = { ...(next.bridgeGateway ?? {}) };
+      if (gatewayPatch.enabled !== undefined) {
+        if (typeof gatewayPatch.enabled !== "boolean") throw new SecurityConfigError(400, "bridgeGateway.enabled must be true or false");
+        if (resolveBridgeGateway(this.options.env.bridgeGateway, this.file).source === "env") throw lockedBy("HYDRA_UMC_BRIDGE_GATEWAY");
+        merged.enabled = gatewayPatch.enabled;
+      }
+      next.bridgeGateway = merged;
+      if (gatewayPatch.enabled === true) warnings.push("bridge_gateway_on");
     }
 
     if (patch.push !== undefined) {
@@ -1168,6 +1202,9 @@ export class SecurityConfig {
     }
     if (patch.ecosystemHealth !== undefined) {
       log(`[SECURITY] ${actor} turned the health of the ecosystem (GET /api/ecosystem/health) ${snapshot.ecosystemHealth.enabled.value ? "on" : "off"}.`);
+    }
+    if (patch.bridgeGateway !== undefined) {
+      log(`[SECURITY] ${actor} turned the gateway to the machine bridges (GET /api/bridges, POST /api/bridges/:name/cmd/:verb) ${snapshot.bridgeGateway.enabled.value ? "on" : "off"}.`);
     }
     if (patch.rul !== undefined) {
       log(`[SECURITY] ${actor} turned the remaining-useful-life relay for operators (POST /api/ai/anomaly-detector/rul) ${snapshot.rul.enabled.value ? "on" : "off"}.`);

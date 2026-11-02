@@ -48,12 +48,15 @@ import { SecurityConfig, certFingerprint, resolveBleMode, resolveTls, securityEn
 import { applyNewInstallTlsDefault } from "./newInstallTls";
 import { resolveMqttMode, type MqttBridge } from "./mqttBridge";
 import { startMqttBridge } from "./mqttStart";
+import { readSecret } from "./mqttBridge";
 import { startBle } from "./ble/start";
 import type { BleGateway } from "./ble/bleGateway";
 import { issueMediaTicket, mediaTicketKey, verifyMediaTicket } from "./mediaTickets";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerConnectionRoutes } from "./routes/connectionRoutes";
 import { registerLivenessRoutes } from "./routes/livenessRoutes";
+import { makeBridgeGatewayGate, registerBridgeRoutes } from "./routes/bridgeRoutes";
+import { BridgeGateway, resolveGatewaySettings } from "./bridgeGateway";
 import { makeEcosystemHealthGate, registerEcosystemHealthRoutes } from "./routes/ecosystemHealthRoutes";
 import { makePushGate, registerPushRoutes } from "./routes/pushRoutes";
 import { PushDevices, PushService } from "./pushNotifications";
@@ -316,8 +319,8 @@ async function startServer() {
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
     save: (file) => {
-      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, push, rul, safety, jobDispatcher, camera, install, websocket, logging } = file;
-      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, push, rul, safety, jobDispatcher, camera, install, websocket, logging });
+      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, bridgeGateway, push, rul, safety, jobDispatcher, camera, install, websocket, logging } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, bridgeGateway, push, rul, safety, jobDispatcher, camera, install, websocket, logging });
     },
     tlsActive: startupTls.enabled,
     bleActiveMode: resolveBleMode(securityEnvFrom(process.env).bleGatt, loadServerConfig()).value,
@@ -375,6 +378,20 @@ async function startServer() {
   registerLivenessRoutes(app, {
     authenticate, requireOperator, getSettings, tracker: livenessTracker,
     staleAfterS: () => (loadServerConfig() as { liveness?: { staleAfterS?: unknown } }).liveness?.staleAfterS,
+  });
+
+  // The gateway to the machine bridges: off unless an administrator turned it on (bridgeGateway.enabled); it connects to the broker of the MQTT
+  // settings the first time a client asks, and says nothing about a bridge that has not announced itself.
+  const bridgeGatewayEnv = securityEnvFrom(process.env).mqtt ?? {};
+  const bridgeGateway = new BridgeGateway({
+    getSettings: () => resolveGatewaySettings((loadServerConfig() as { bridgeGateway?: import("./bridgeGateway").BridgeGatewayFile }).bridgeGateway),
+    url: security.mqtt().url,
+    username: security.mqtt().username,
+    password: readSecret(bridgeGatewayEnv.password, bridgeGatewayEnv.passwordFile),
+    log: industrialLog,
+  });
+  registerBridgeRoutes(app, {
+    authenticate, requireOperator, bridgeGatewayGate: makeBridgeGatewayGate(() => security.bridgeGatewayEnabled()), gateway: bridgeGateway, audit,
   });
 
   registerRobotRoutes(app, {
@@ -612,6 +629,7 @@ async function startServer() {
     for (const key of cameraProcesses.keys()) stopCameraProcess(key);
     void bleGateway?.stop().catch(() => undefined);
     void mqttBridge?.stop().catch(() => undefined);
+    void bridgeGateway.stop().catch(() => undefined);
     jobStopRelay?.stop();
     orchestratorTakeover?.stop();
     try { connectionTracker().flush(); } catch { /* best-effort */ }

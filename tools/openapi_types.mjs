@@ -65,6 +65,9 @@ export const RESPONSES = {
   "DELETE /api/push/devices/{token}": ref("PushDeviceRemoved"),
   "GET /api/admin/push": ref("PushStatus"),
   "GET /api/rul/config": ref("RulConfig"),
+  "GET /api/bridges": ref("BridgeList"),
+  "GET /api/bridges/{name}/state": ref("BridgeState"),
+  "POST /api/bridges/{name}/cmd/{verb}": ref("BridgeCommandAccepted"),
   "POST /api/robot/{id}/heartbeat": ref("Success"),
   "POST /api/robot/{id}/claim": ref("Reservation"),
   "POST /api/robot/{id}/release": ref("Reservation"),
@@ -118,6 +121,7 @@ export const REQUESTS = {
   "POST /api/camera/{id}/ptz": { required: ["host"], fields: { host: str, port: int, username: str, password: str, channel: int, pan: num, tilt: num, zoom: num } },
   "POST /api/push/devices": { required: ["token", "platform"], fields: { token: str, platform: { type: "string", enum: ["ios"] }, locale: { type: "string", enum: ["en", "es", "de", "fr", "it", "ja", "zh", "pt"] } } },
   "POST /api/robot/{id}/command": { required: ["command"], fields: { command: str, params: { type: "object" }, seq: int } },
+  "POST /api/bridges/{name}/cmd/{verb}": { required: [], fields: {} },
 };
 
 // "METHOD /path" -> status codes that a shared middleware answers before the handler runs, so the handler's own source does not show them.
@@ -127,6 +131,10 @@ export const EXTRA_STATUSES = {
   // 404 while push.enabled is off (as if the route did not exist).
   "POST /api/push/devices": [404],
   "DELETE /api/push/devices/{token}": [404],
+  // 404 while bridgeGateway.enabled is off (as if the routes did not exist), 403 for a viewer on the command.
+  "GET /api/bridges": [404],
+  "GET /api/bridges/{name}/state": [404, 503],
+  "POST /api/bridges/{name}/cmd/{verb}": [200, 403, 404, 409, 413, 429, 502, 503],
 };
 
 // "METHOD /path" -> status codes whose answer has no body at all (a switch that is off answers a bare 404).
@@ -134,6 +142,9 @@ export const EMPTY_BODY_STATUSES = {
   "GET /api/ecosystem/health": [404],
   "POST /api/push/devices": [404],
   "DELETE /api/push/devices/{token}": [404],
+  "GET /api/bridges": [404],
+  "GET /api/bridges/{name}/state": [],
+  "POST /api/bridges/{name}/cmd/{verb}": [],
 };
 
 export const errorResponse = ref("Error");

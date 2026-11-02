@@ -1345,6 +1345,79 @@
             }
           }
         }
+      },
+      "BridgeState": {
+        "type": "object",
+        "required": [
+          "name",
+          "available",
+          "state",
+          "health",
+          "updatedAt"
+        ],
+        "description": "What the gateway knows of one machine bridge from its retained topics: whether it is available (null when it never said), its last state and health report as the bridge published them, and when the last of them arrived.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+          },
+          "available": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "True while the bridge is online (or its health report is not a FAULT), false when offline, null when it published neither."
+          },
+          "state": {
+            "description": "The last retained state of the bridge exactly as it published it (null when it published none)."
+          },
+          "health": {
+            "description": "The last retained HealthReport of the bridge (null when it publishes none)."
+          },
+          "updatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "BridgeList": {
+        "type": "object",
+        "required": [
+          "connected",
+          "bridges"
+        ],
+        "description": "The bridges the gateway has seen on the broker.",
+        "properties": {
+          "connected": {
+            "type": "boolean",
+            "description": "Whether the gateway is connected to the broker now."
+          },
+          "bridges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BridgeState"
+            }
+          }
+        }
+      },
+      "BridgeCommandAccepted": {
+        "type": "object",
+        "required": [
+          "accepted",
+          "result"
+        ],
+        "description": "The outcome of a command sent through the gateway: it was published, and the bridge answered (result holds its answer) or did not answer in time (result null).",
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "result": {
+            "description": "The answer the bridge published on the result topic, as it published it; null when none arrived in time."
+          }
+        }
       }
     }
   },
@@ -1709,6 +1782,240 @@
             "name": "verify",
             "in": "query",
             "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/bridges": {
+      "get": {
+        "tags": [
+          "bridges"
+        ],
+        "summary": "GET /api/bridges",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BridgeList"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. No body."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/bridges/{name}/cmd/{verb}": {
+      "post": {
+        "tags": [
+          "bridges"
+        ],
+        "summary": "POST /api/bridges/{name}/cmd/{verb}",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BridgeCommandAccepted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in but not allowed. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict with the current state. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service rejected the request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "verb",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [],
+                "properties": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/bridges/{name}/state": {
+      "get": {
+        "tags": [
+          "bridges"
+        ],
+        "summary": "GET /api/bridges/{name}/state",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BridgeState"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
             "schema": {
               "type": "string"
             }
