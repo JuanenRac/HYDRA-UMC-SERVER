@@ -37,6 +37,7 @@ export const SWITCHES: readonly SwitchDef[] = [
   { id: 'voice.requireSignature', section: 'voice', key: 'requireSignature', riskyWhen: null, label: 'sw_voice_signature', warning: null, confirm: null, warningCode: null },
   { id: 'camera.credentialsViaEnv', section: 'camera', key: 'credentialsViaEnv', riskyWhen: false, label: 'sw_camera_env', warning: 'warn_camera_env', confirm: 'confirm_install', warningCode: 'camera_credentials_in_arguments' },
   { id: 'push.enabled', section: 'push', key: 'enabled', riskyWhen: null, label: 'sw_push', warning: 'warn_push', confirm: null, warningCode: 'push_enabled' },
+  { id: 'presence.enabled', section: 'presence', key: 'enabled', riskyWhen: null, label: 'sw_presence', warning: 'warn_presence', confirm: null, warningCode: 'presence_on' },
   { id: 'trustedNetworks.enabled', section: 'trustedNetworks', key: 'enabled', riskyWhen: null, label: 'sw_trusted_networks', warning: 'warn_trusted_networks', confirm: null, warningCode: 'trusted_networks_on' },
   { id: 'install.newInstallTls', section: 'install', key: 'newInstallTls', riskyWhen: false, label: 'sw_install_tls', warning: 'warn_install_tls', confirm: 'confirm_install', warningCode: 'new_install_tls_off' },
 ];
@@ -80,6 +81,7 @@ export function warningKeys(warnings: unknown): string[] {
   if (!Array.isArray(warnings)) return [];
   const keys: string[] = [];
   for (const def of SWITCHES) if (def.warning && def.warningCode && warnings.includes(def.warningCode)) keys.push(def.warning);
+  if (warnings.includes('presence_action_notify')) keys.push('warn_presence_notify');
   if (warnings.includes('job_stop_relay_on')) keys.push('jd_warning_relay');
   if (warnings.includes('replan_unconfirmed_allowed')) keys.push('jd_warning_replan');
   return keys;
@@ -163,4 +165,27 @@ export function jobDispatcherNeedsConfirmation(current: JobDispatcherState, next
   const relayOn = !current.relayEnabled && next.jobDispatcher.stopRelay.enabled;
   const unconfirmed = next.jobDispatcher.replan !== undefined && !current.allowUnconfirmed && next.jobDispatcher.replan.allowUnconfirmed;
   return relayOn || unconfirmed;
+}
+
+// ------------------------------------------------------------------ the action of the dead-man of the presence
+
+export const PRESENCE_ACTIONS = ['slow', 'pause', 'notify', 'stop'] as const;
+export type PresenceAction = (typeof PRESENCE_ACTIONS)[number];
+
+export interface PresenceActionState {
+  action: PresenceAction;
+  source: Source;
+}
+
+/** The action the server reports for a lost heartbeat; a server that predates it, or reports it damaged, gives null. */
+export function readPresenceAction(snapshot: unknown): PresenceActionState | null {
+  if (!isObject(snapshot) || !isObject(snapshot.presence) || !isObject(snapshot.presence.action)) return null;
+  const { value, source } = snapshot.presence.action;
+  if (typeof value !== 'string' || !(PRESENCE_ACTIONS as readonly string[]).includes(value) || !isSource(source)) return null;
+  return { action: value as PresenceAction, source };
+}
+
+/** The request body that chooses the action (nothing else is sent). */
+export function presenceActionPatch(action: PresenceAction): { presence: { action: PresenceAction } } {
+  return { presence: { action } };
 }

@@ -241,6 +241,7 @@ CORS 通过一个可配置的白名单（`CORS_ALLOWED_ORIGINS`，见下文“�
 - `HYDRA_UMC_HEALTH_OPEN=1`（`health.open`）- `GET /health` 无需登录即可返回精简的健康报告（不含版本、主机或计数）；关闭时返回 `404`。
 - `HYDRA_UMC_ECOSYSTEM_HEALTH=1`（`ecosystemHealth.enabled`）- `GET /api/ecosystem/health` 返回生态系统各服务的健康状况；关闭时返回 `404`。
 - `HYDRA_UMC_INFO_TICKETS=1` （`infoTickets.enabled`） - `POST /api/info/ticket` 签发带签名的票据（地址中的 `?ticket=`），在 `HYDRA_UMC_INFO_AUTH=required` 关闭这些只读信息路由（`/metrics`、系统指标、监控器、生态系统状态）后，仍让无法发送令牌的采集器或仪表板读取；关闭时该路由返回 `404`，票据会被忽略。
+- `HYDRA_UMC_PRESENCE=1`(`presence.enabled`)和 `HYDRA_UMC_PRESENCE_ACTION`(`presence.action`) - 操作员在场的死人开关:`POST /api/operator/presence` 接收手表带编号的心跳;心跳丢失时,服务器会对该人持有的机器人采取动作,默认是减速并提醒(也可暂停、仅提醒或停止);关闭时该路由返回 `404`。
 - `HYDRA_UMC_MQTT_HOME_ASSISTANT=1` （`mqtt.homeAssistant.enabled`） - MQTT 桥还会为 Home Assistant 发布每台机器人的发现配置（保留消息，位于 `homeassistant/` 下）；默认关闭，下次启动时生效。
 - `HYDRA_UMC_RUL=1`（`rul.enabled`）- AI 仪表板卡片背后的剩余使用寿命估算 `POST /api/ai/anomaly-detector/rul`，除管理员外也向操作员开放（仅限这一个请求，并限制其大小和时间）；关闭时只有管理员可以发送。已登录的客户端可通过 `GET /api/rul/config` 读取它是否开启及两项上限（只有开启时，AI 仪表板的卡片才会出现）。
 - `HYDRA_UMC_SAFETY_PUBLISH_STOP=1`（`safety.publishGlobalStop`）- 全局停止还会在 MQTT 桥的 `<前缀>/safety/estop` 上以保留的 `SAFE_STOP` 通告（见 `docs/GLOBAL_STOP.md`）。

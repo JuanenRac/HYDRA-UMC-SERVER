@@ -3582,6 +3582,227 @@
         ]
       }
     },
+    "/api/operator/presence": {
+      "get": {
+        "tags": [
+          "operator"
+        ],
+        "summary": "GET /api/operator/presence",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "state",
+                    "lastSequence",
+                    "secondsSinceBeat",
+                    "action",
+                    "timeoutSeconds",
+                    "degradedRobots"
+                  ],
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "unknown",
+                        "present",
+                        "lost",
+                        "left",
+                        "recovering"
+                      ]
+                    },
+                    "lastSequence": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "secondsSinceBeat": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "action": {
+                      "type": "string",
+                      "enum": [
+                        "slow",
+                        "pause",
+                        "notify",
+                        "stop"
+                      ]
+                    },
+                    "timeoutSeconds": {
+                      "type": "number"
+                    },
+                    "degradedRobots": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in but not allowed. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. No body."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "operator"
+        ],
+        "summary": "POST /api/operator/presence",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "accepted",
+                    "duplicate",
+                    "stale",
+                    "state",
+                    "sequence",
+                    "action",
+                    "timeoutSeconds"
+                  ],
+                  "properties": {
+                    "accepted": {
+                      "type": "boolean"
+                    },
+                    "duplicate": {
+                      "type": "boolean"
+                    },
+                    "stale": {
+                      "type": "boolean"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "present",
+                        "lost",
+                        "left",
+                        "recovering"
+                      ]
+                    },
+                    "sequence": {
+                      "type": "integer"
+                    },
+                    "action": {
+                      "type": "string",
+                      "enum": [
+                        "slow",
+                        "pause",
+                        "notify",
+                        "stop"
+                      ]
+                    },
+                    "timeoutSeconds": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in but not allowed. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. No body."
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "sequence",
+                  "intervalSeconds",
+                  "state"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "presence_heartbeat"
+                    ]
+                  },
+                  "protocolVersion": {
+                    "type": "integer"
+                  },
+                  "sequence": {
+                    "type": "integer"
+                  },
+                  "intervalSeconds": {
+                    "type": "number"
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "PRESENT",
+                      "LEFT"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/push/devices": {
       "post": {
         "tags": [

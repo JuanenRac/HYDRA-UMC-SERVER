@@ -92,6 +92,8 @@ export interface PushFile {
   notifyJobFinished?: boolean;
   /** Tell the phones that a global stop was issued (default: yes once push is on). Read from the file only. */
   notifyGlobalStop?: boolean;
+  /** Tell the phones that the heartbeat of an operator was lost (default: yes once push is on). Read from the file only. */
+  notifyPresenceLost?: boolean;
   /** How many device tokens the server keeps (1 to 10000; 500 by default). Read from the file only. */
   maxDevices?: number;
 }
@@ -136,6 +138,24 @@ export interface InfoTicketsFile {
   ttlSeconds?: number;
   /** The longest life a ticket may be asked for, in seconds (30 to 2592000; 300 by default). Read from the file only. */
   maxTtlSeconds?: number;
+}
+
+/** The dead-man of the presence of the operator (POST /api/operator/presence, src/operatorPresence.ts). */
+export interface PresenceFile {
+  /** Whether the heartbeat route answers and a lost heartbeat acts on the robots of the operator (default: no; the route then answers 404). */
+  enabled?: boolean;
+  /** What a lost heartbeat does to the robots that operator holds: "slow" (default), "pause", "notify" or "stop". */
+  action?: "slow" | "pause" | "notify" | "stop";
+  /** Seconds without a heartbeat before it counts as lost (3 to 600; 15 by default). Read from the file only. */
+  timeoutSeconds?: number;
+  /** The share of the speed kept while the heartbeat is lost (0.05 to 0.9; 0.3 by default). Read from the file only. */
+  slowFactor?: number;
+  /** How many heartbeats in a row bring the operator back (1 to 20; 3 by default). Read from the file only. */
+  recoverBeats?: number;
+  /** Seconds the speed takes to return to what it was (0 to 120; 5 by default). Read from the file only. */
+  rampSeconds?: number;
+  /** Whether a heartbeat that says the operator LEFT on purpose acts at once instead of after the timeout (default: yes). Read from the file only. */
+  leftImmediate?: boolean;
 }
 
 /** The live pictures and saved photos and recordings of the cameras (src/mediaTickets.ts). */
@@ -206,6 +226,7 @@ export interface SecurityFile {
   health?: HealthFile;
   ecosystemHealth?: EcosystemHealthFile;
   infoTickets?: InfoTicketsFile;
+  presence?: PresenceFile;
   bridgeGateway?: BridgeGatewayFile;
   push?: PushFile;
   /** Where a request comes from and what is asked of it (src/trustedNetworks.ts). */
@@ -236,6 +257,8 @@ export interface SecurityEnv {
   healthOpen?: string;
   ecosystemHealth?: string;
   infoTickets?: string;
+  presence?: string;
+  presenceAction?: string;
   bridgeGateway?: string;
   push?: string;
   trustedNetworks?: string;
@@ -269,6 +292,8 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     healthOpen: env.HYDRA_UMC_HEALTH_OPEN,
     ecosystemHealth: env.HYDRA_UMC_ECOSYSTEM_HEALTH,
     infoTickets: env.HYDRA_UMC_INFO_TICKETS,
+    presence: env.HYDRA_UMC_PRESENCE,
+    presenceAction: env.HYDRA_UMC_PRESENCE_ACTION,
     bridgeGateway: env.HYDRA_UMC_BRIDGE_GATEWAY,
     push: env.HYDRA_UMC_PUSH,
     trustedNetworks: env.HYDRA_UMC_TRUSTED_NETWORKS,
@@ -367,11 +392,42 @@ export function resolveEcosystemHealth(env: string | undefined, file: SecurityFi
   return { value: false, source: "default" };
 }
 
+const clampNumber = (value: unknown, min: number, max: number, fallback: number): number => (typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback);
+
+/** The times of the dead-man of the presence, with the limits applied (src/operatorPresence.ts reads the same numbers). */
+export function presenceTimes(file: PresenceFile | undefined): { timeoutSeconds: number; slowFactor: number; recoverBeats: number; rampSeconds: number; leftImmediate: boolean } {
+  return {
+    timeoutSeconds: clampNumber(file?.timeoutSeconds, 3, 600, 15),
+    slowFactor: clampNumber(file?.slowFactor, 0.05, 0.9, 0.3),
+    recoverBeats: Math.round(clampNumber(file?.recoverBeats, 1, 20, 3)),
+    rampSeconds: clampNumber(file?.rampSeconds, 0, 120, 5),
+    leftImmediate: file?.leftImmediate !== false,
+  };
+}
+
 /** The signed tickets of the information routes (POST /api/info/ticket): only the exact word "1" in the environment switches them on; the default is off. */
 export function resolveInfoTickets(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
   if (isSet(env)) return { value: env.trim() === "1", source: "env" };
   if (typeof file.infoTickets?.enabled === "boolean") return { value: file.infoTickets.enabled, source: "config" };
   return { value: false, source: "default" };
+}
+
+/** The dead-man of the presence of the operator (POST /api/operator/presence): only the exact word "1" in the environment switches it on; the default is off. */
+export function resolvePresence(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.presence?.enabled === "boolean") return { value: file.presence.enabled, source: "config" };
+  return { value: false, source: "default" };
+}
+
+export const PRESENCE_ACTION_VALUES = ["slow", "pause", "notify", "stop"] as const;
+export type PresenceActionValue = (typeof PRESENCE_ACTION_VALUES)[number];
+const isPresenceAction = (value: unknown): value is PresenceActionValue => typeof value === "string" && (PRESENCE_ACTION_VALUES as readonly string[]).includes(value);
+
+/** What a lost heartbeat does: the environment first (a word that is not one of the four is ignored), then the file, then "slow". */
+export function resolvePresenceAction(env: string | undefined, file: SecurityFile): { value: PresenceActionValue; source: Source } {
+  if (isSet(env) && isPresenceAction(env.trim().toLowerCase())) return { value: env.trim().toLowerCase() as PresenceActionValue, source: "env" };
+  if (isPresenceAction(file.presence?.action)) return { value: file.presence.action, source: "config" };
+  return { value: "slow", source: "default" };
 }
 
 /** The gateway to the machine bridges: only the exact word "1" in the environment switches it on; the default is off. */
@@ -551,6 +607,8 @@ export interface SecuritySnapshot {
   health: { open: { value: boolean; source: Source } };
   ecosystemHealth: { enabled: { value: boolean; source: Source } };
   infoTickets: { enabled: { value: boolean; source: Source } };
+  /** The switch and the action of the dead-man of the presence of the operator; the times are edited in the configuration file. */
+  presence: { enabled: { value: boolean; source: Source }; action: { value: PresenceActionValue; source: Source }; timeoutSeconds: number; slowFactor: number; recoverBeats: number; rampSeconds: number; leftImmediate: boolean };
   bridgeGateway: { enabled: { value: boolean; source: Source } };
   push: { enabled: { value: boolean; source: Source } };
   /** The switch, and what the configuration file says about the rest (read only here: the ranges are edited in the file). */
@@ -663,6 +721,16 @@ export class SecurityConfig {
   /** Whether GET /api/ecosystem/health answers (off unless an administrator turned it on). */
   infoTicketsEnabled(): boolean {
     return resolveInfoTickets(this.options.env.infoTickets, this.file).value;
+  }
+
+  /** Whether the dead-man of the presence of the operator is on (off unless an administrator turned it on). */
+  presenceEnabled(): boolean {
+    return resolvePresence(this.options.env.presence, this.file).value;
+  }
+
+  /** What a lost heartbeat does to the robots of the operator (slow down unless an administrator chose another action). */
+  presenceAction(): PresenceActionValue {
+    return resolvePresenceAction(this.options.env.presenceAction, this.file).value;
   }
 
   /** Whether GET /api/ecosystem/health answers (off unless an administrator turned it on). */
@@ -780,6 +848,10 @@ export class SecurityConfig {
       health: { open: resolveHealthOpen(this.options.env.healthOpen, this.file) },
       ecosystemHealth: { enabled: resolveEcosystemHealth(this.options.env.ecosystemHealth, this.file) },
       infoTickets: { enabled: resolveInfoTickets(this.options.env.infoTickets, this.file) },
+      presence: (() => {
+        const p = presenceTimes(this.file.presence);
+        return { enabled: resolvePresence(this.options.env.presence, this.file), action: resolvePresenceAction(this.options.env.presenceAction, this.file), ...p };
+      })(),
       bridgeGateway: { enabled: resolveBridgeGateway(this.options.env.bridgeGateway, this.file) },
       push: { enabled: resolvePush(this.options.env.push, this.file) },
       trustedNetworks: (() => {
@@ -834,7 +906,7 @@ export class SecurityConfig {
   /** Applies a change asked for by an administrator; returns the new state and the warnings to show. */
   update(patch: any, actor: string): { snapshot: SecuritySnapshot; warnings: string[]; appliesOnRestart: boolean } {
     const warnings: string[] = [];
-    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, infoTickets: this.file.infoTickets ? { ...this.file.infoTickets } : undefined, bridgeGateway: this.file.bridgeGateway ? { ...this.file.bridgeGateway } : undefined, push: this.file.push ? { ...this.file.push } : undefined, trustedNetworks: this.file.trustedNetworks ? { ...this.file.trustedNetworks } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
+    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, infoTickets: this.file.infoTickets ? { ...this.file.infoTickets } : undefined, presence: this.file.presence ? { ...this.file.presence } : undefined, bridgeGateway: this.file.bridgeGateway ? { ...this.file.bridgeGateway } : undefined, push: this.file.push ? { ...this.file.push } : undefined, trustedNetworks: this.file.trustedNetworks ? { ...this.file.trustedNetworks } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
     let appliesOnRestart = false;
     const log = this.options.log ?? (() => undefined);
     const lockedBy = (name: string) => new SecurityConfigError(409, `${name} is set in the environment of this server; remove it there to change it here`);
@@ -1037,6 +1109,25 @@ export class SecurityConfig {
         if (ticketsPatch.enabled === true) warnings.push("info_tickets_on");
       }
       next.infoTickets = merged;
+    }
+
+    if (patch.presence !== undefined) {
+      const presencePatch = patch.presence;
+      if (typeof presencePatch !== "object" || presencePatch === null || Array.isArray(presencePatch)) throw new SecurityConfigError(400, "presence must be an object");
+      const merged: PresenceFile = { ...(next.presence ?? {}) };
+      if (presencePatch.enabled !== undefined) {
+        if (typeof presencePatch.enabled !== "boolean") throw new SecurityConfigError(400, "presence.enabled must be true or false");
+        if (resolvePresence(this.options.env.presence, this.file).source === "env") throw lockedBy("HYDRA_UMC_PRESENCE");
+        merged.enabled = presencePatch.enabled;
+        if (presencePatch.enabled === true) warnings.push("presence_on");
+      }
+      if (presencePatch.action !== undefined) {
+        if (!isPresenceAction(presencePatch.action)) throw new SecurityConfigError(400, "presence.action must be slow, pause, notify or stop");
+        if (resolvePresenceAction(this.options.env.presenceAction, this.file).source === "env") throw lockedBy("HYDRA_UMC_PRESENCE_ACTION");
+        merged.action = presencePatch.action;
+        if (presencePatch.action === "notify") warnings.push("presence_action_notify");
+      }
+      next.presence = merged;
     }
 
     if (patch.bridgeGateway !== undefined) {
@@ -1307,6 +1398,9 @@ export class SecurityConfig {
     }
     if (patch.infoTickets !== undefined) {
       log(`[SECURITY] ${actor} turned the signed tickets of the information routes (POST /api/info/ticket) ${snapshot.infoTickets.enabled.value ? "on" : "off"}.`);
+    }
+    if (patch.presence !== undefined) {
+      log(`[SECURITY] ${actor} set the dead-man of the presence of the operator (POST /api/operator/presence): ${snapshot.presence.enabled.value ? "on" : "off"}, a lost heartbeat will ${snapshot.presence.action.value === "slow" ? "slow the robots down" : snapshot.presence.action.value === "pause" ? "pause the robots" : snapshot.presence.action.value === "stop" ? "stop the robots" : "only warn (no robot is touched)"}.`);
     }
     if (patch.bridgeGateway !== undefined) {
       log(`[SECURITY] ${actor} turned the gateway to the machine bridges (GET /api/bridges, POST /api/bridges/:name/cmd/:verb) ${snapshot.bridgeGateway.enabled.value ? "on" : "off"}.`);

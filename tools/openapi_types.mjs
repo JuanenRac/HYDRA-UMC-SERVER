@@ -59,6 +59,17 @@ export const RESPONSES = {
   "POST /api/stop-all": ref("StopAllResult"),
   "POST /api/stop-all/release": ref("GlobalStopReleased"),
   "POST /api/info/ticket": ref("InfoTicket"),
+  // The answers of the presence routes are described here, not in the shapes copied from the SDK (the SDK does not know them yet).
+  "POST /api/operator/presence": {
+    type: "object",
+    required: ["accepted", "duplicate", "stale", "state", "sequence", "action", "timeoutSeconds"],
+    properties: { accepted: { type: "boolean" }, duplicate: { type: "boolean" }, stale: { type: "boolean" }, state: { type: "string", enum: ["present", "lost", "left", "recovering"] }, sequence: { type: "integer" }, action: { type: "string", enum: ["slow", "pause", "notify", "stop"] }, timeoutSeconds: { type: "number" } },
+  },
+  "GET /api/operator/presence": {
+    type: "object",
+    required: ["state", "lastSequence", "secondsSinceBeat", "action", "timeoutSeconds", "degradedRobots"],
+    properties: { state: { type: "string", enum: ["unknown", "present", "lost", "left", "recovering"] }, lastSequence: { type: ["integer", "null"] }, secondsSinceBeat: { type: ["integer", "null"] }, action: { type: "string", enum: ["slow", "pause", "notify", "stop"] }, timeoutSeconds: { type: "number" }, degradedRobots: { type: "array", items: { type: "integer" } } },
+  },
   "GET /health": ref("HealthReport"),
   "GET /api/robots/liveness": ref("RobotLiveness"),
   "GET /api/ecosystem/health": ref("EcosystemHealth"),
@@ -123,6 +134,7 @@ export const REQUESTS = {
   "POST /api/push/devices": { required: ["token", "platform"], fields: { token: str, platform: { type: "string", enum: ["ios"] }, locale: { type: "string", enum: ["en", "es", "de", "fr", "it", "ja", "zh", "pt"] } } },
   "POST /api/robot/{id}/command": { required: ["command"], fields: { command: str, params: { type: "object" }, seq: int } },
   "POST /api/bridges/{name}/cmd/{verb}": { required: [], fields: {} },
+  "POST /api/operator/presence": { required: ["sequence", "intervalSeconds", "state"], fields: { type: { type: "string", enum: ["presence_heartbeat"] }, protocolVersion: int, sequence: int, intervalSeconds: num, state: { type: "string", enum: ["PRESENT", "LEFT"] } } },
 };
 
 // "METHOD /path" -> status codes that a shared middleware answers before the handler runs, so the handler's own source does not show them.
@@ -132,6 +144,9 @@ export const EXTRA_STATUSES = {
   // 404 while push.enabled is off (as if the route did not exist).
   "POST /api/push/devices": [404],
   "DELETE /api/push/devices/{token}": [404],
+  // 404 while presence.enabled is off (as if the routes did not exist), 403 for a viewer.
+  "POST /api/operator/presence": [403, 404],
+  "GET /api/operator/presence": [403, 404],
   // 404 while bridgeGateway.enabled is off (as if the routes did not exist), 403 for a viewer on the command.
   "GET /api/bridges": [404],
   "GET /api/bridges/{name}/state": [404, 503],
@@ -143,6 +158,8 @@ export const EMPTY_BODY_STATUSES = {
   "GET /api/ecosystem/health": [404],
   "POST /api/push/devices": [404],
   "DELETE /api/push/devices/{token}": [404],
+  "POST /api/operator/presence": [404],
+  "GET /api/operator/presence": [404],
   "GET /api/bridges": [404],
   "GET /api/bridges/{name}/state": [],
   "POST /api/bridges/{name}/cmd/{verb}": [],

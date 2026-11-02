@@ -4,6 +4,7 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **Dead-man of the presence of the operator, off by default (`POST /api/operator/presence`, `presence.enabled`):** the numbered heartbeat the watch sends is accepted (authenticated, idempotent by its sequence number). When the heartbeats stop, or the person says they left, the server acts on the robots that account holds a claim on: by default it slows them down to a share of their speed and warns the registered phones; Server Admin (`presence.action`, or `HYDRA_UMC_PRESENCE_ACTION`) chooses between slowing down, pausing, only warning and stopping. The timeout, the share of speed, the number of heartbeats that bring the operator back and the ramp that returns the speed without a jump are in `data/server-config.json`. It is written to the log and to the audit record, the global stop is never held back by it, and a paused or stopped robot is never resumed by it. Tried with simulated robots only. `GET /api/operator/presence` shows the state of the signed-in account.
 - **The README shows screenshots of Server Admin** (security, user accounts and server configuration), taken against a throw-away server with a made-up administrator by `tools/capture_screenshots.mjs`; the list and the captions in the eight languages are in `docs/screenshots.json`.
 
 ## [0.8.2.1] - Signed tickets for the information routes, a Home Assistant device for every robot and the trusted networks switch

@@ -13,8 +13,8 @@ import { Lock, Save, ShieldCheck } from 'lucide-react';
 import { ApiError, apiFetch } from '../api';
 import { detectLanguage, translate, type Language } from '../i18n';
 import {
-  isLocked, jobDispatcherNeedsConfirmation, jobDispatcherPatch, needsConfirmation, parseRobotMapText, readJobDispatcher, readSwitches,
-  robotMapToText, switchPatch, warningKeys, type JobDispatcherState, type SwitchState,
+  PRESENCE_ACTIONS, isLocked, jobDispatcherNeedsConfirmation, jobDispatcherPatch, needsConfirmation, parseRobotMapText, presenceActionPatch, readJobDispatcher,
+  readPresenceAction, readSwitches, robotMapToText, switchPatch, warningKeys, type JobDispatcherState, type PresenceAction, type PresenceActionState, type SwitchState,
 } from '../securityModel';
 
 function savedLanguage(): string | null {
@@ -31,6 +31,7 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
 
   const [switches, setSwitches] = useState<SwitchState[]>([]);
   const [dispatcher, setDispatcher] = useState<JobDispatcherState | null>(null);
+  const [presence, setPresence] = useState<PresenceActionState | null>(null);
   const [relay, setRelay] = useState(false);
   const [mapText, setMapText] = useState('');
   const [allow, setAllow] = useState(false);
@@ -43,6 +44,7 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
     setSwitches(readSwitches(snapshot));
     const jd = readJobDispatcher(snapshot);
     setDispatcher(jd);
+    setPresence(readPresenceAction(snapshot));
     if (jd) {
       setRelay(jd.relayEnabled);
       setMapText(robotMapToText(jd.robotMap));
@@ -122,6 +124,19 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
           </div>
         ))}
       </div>
+
+      {presence && (
+        <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col gap-2" data-testid="security-presence">
+          <label className="text-xs font-bold text-slate-200 flex items-center gap-2" htmlFor="presence-action">
+            {t('presence_action_title')}
+            {isLocked(presence.source) && <Lock size={12} className="text-amber-400" />}
+          </label>
+          <select id="presence-action" data-testid="presence-action" value={presence.action} disabled={busy || isLocked(presence.source)} onChange={e => void send(presenceActionPatch(e.target.value as PresenceAction))} className={input}>
+            {PRESENCE_ACTIONS.map(action => <option key={action} value={action}>{t(`presence_action_${action}`)}</option>)}
+          </select>
+          <span className="text-[10px] text-slate-500">{t(`source_${presence.source}`)}</span>
+        </div>
+      )}
 
       {dispatcher && (
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col gap-3" data-testid="security-dispatcher">

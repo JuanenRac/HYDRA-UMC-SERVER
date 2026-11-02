@@ -42,6 +42,8 @@ import { ensureSeedUser, findUser, verifyPassword } from "./users";
 import { pruneExpiredRefreshTokens } from "./refresh_tokens";
 import { SafetyLimits, JogArming } from "./safetyLimits";
 import { registerSafetyRoutes } from "./routes/safetyRoutes";
+import { makePresenceGate, registerPresenceRoutes } from "./routes/presenceRoutes";
+import { OperatorPresence, presenceSettings } from "./operatorPresence";
 import { listClaims } from "./claimPolicy";
 import { AuditLog, auditOptionsFromEnv } from "./auditLog";
 import { SecurityConfig, certFingerprint, resolveBleMode, resolveTls, securityEnvFrom } from "./securityConfig";
@@ -61,7 +63,7 @@ import { makeBridgeGatewayGate, registerBridgeRoutes } from "./routes/bridgeRout
 import { BridgeGateway, resolveGatewaySettings } from "./bridgeGateway";
 import { makeEcosystemHealthGate, registerEcosystemHealthRoutes } from "./routes/ecosystemHealthRoutes";
 import { makePushGate, registerPushRoutes } from "./routes/pushRoutes";
-import { PushDevices, PushService } from "./pushNotifications";
+import { PushDevices, PushService, emitPush } from "./pushNotifications";
 import type { PushFile } from "./securityConfig";
 import { LastSeenMemory, collectEcosystemHealth } from "./ecosystemHealth";
 import { RobotLivenessTracker } from "./robotLiveness";
@@ -325,8 +327,8 @@ async function startServer() {
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
     save: (file) => {
-      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging } = file;
-      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging });
+      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging });
     },
     tlsActive: startupTls.enabled,
     bleActiveMode: resolveBleMode(securityEnvFrom(process.env).bleGatt, loadServerConfig()).value,
@@ -418,6 +420,26 @@ async function startServer() {
   });
 
   registerSafetyRoutes(app, { authenticate, requireAdmin, getSettings, findRobotById, isReservationActive, safety, arming, audit, onClaimsChanged });
+
+  // The dead-man of the presence of the operator (POST /api/operator/presence), behind the switch presence.enabled (off by default: 404). The action of a lost
+  // heartbeat (slow down by default) and the times come from Server Admin and data/server-config.json; the global stop is never held back by it.
+  const operatorPresence = new OperatorPresence({
+    enabled: () => security.presenceEnabled(),
+    settings: () => presenceSettings((loadServerConfig() as { presence?: import("./securityConfig").PresenceFile }).presence, security.presenceAction()),
+    now: () => Date.now(),
+    getSettings,
+    isReservationActive,
+    stoppedPlaybackState,
+    stopServerPlayback,
+    disarm: (robotId) => arming.disarm(robotId),
+    broadcastRobotDelta,
+    persist: () => queueSettingsWrite(getSettings()),
+    log: industrialLog,
+    audit: (event) => { audit.record(event); },
+    warn: (robotNames) => emitPush("presence-lost", { robotName: robotNames.join(", ") }),
+  });
+  registerPresenceRoutes(app, { authenticate, requireOperator, presenceGate: makePresenceGate(() => security.presenceEnabled()), presence: operatorPresence });
+  setInterval(() => { try { operatorPresence.tick(); } catch (error) { industrialLog(`[PRESENCE] the check failed (${error instanceof Error ? error.message : "unknown error"}).`); } }, 1000).unref();
 
   // The live pictures and the saved photos and recordings ask for a ticket (POST /api/camera/ticket) or a signed-in client unless the installation opts out with
   // HYDRA_UMC_CAMERA_AUTH=open, for the clients that do not ask for tickets yet.

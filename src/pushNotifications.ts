@@ -16,7 +16,7 @@ import http2 from "node:http2";
 import path from "node:path";
 import type { PushFile } from "./securityConfig";
 
-export type PushEvent = "job-finished" | "global-stop";
+export type PushEvent = "job-finished" | "global-stop" | "presence-lost";
 
 /** What the rest of the server says to the push service: it never imports it, it only emits here. */
 export const pushBus = new EventEmitter();
@@ -53,6 +53,16 @@ const TEXTS: Record<PushEvent, Record<PushLocale, { title: string; body: (robot?
     ja: { title: "HYDRA-UMC", body: () => "グローバル停止が実行されました。すべてのロボットが停止しました。" },
     zh: { title: "HYDRA-UMC", body: () => "已发出全局停止：所有机器人均已停止。" },
     pt: { title: "HYDRA-UMC", body: () => "Foi dada uma paragem global: todos os robôs foram parados." },
+  },
+  "presence-lost": {
+    en: { title: "HYDRA-UMC", body: (r) => (r ? `The heartbeat of the operator was lost: ${r} held back.` : "The heartbeat of the operator was lost.") },
+    es: { title: "HYDRA-UMC", body: (r) => (r ? `Se perdió el latido del operador: ${r} contenido.` : "Se perdió el latido del operador.") },
+    de: { title: "HYDRA-UMC", body: (r) => (r ? `Der Herzschlag des Bedieners ist ausgefallen: ${r} zurückgehalten.` : "Der Herzschlag des Bedieners ist ausgefallen.") },
+    fr: { title: "HYDRA-UMC", body: (r) => (r ? `Le signal de présence de l'opérateur est perdu : ${r} retenu.` : "Le signal de présence de l'opérateur est perdu.") },
+    it: { title: "HYDRA-UMC", body: (r) => (r ? `Il segnale di presenza dell'operatore è andato perso: ${r} trattenuto.` : "Il segnale di presenza dell'operatore è andato perso.") },
+    ja: { title: "HYDRA-UMC", body: (r) => (r ? `オペレーターの在席信号が途絶えました：${r} を制限しました。` : "オペレーターの在席信号が途絶えました。") },
+    zh: { title: "HYDRA-UMC", body: (r) => (r ? `操作员的在场心跳已丢失：已限制 ${r}。` : "操作员的在场心跳已丢失。") },
+    pt: { title: "HYDRA-UMC", body: (r) => (r ? `O sinal de presença do operador perdeu-se: ${r} contido.` : "O sinal de presença do operador perdeu-se.") },
   },
 };
 
@@ -359,6 +369,7 @@ export class PushService {
 
   private eventAllowed(event: PushEvent): boolean {
     const config = this.deps.config();
+    if (event === "presence-lost") return config?.notifyPresenceLost !== false;
     return event === "job-finished" ? config?.notifyJobFinished !== false : config?.notifyGlobalStop !== false;
   }
 
@@ -376,7 +387,7 @@ export class PushService {
         const result = await sender.send(
           device.token,
           { aps: { alert: { title: text.title, body: text.body }, sound: "default" }, kind: event },
-          { collapseId: event === "job-finished" ? `job-${detail.robotName ?? "any"}` : "global-stop", expiresInSeconds: event === "global-stop" ? 3600 : 24 * 3600 },
+          { collapseId: event === "job-finished" ? `job-${detail.robotName ?? "any"}` : event, expiresInSeconds: event === "job-finished" ? 24 * 3600 : 3600 },
         );
         if (result.status === 200) accepted++;
         else if (result.status === 410 || DEAD_TOKEN_REASONS.has(result.reason ?? "")) this.deps.devices.remove(device.token, null);

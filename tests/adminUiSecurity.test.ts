@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { SecurityConfig, type SecurityFile } from "../src/securityConfig.ts";
 import { LANGUAGES, MESSAGES, detectLanguage, translate } from "../admin-ui/src/i18n.ts";
 import {
-  SWITCHES, isLocked, jobDispatcherNeedsConfirmation, jobDispatcherPatch, needsConfirmation, parseRobotMapText, readJobDispatcher, readSwitches,
+  SWITCHES, PRESENCE_ACTIONS, isLocked, jobDispatcherNeedsConfirmation, jobDispatcherPatch, needsConfirmation, parseRobotMapText, presenceActionPatch, readJobDispatcher, readPresenceAction, readSwitches,
   robotMapToText, switchPatch, warningKeys,
 } from "../admin-ui/src/securityModel.ts";
 
@@ -15,9 +15,9 @@ function makeConfig(env: any = {}, initial: SecurityFile = {}) {
   return { config, stored: () => stored };
 }
 
-test("the eleven switches are exactly the ones the server reports, each on its conservative value by default", () => {
+test("the twelve switches are exactly the ones the server reports, each on its conservative value by default", () => {
   const states = readSwitches(makeConfig().config.snapshot());
-  assert.equal(states.length, 11);
+  assert.equal(states.length, 12);
   assert.deepEqual(states.map((s) => s.def.id), SWITCHES.map((s) => s.id));
   for (const state of states) {
     assert.equal(state.source, "default", state.def.id);
@@ -118,7 +118,7 @@ test("every sentence the tab uses exists in the eight languages, with no placeho
     if (def.warning) used.add(def.warning);
     if (def.confirm) used.add(def.confirm);
   }
-  for (const key of ["jd_title", "jd_relay_label", "jd_relay_help", "jd_map_label", "jd_map_placeholder", "jd_map_help", "jd_map_invalid", "jd_replan_title", "jd_allow_label", "jd_timeout_label", "jd_timeout_invalid", "jd_replan_help", "jd_not_editable", "jd_save", "jd_confirm", "jd_warning_relay", "jd_warning_replan"]) used.add(key);
+  for (const key of ["presence_action_title", "presence_action_slow", "presence_action_pause", "presence_action_notify", "presence_action_stop", "warn_presence_notify", "jd_title", "jd_relay_label", "jd_relay_help", "jd_map_label", "jd_map_placeholder", "jd_map_help", "jd_map_invalid", "jd_replan_title", "jd_allow_label", "jd_timeout_label", "jd_timeout_invalid", "jd_replan_help", "jd_not_editable", "jd_save", "jd_confirm", "jd_warning_relay", "jd_warning_replan"]) used.add(key);
   for (const language of LANGUAGES) {
     for (const key of used) {
       const text = MESSAGES[language][key];
@@ -137,4 +137,19 @@ test("the language is the saved one, else the browser's, else English", () => {
   assert.equal(detectLanguage(null, null), "en");
   assert.equal(translate("fr", "tab"), "Sécurité");
   assert.equal(translate("en", "no_such_key"), "no_such_key");
+});
+
+test("the action of a lost heartbeat is read as the server reports it, chosen on its own, and the environment locks it", () => {
+  const { config } = makeConfig();
+  assert.deepEqual(readPresenceAction(config.snapshot()), { action: "slow", source: "default" });
+  assert.deepEqual([...PRESENCE_ACTIONS], ["slow", "pause", "notify", "stop"]);
+  for (const action of PRESENCE_ACTIONS) {
+    const saved = makeConfig().config.update(presenceActionPatch(action), "root");
+    assert.deepEqual(readPresenceAction(saved.snapshot), { action, source: "config" });
+  }
+  assert.deepEqual(presenceActionPatch("pause"), { presence: { action: "pause" } });
+  assert.equal(isLocked(readPresenceAction(makeConfig({ presenceAction: "stop" }).config.snapshot())!.source), true);
+  assert.equal(readPresenceAction({}), null);
+  assert.equal(readPresenceAction({ presence: { action: { value: "explode", source: "config" } } }), null);
+  assert.ok(warningKeys(makeConfig().config.update({ presence: { action: "notify" } }, "root").warnings).includes("warn_presence_notify"));
 });
