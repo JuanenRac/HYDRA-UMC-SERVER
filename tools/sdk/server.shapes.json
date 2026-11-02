@@ -966,6 +966,23 @@
         }
       }
     },
+    "InfoTicket": {
+      "type": "object",
+      "required": [
+        "ticket",
+        "expiresInSeconds"
+      ],
+      "properties": {
+        "ticket": {
+          "type": "string",
+          "description": "Signed ticket for the read-only information routes; it goes in the address as ?ticket=."
+        },
+        "expiresInSeconds": {
+          "type": "integer",
+          "minimum": 30
+        }
+      }
+    },
     "HealthReport": {
       "type": "object",
       "required": [

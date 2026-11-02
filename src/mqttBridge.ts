@@ -15,6 +15,10 @@
 //   <prefix>/robot_<id>/cmd/<command>     in (mode "commands"): the JSON parameters of the command (empty payload = {})
 //   <prefix>/robot_<id>/cmd/<command>/result   out: {"success","status","code","error"} once the route has answered
 //
+// Home Assistant (off by default, mqtt.homeAssistant.enabled): the bridge also publishes, retained, the discovery configs of
+// each robot under `<discoveryPrefix>/<component>/<node>/<object>/config` (a device per robot with its online flag, tool,
+// playback state and joints, and, in mode "commands" only, a stop button), so Home Assistant lists the robots with no setup.
+//
 // A command that arrives here gets no privilege of its own. It is presented to POST /api/robot/:id/command on this
 // same server, over the loopback address, with the access token of a dedicated account (HYDRA_UMC_MQTT_COMMAND_USER
 // and its password), so the role of that account, the reservations of the robots, the If-Match rule and the limits of
@@ -38,6 +42,8 @@ export interface MqttFile {
   commandUser?: string;
   minStateIntervalMs?: number;
   commandsPerSecond?: number;
+  /** Discovery of the robots by Home Assistant (off by default). */
+  homeAssistant?: { enabled?: boolean; discoveryPrefix?: string };
 }
 
 export interface MqttEnv {
@@ -50,6 +56,7 @@ export interface MqttEnv {
   commandUser?: string;
   commandPassword?: string;
   commandPasswordFile?: string;
+  homeAssistant?: string;
 }
 
 export function mqttEnvFrom(env: NodeJS.ProcessEnv): MqttEnv {
@@ -63,6 +70,7 @@ export function mqttEnvFrom(env: NodeJS.ProcessEnv): MqttEnv {
     commandUser: env.HYDRA_UMC_MQTT_COMMAND_USER,
     commandPassword: env.HYDRA_UMC_MQTT_COMMAND_PASSWORD,
     commandPasswordFile: env.HYDRA_UMC_MQTT_COMMAND_PASSWORD_FILE,
+    homeAssistant: env.HYDRA_UMC_MQTT_HOME_ASSISTANT,
   };
 }
 
@@ -70,6 +78,14 @@ const isSet = (value: string | undefined): value is string => (value ?? "").trim
 
 export const DEFAULT_MQTT_URL = "mqtt://127.0.0.1:1883";
 export const DEFAULT_MQTT_PREFIX = "hydra/swarm";
+export const DEFAULT_DISCOVERY_PREFIX = "homeassistant";
+
+/** Discovery by Home Assistant: only the exact word "1" in the environment switches it on; the default is off. */
+export function resolveHomeAssistant(env: string | undefined, file: { mqtt?: MqttFile }): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.mqtt?.homeAssistant?.enabled === "boolean") return { value: file.mqtt.homeAssistant.enabled, source: "config" };
+  return { value: false, source: "default" };
+}
 
 export function resolveMqttMode(env: string | undefined, file: { mqtt?: MqttFile }): { value: MqttMode; source: Source } {
   if (isSet(env)) {
@@ -108,6 +124,7 @@ export function resolveMqttSettings(env: MqttEnv, file: { mqtt?: MqttFile }) {
   const resolved = resolveMqttMode(env.mode, file);
   const url = validMqttUrl(env.url) ?? validMqttUrl(file.mqtt?.url) ?? DEFAULT_MQTT_URL;
   const prefix = validMqttPrefix(env.prefix) ?? validMqttPrefix(file.mqtt?.prefix) ?? DEFAULT_MQTT_PREFIX;
+  const ha = resolveHomeAssistant(env.homeAssistant, file);
   return {
     mode: resolved.value,
     modeSource: resolved.source,
@@ -117,6 +134,9 @@ export function resolveMqttSettings(env: MqttEnv, file: { mqtt?: MqttFile }) {
     commandUser: isSet(env.commandUser) ? env.commandUser.trim() : file.mqtt?.commandUser?.trim() || undefined,
     minStateIntervalMs: clamp(file.mqtt?.minStateIntervalMs, 250, 50, 60000),
     commandsPerSecond: clamp(file.mqtt?.commandsPerSecond, 10, 1, 100),
+    homeAssistant: ha.value,
+    homeAssistantSource: ha.source,
+    discoveryPrefix: validMqttPrefix(file.mqtt?.homeAssistant?.discoveryPrefix) ?? DEFAULT_DISCOVERY_PREFIX,
   };
 }
 
@@ -191,6 +211,59 @@ export function summarizeRobot(controllerId: string, robot: any): Record<string,
     pointsCount: Array.isArray(robot?.recordedPoints) ? robot.recordedPoints.length : 0,
     reservation: reservation ? { ownerUsername: reservation.ownerUsername, expiresAt: reservation.expiresAt } : null,
   };
+}
+
+// ---- Home Assistant discovery ----------------------------------------------------------------------------------
+
+export interface DiscoveryMessage {
+  topic: string;
+  payload: string;
+}
+
+/**
+ * The discovery configs of one robot for Home Assistant: a device with an online flag, the tool, the playback state, the six joints
+ * and, only when the bridge carries commands out, a stop button. Every entity is available only while the bridge is (`<prefix>/status`).
+ * The unique ids carry the controller and the robot, so two controllers with the same robot number never collide.
+ */
+export function discoveryMessages(prefix: string, discoveryPrefix: string, controllerId: string, robot: any, commands: boolean): DiscoveryMessage[] {
+  if (typeof robot?.id !== "number") return [];
+  const base = robotTopic(prefix, robot.id);
+  const node = `hydra_umc_${String(controllerId).replace(/[^A-Za-z0-9_-]/g, "_") || "c"}_robot_${robot.id}`;
+  const device = {
+    identifiers: [node],
+    name: typeof robot.name === "string" && robot.name ? robot.name.slice(0, 80) : `Robot ${robot.id}`,
+    manufacturer: "HYDRA-UMC",
+    model: typeof robot.model === "string" ? robot.model.slice(0, 80) : "robot",
+  };
+  const common = (object: string, name: string) => ({
+    name,
+    unique_id: `${node}_${object}`,
+    device,
+    availability_topic: `${prefix}/status`,
+    payload_available: "online",
+    payload_not_available: "offline",
+  });
+  const message = (component: string, object: string, body: Record<string, unknown>): DiscoveryMessage => ({
+    topic: `${discoveryPrefix}/${component}/${node}/${object}/config`,
+    payload: JSON.stringify(body),
+  });
+  const out: DiscoveryMessage[] = [
+    message("binary_sensor", "online", {
+      ...common("online", "Online"),
+      state_topic: `${base}/state`,
+      value_template: "{{ 'ON' if value_json.online else 'OFF' }}",
+      device_class: "connectivity",
+    }),
+    message("sensor", "tool", { ...common("tool", "Tool"), state_topic: `${base}/tool`, value_template: "{{ value_json }}" }),
+    message("sensor", "playback", { ...common("playback", "Playback"), state_topic: `${base}/state`, value_template: "{{ value_json.playbackState }}" }),
+  ];
+  for (let joint = 1; joint <= 6; joint++) {
+    out.push(message("sensor", `j${joint}`, { ...common(`j${joint}`, `Joint ${joint}`), state_topic: `${base}/joints`, value_template: `{{ value_json.j${joint} }}`, state_class: "measurement" }));
+  }
+  if (commands) {
+    out.push(message("button", "stop", { ...common("stop", "Stop"), command_topic: `${base}/cmd/stop`, payload_press: "{}", qos: 1 }));
+  }
+  return out;
 }
 
 // ---- the client ------------------------------------------------------------------------------------------------
@@ -323,6 +396,11 @@ export class MqttBridge {
         this.publishIfChanged(`${base}/state`, JSON.stringify(summarizeRobot(String(controller?.id ?? ""), robot)));
         this.publishIfChanged(`${base}/joints`, JSON.stringify(robot.joints ?? null));
         this.publishIfChanged(`${base}/tool`, JSON.stringify(robot.tool ?? null));
+        if (this.options.settings.homeAssistant) {
+          for (const entry of discoveryMessages(this.prefix, this.options.settings.discoveryPrefix, String(controller?.id ?? ""), robot, this.options.settings.mode === "commands")) {
+            this.publishIfChanged(entry.topic, entry.payload);
+          }
+        }
       }
     }
   }

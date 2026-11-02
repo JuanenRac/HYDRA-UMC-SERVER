@@ -43,6 +43,23 @@ Only what changed is published again, at most four times a second. The summary n
 recorded points (only how many), nor the credentials of the cameras, nor the history of the
 reservations. After a reconnection everything is published again.
 
+## Home Assistant
+
+With `HYDRA_UMC_MQTT_HOME_ASSISTANT=1` (or `mqtt.homeAssistant.enabled` in Server Admin or `data/server-config.json`; off by default, applies on the next start) the bridge also publishes, retained and only
+when they change, the discovery configs that Home Assistant reads under `<discoveryPrefix>/<component>/<node>/<object>/config`. `discoveryPrefix` is `homeassistant` unless
+`mqtt.homeAssistant.discoveryPrefix` says another. Each robot is one device (`hydra_umc_<controller>_robot_<id>`) with:
+
+| Entity | Component | Reads |
+|---|---|---|
+| Online | `binary_sensor` (connectivity) | `online` of `<prefix>/robot_<id>/state` |
+| Tool | `sensor` | `<prefix>/robot_<id>/tool` |
+| Playback | `sensor` | `playbackState` of the state |
+| Joint 1 to 6 | `sensor` | `j1` to `j6` of `<prefix>/robot_<id>/joints` |
+| Stop | `button`, only in mode `commands` | publishes `{}` on `<prefix>/robot_<id>/cmd/stop` |
+
+Every entity is available only while `<prefix>/status` says `online`. The broker has to let the connection publish under the discovery prefix (and, for the button, Home Assistant has to be
+allowed to publish on `<prefix>/+/cmd/stop`). A robot removed from the settings keeps its retained configs until they are cleared from the broker.
+
 ## Commands
 
 A command published here gets no privilege of its own. It is presented to

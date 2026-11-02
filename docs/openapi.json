@@ -967,6 +967,23 @@
           }
         }
       },
+      "InfoTicket": {
+        "type": "object",
+        "required": [
+          "ticket",
+          "expiresInSeconds"
+        ],
+        "properties": {
+          "ticket": {
+            "type": "string",
+            "description": "Signed ticket for the read-only information routes; it goes in the address as ?ticket=."
+          },
+          "expiresInSeconds": {
+            "type": "integer",
+            "minimum": 30
+          }
+        }
+      },
       "HealthReport": {
         "type": "object",
         "required": [
@@ -3156,6 +3173,57 @@
             }
           }
         }
+      }
+    },
+    "/api/info/ticket": {
+      "post": {
+        "tags": [
+          "info"
+        ],
+        "summary": "POST /api/info/ticket",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InfoTicket"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "description": "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ttlSeconds": {}
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/api/integrations/test-connection": {

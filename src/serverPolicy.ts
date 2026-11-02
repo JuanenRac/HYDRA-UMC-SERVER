@@ -431,15 +431,15 @@ export function wsQueryTokenAllowed(value: string | undefined): boolean {
 
 /**
  * What a read-only ("viewer") account may call. Reading (GET, HEAD, OPTIONS) is open to it; anything that writes is
- * refused, except the one call that only reads in substance: the ticket that lets a browser open a camera stream
- * (POST /api/camera/ticket). Decided by method and path alone, in one place, so a route added later is read-only for
+ * refused, except the two calls that only read in substance: the ticket that lets a browser open a camera stream
+ * (POST /api/camera/ticket) and the ticket that lets a scraper read the information routes (POST /api/info/ticket). Decided by method and path alone, in one place, so a route added later is read-only for
  * a viewer without having to remember it.
  */
 export function viewerMayCall(method: string | undefined, path: string | undefined): boolean {
   const verb = (method ?? "").toUpperCase();
   if (verb === "GET" || verb === "HEAD" || verb === "OPTIONS") return true;
   const clean = (path ?? "").split("?")[0].replace(/\/+$/, "");
-  return verb === "POST" && clean === "/api/camera/ticket";
+  return verb === "POST" && (clean === "/api/camera/ticket" || clean === "/api/info/ticket");
 }
 
 /**

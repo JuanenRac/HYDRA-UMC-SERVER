@@ -52,6 +52,7 @@ import { readSecret } from "./mqttBridge";
 import { startBle } from "./ble/start";
 import type { BleGateway } from "./ble/bleGateway";
 import { issueMediaTicket, mediaTicketKey, verifyMediaTicket } from "./mediaTickets";
+import { infoTicketKey, verifyInfoTicket, type InfoTicketLimits } from "./infoTickets";
 import { registerAuthRoutes } from "./routes/auth";
 import { classify as classifyAddress, makeTrustedNetworksGate } from "./trustedNetworks";
 import { registerConnectionRoutes } from "./routes/connectionRoutes";
@@ -324,8 +325,8 @@ async function startServer() {
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
     save: (file) => {
-      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging } = file;
-      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging });
+      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging });
     },
     tlsActive: startupTls.enabled,
     bleActiveMode: resolveBleMode(securityEnvFrom(process.env).bleGatt, loadServerConfig()).value,
@@ -425,7 +426,14 @@ async function startServer() {
   if (!security.infoAuthRequired() && NODE_ENV === "production") {
     console.warn("[SECURITY] Host metrics, the process supervisor and the ecosystem status are readable by the whole LAN. Set HYDRA_UMC_INFO_AUTH=required once every client sends its token on them.");
   }
-  const infoAccess = (req: express.Request, res: express.Response, next: express.NextFunction) => (security.infoAuthRequired() ? authenticate(req, res, next) : next());
+  // With the signed tickets of the information routes on (infoTickets.enabled, off by default) a valid `?ticket=` from POST /api/info/ticket also opens them,
+  // for a dashboard or a scraper that cannot send a bearer token; a ticket never opens anything else.
+  const INFO_KEY = infoTicketKey(JWT_SECRET);
+  const infoAccess = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (!security.infoAuthRequired()) return next();
+    if (security.infoTicketsEnabled() && verifyInfoTicket(INFO_KEY, req.query.ticket, Date.now()) !== null) return next();
+    return authenticate(req, res, next);
+  };
   const MEDIA_KEY = mediaTicketKey(JWT_SECRET);
   // Each of the three options below comes from the environment of the deployment first, then from what an administrator saved in Server Admin; read on every request.
   if (security.cameraOpen()) {
@@ -454,7 +462,10 @@ async function startServer() {
   // What the dashboard of the AI summaries reads to know whether to show its remaining-useful-life card: any signed-in account, read only.
   registerRulConfigRoute(app, { authenticate, rul: rulNow });
 
-  registerSystemRoutes(app, { authenticate, requireAdmin, industrialLog, infoAccess });
+  registerSystemRoutes(app, {
+    authenticate, requireAdmin, industrialLog, infoAccess,
+    infoTickets: { enabled: () => security.infoTicketsEnabled(), key: INFO_KEY, limits: () => (loadServerConfig() as { infoTickets?: InfoTicketLimits }).infoTickets },
+  });
 
   // The health of the services of the ecosystem in one answer, behind a switch of Server Admin (off by default: 404).
   const ecosystemHealthMemory = new LastSeenMemory({ file: path.join(process.cwd(), "data", "ecosystem-health-last-seen.json") });

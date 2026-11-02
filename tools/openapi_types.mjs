@@ -58,6 +58,7 @@ export const RESPONSES = {
   "GET /api/hardware/canota/version": ref("Passthrough"),
   "POST /api/stop-all": ref("StopAllResult"),
   "POST /api/stop-all/release": ref("GlobalStopReleased"),
+  "POST /api/info/ticket": ref("InfoTicket"),
   "GET /health": ref("HealthReport"),
   "GET /api/robots/liveness": ref("RobotLiveness"),
   "GET /api/ecosystem/health": ref("EcosystemHealth"),

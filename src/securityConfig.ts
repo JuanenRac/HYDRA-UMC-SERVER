@@ -128,6 +128,16 @@ export interface RulFile {
   timeoutMs?: number;
 }
 
+/** The signed tickets that let a client without a bearer token read the information routes (POST /api/info/ticket, src/infoTickets.ts). */
+export interface InfoTicketsFile {
+  /** Whether the tickets are issued and accepted (default: no; the route then answers 404 and a ticket in an address is ignored). */
+  enabled?: boolean;
+  /** Life of a ticket in seconds when the client does not ask for another (30 to 2592000; 300 by default). Not a security switch: read from the file only. */
+  ttlSeconds?: number;
+  /** The longest life a ticket may be asked for, in seconds (30 to 2592000; 300 by default). Read from the file only. */
+  maxTtlSeconds?: number;
+}
+
 /** The live pictures and saved photos and recordings of the cameras (src/mediaTickets.ts). */
 export interface CameraFile {
   /** Whether the pictures answer without a ticket or a signed-in client (default: no; they then need one). */
@@ -195,6 +205,7 @@ export interface SecurityFile {
   connections?: ConnectionsFile;
   health?: HealthFile;
   ecosystemHealth?: EcosystemHealthFile;
+  infoTickets?: InfoTicketsFile;
   bridgeGateway?: BridgeGatewayFile;
   push?: PushFile;
   /** Where a request comes from and what is asked of it (src/trustedNetworks.ts). */
@@ -224,6 +235,7 @@ export interface SecurityEnv {
   connectionRecordAddress?: string;
   healthOpen?: string;
   ecosystemHealth?: string;
+  infoTickets?: string;
   bridgeGateway?: string;
   push?: string;
   trustedNetworks?: string;
@@ -256,6 +268,7 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     connectionRecordAddress: env.HYDRA_UMC_CONNECTION_RECORD_ADDRESS,
     healthOpen: env.HYDRA_UMC_HEALTH_OPEN,
     ecosystemHealth: env.HYDRA_UMC_ECOSYSTEM_HEALTH,
+    infoTickets: env.HYDRA_UMC_INFO_TICKETS,
     bridgeGateway: env.HYDRA_UMC_BRIDGE_GATEWAY,
     push: env.HYDRA_UMC_PUSH,
     trustedNetworks: env.HYDRA_UMC_TRUSTED_NETWORKS,
@@ -351,6 +364,13 @@ export function resolveHealthOpen(env: string | undefined, file: SecurityFile): 
 export function resolveEcosystemHealth(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
   if (isSet(env)) return { value: env.trim() === "1", source: "env" };
   if (typeof file.ecosystemHealth?.enabled === "boolean") return { value: file.ecosystemHealth.enabled, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** The signed tickets of the information routes (POST /api/info/ticket): only the exact word "1" in the environment switches them on; the default is off. */
+export function resolveInfoTickets(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.infoTickets?.enabled === "boolean") return { value: file.infoTickets.enabled, source: "config" };
   return { value: false, source: "default" };
 }
 
@@ -524,12 +544,13 @@ export interface SecuritySnapshot {
   infoAuth: { value: boolean; source: Source };
   tls: { enabled: boolean; source: Source; certPath: string | null; keyPath: string | null; fingerprint256: string | null; active: boolean; appliesOnRestart: boolean };
   ble: { mode: { value: BleMode; source: Source }; requireEncryption: { value: boolean; source: Source }; activeMode: BleMode; appliesOnRestart: boolean };
-  mqtt: { mode: { value: MqttMode; source: Source }; url: string; prefix: string; username: string | null; commandUser: string | null; activeMode: MqttMode; appliesOnRestart: boolean };
+  mqtt: { mode: { value: MqttMode; source: Source }; url: string; prefix: string; username: string | null; commandUser: string | null; activeMode: MqttMode; appliesOnRestart: boolean; homeAssistant: { enabled: { value: boolean; source: Source }; discoveryPrefix: string } };
   voice: { includeHeardText: { value: boolean; source: Source }; minConfidence: { value: number; source: Source }; requireSignature: { value: boolean; source: Source } };
   robots: { allowEnable: { value: boolean; source: Source } };
   connections: { recordAddress: { value: boolean; source: Source } };
   health: { open: { value: boolean; source: Source } };
   ecosystemHealth: { enabled: { value: boolean; source: Source } };
+  infoTickets: { enabled: { value: boolean; source: Source } };
   bridgeGateway: { enabled: { value: boolean; source: Source } };
   push: { enabled: { value: boolean; source: Source } };
   /** The switch, and what the configuration file says about the rest (read only here: the ranges are edited in the file). */
@@ -637,6 +658,11 @@ export class SecurityConfig {
   /** Whether the server sends push notifications (off unless an administrator turned it on). */
   pushEnabled(): boolean {
     return resolvePush(this.options.env.push, this.file).value;
+  }
+
+  /** Whether GET /api/ecosystem/health answers (off unless an administrator turned it on). */
+  infoTicketsEnabled(): boolean {
+    return resolveInfoTickets(this.options.env.infoTickets, this.file).value;
   }
 
   /** Whether GET /api/ecosystem/health answers (off unless an administrator turned it on). */
@@ -753,6 +779,7 @@ export class SecurityConfig {
       connections: { recordAddress: resolveConnectionRecordAddress(this.options.env.connectionRecordAddress, this.file) },
       health: { open: resolveHealthOpen(this.options.env.healthOpen, this.file) },
       ecosystemHealth: { enabled: resolveEcosystemHealth(this.options.env.ecosystemHealth, this.file) },
+      infoTickets: { enabled: resolveInfoTickets(this.options.env.infoTickets, this.file) },
       bridgeGateway: { enabled: resolveBridgeGateway(this.options.env.bridgeGateway, this.file) },
       push: { enabled: resolvePush(this.options.env.push, this.file) },
       trustedNetworks: (() => {
@@ -798,6 +825,7 @@ export class SecurityConfig {
           commandUser: settings.commandUser ?? null,
           activeMode: this.options.mqttActiveMode ?? "off",
           appliesOnRestart: settings.mode !== (this.options.mqttActiveMode ?? "off"),
+          homeAssistant: { enabled: { value: settings.homeAssistant, source: settings.homeAssistantSource }, discoveryPrefix: settings.discoveryPrefix },
         };
       })(),
     };
@@ -806,7 +834,7 @@ export class SecurityConfig {
   /** Applies a change asked for by an administrator; returns the new state and the warnings to show. */
   update(patch: any, actor: string): { snapshot: SecuritySnapshot; warnings: string[]; appliesOnRestart: boolean } {
     const warnings: string[] = [];
-    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, bridgeGateway: this.file.bridgeGateway ? { ...this.file.bridgeGateway } : undefined, push: this.file.push ? { ...this.file.push } : undefined, trustedNetworks: this.file.trustedNetworks ? { ...this.file.trustedNetworks } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
+    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, infoTickets: this.file.infoTickets ? { ...this.file.infoTickets } : undefined, bridgeGateway: this.file.bridgeGateway ? { ...this.file.bridgeGateway } : undefined, push: this.file.push ? { ...this.file.push } : undefined, trustedNetworks: this.file.trustedNetworks ? { ...this.file.trustedNetworks } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
     let appliesOnRestart = false;
     const log = this.options.log ?? (() => undefined);
     const lockedBy = (name: string) => new SecurityConfigError(409, `${name} is set in the environment of this server; remove it there to change it here`);
@@ -897,6 +925,23 @@ export class SecurityConfig {
           merged[field] = mqttPatch[field].trim();
         }
       }
+      if (mqttPatch.homeAssistant !== undefined) {
+        const haPatch = mqttPatch.homeAssistant;
+        if (typeof haPatch !== "object" || haPatch === null || Array.isArray(haPatch)) throw new SecurityConfigError(400, "mqtt.homeAssistant must be an object");
+        const mergedHa: NonNullable<MqttFile["homeAssistant"]> = { ...(merged.homeAssistant ?? {}) };
+        if (haPatch.enabled !== undefined) {
+          if (typeof haPatch.enabled !== "boolean") throw new SecurityConfigError(400, "mqtt.homeAssistant.enabled must be true or false");
+          if (resolveMqttSettings(envOf, { mqtt: merged }).homeAssistantSource === "env") throw lockedBy("HYDRA_UMC_MQTT_HOME_ASSISTANT");
+          mergedHa.enabled = haPatch.enabled;
+          if (haPatch.enabled === true) warnings.push("mqtt_home_assistant_on");
+        }
+        if (haPatch.discoveryPrefix !== undefined) {
+          const dp = validMqttPrefix(haPatch.discoveryPrefix);
+          if (!dp) throw new SecurityConfigError(400, "mqtt.homeAssistant.discoveryPrefix must be topic levels of letters, digits, . _ - separated by /");
+          mergedHa.discoveryPrefix = dp;
+        }
+        merged.homeAssistant = mergedHa;
+      }
       next.mqtt = merged;
       appliesOnRestart = true;
       const resolved = resolveMqttSettings(envOf, { mqtt: merged });
@@ -979,6 +1024,19 @@ export class SecurityConfig {
         merged.enabled = ecoPatch.enabled;
       }
       next.ecosystemHealth = merged;
+    }
+
+    if (patch.infoTickets !== undefined) {
+      const ticketsPatch = patch.infoTickets;
+      if (typeof ticketsPatch !== "object" || ticketsPatch === null || Array.isArray(ticketsPatch)) throw new SecurityConfigError(400, "infoTickets must be an object");
+      const merged: InfoTicketsFile = { ...(next.infoTickets ?? {}) };
+      if (ticketsPatch.enabled !== undefined) {
+        if (typeof ticketsPatch.enabled !== "boolean") throw new SecurityConfigError(400, "infoTickets.enabled must be true or false");
+        if (resolveInfoTickets(this.options.env.infoTickets, this.file).source === "env") throw lockedBy("HYDRA_UMC_INFO_TICKETS");
+        merged.enabled = ticketsPatch.enabled;
+        if (ticketsPatch.enabled === true) warnings.push("info_tickets_on");
+      }
+      next.infoTickets = merged;
     }
 
     if (patch.bridgeGateway !== undefined) {
@@ -1246,6 +1304,9 @@ export class SecurityConfig {
     }
     if (patch.ecosystemHealth !== undefined) {
       log(`[SECURITY] ${actor} turned the health of the ecosystem (GET /api/ecosystem/health) ${snapshot.ecosystemHealth.enabled.value ? "on" : "off"}.`);
+    }
+    if (patch.infoTickets !== undefined) {
+      log(`[SECURITY] ${actor} turned the signed tickets of the information routes (POST /api/info/ticket) ${snapshot.infoTickets.enabled.value ? "on" : "off"}.`);
     }
     if (patch.bridgeGateway !== undefined) {
       log(`[SECURITY] ${actor} turned the gateway to the machine bridges (GET /api/bridges, POST /api/bridges/:name/cmd/:verb) ${snapshot.bridgeGateway.enabled.value ? "on" : "off"}.`);

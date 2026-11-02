@@ -11,13 +11,26 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { getSupervisorSnapshot, getSystemMetrics } from "../systemMetrics";
 import { getEcosystemStatus } from "../ecosystemStatus";
+import { infoTicketSeconds, issueInfoTicket, type InfoTicketLimits } from "../infoTickets";
 
 const execFileAsync = promisify(execFile);
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
-export function registerSystemRoutes(app: express.Express, auth: { authenticate: Middleware; requireAdmin: Middleware; industrialLog: (msg: string) => void; infoAccess: Middleware }): void {
-  const { authenticate, requireAdmin, industrialLog, infoAccess } = auth;
+export function registerSystemRoutes(app: express.Express, auth: { authenticate: Middleware; requireAdmin: Middleware; industrialLog: (msg: string) => void; infoAccess: Middleware; infoTickets?: { enabled: () => boolean; key: Buffer; limits: () => InfoTicketLimits | undefined } }): void {
+  const { authenticate, requireAdmin, industrialLog, infoAccess, infoTickets } = auth;
+
+  // The signed ticket a client without a bearer token puts in the address (`?ticket=`) of the read-only information routes. Off by default
+  // (infoTickets.enabled): the route then answers 404, as if it did not exist. Any signed-in account may ask; only an administrator may ask
+  // for a life longer than the default 300 seconds (and never longer than infoTickets.maxTtlSeconds).
+  app.post("/api/info/ticket", authenticate, (req, res) => {
+    if (!infoTickets?.enabled()) return res.status(404).json({ error: "Not found" });
+    const user = (req as any).user;
+    const limits = infoTickets.limits();
+    const asked = infoTicketSeconds(limits, req.body?.ttlSeconds);
+    const seconds = user?.role === "admin" ? asked : Math.min(asked, infoTicketSeconds(undefined, undefined));
+    res.json(issueInfoTicket(infoTickets.key, String(user?.username ?? ""), Date.now(), seconds));
+  });
 
   // System Metrics API for industrial monitoring - powers the Overview
   // footer's CPU/memory/temp/network readout (Dashboard.tsx StatusFooter).
