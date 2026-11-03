@@ -7,12 +7,12 @@
 // and ConnectionEvent contracts of the SDK. An administrator sees every client and, when the option connections.recordAddress is on,
 // the address and user agent; any other account sees only its own entries and never an address. See src/connections.ts.
 import express from "express";
-import { authenticate } from "../auth";
+import { authenticate, apiRateLimiter } from "../auth";
 import { CLIENT_KINDS, CONNECTION_ACTIONS, connectionTracker, type ClientKind, type ConnectionAction } from "../connections";
 import { openSessionsByClient } from "../refresh_tokens";
 
 export function registerConnectionRoutes(app: express.Express): void {
-  app.get("/api/connections/clients", authenticate, (req: any, res) => {
+  app.get("/api/connections/clients", apiRateLimiter, authenticate, (req: any, res) => {
     const admin = req.user?.role === "admin";
     const kind = typeof req.query.kind === "string" ? req.query.kind : undefined;
     if (kind !== undefined && !(CLIENT_KINDS as readonly string[]).includes(kind)) return res.status(400).json({ error: `kind must be one of ${CLIENT_KINDS.join(", ")}` });
@@ -26,7 +26,7 @@ export function registerConnectionRoutes(app: express.Express): void {
     res.json({ clients });
   });
 
-  app.get("/api/connections/events", authenticate, (req: any, res) => {
+  app.get("/api/connections/events", apiRateLimiter, authenticate, (req: any, res) => {
     const admin = req.user?.role === "admin";
     const kind = typeof req.query.kind === "string" ? req.query.kind : undefined;
     if (kind !== undefined && !(CLIENT_KINDS as readonly string[]).includes(kind)) return res.status(400).json({ error: `kind must be one of ${CLIENT_KINDS.join(", ")}` });

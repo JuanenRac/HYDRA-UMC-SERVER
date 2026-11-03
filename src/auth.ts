@@ -260,3 +260,29 @@ export const stopAllRateLimiter = rateLimit({
     });
   },
 });
+
+// The general budget per address for the API routes that read or change things: generous (a kiosk, a phone and a browser behind one
+// address all poll), so only a loop that hammers the server is stopped. Both the window and the maximum can be set in the environment.
+const API_RATE_LIMIT_WINDOW_MS = Number(process.env.API_RATE_LIMIT_WINDOW_MS) || 60 * 1000;
+const API_RATE_LIMIT_MAX = Number(process.env.API_RATE_LIMIT_MAX) || 600;
+export const apiRateLimiter = rateLimit({
+  windowMs: API_RATE_LIMIT_WINDOW_MS,
+  limit: API_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    res.status(429).json({ error: "Too many requests from this address - please wait before trying again.", retryAfterMs: API_RATE_LIMIT_WINDOW_MS });
+  },
+});
+
+// A tighter budget for the routes that check a one-time code or password again, or that start and stop services: guessing is capped.
+const SENSITIVE_RATE_LIMIT_MAX = Number(process.env.SENSITIVE_RATE_LIMIT_MAX) || 30;
+export const sensitiveRateLimiter = rateLimit({
+  windowMs: API_RATE_LIMIT_WINDOW_MS,
+  limit: SENSITIVE_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    res.status(429).json({ error: "Too many attempts from this address - please wait before trying again.", retryAfterMs: API_RATE_LIMIT_WINDOW_MS });
+  },
+});

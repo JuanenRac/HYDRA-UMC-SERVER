@@ -8,6 +8,7 @@
 // the two auth middlewares, the data directory helpers and the table of
 // running camera processes.
 import express from "express";
+import { apiRateLimiter } from "../auth";
 import fs from "fs";
 import path from "path";
 import { execFile } from "child_process";
@@ -16,7 +17,7 @@ import { Readable } from "stream";
 import { discoverRtspPath, sendPtzCommand } from "../cameraProbe";
 import { visionStreamerExecutablePath } from "../ecosystemStatus";
 import { upstreamHeaders } from "../upstreamAuth";
-import { cameraStreamPort, isValidCameraId, MAX_CAMERAS } from "../serverPolicy";
+import { cameraStreamPort, isValidCameraId, MAX_CAMERAS, validCameraHost } from "../serverPolicy";
 
 const execFileAsync = promisify(execFile);
 
@@ -61,7 +62,7 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
   // lives in ./serverPolicy (see that module's own header comment), moved
   // unchanged so it's directly unit-testable.
 
-  app.get("/api/camera/:id/stream", mediaAccess, async (req, res) => {
+  app.get("/api/camera/:id/stream", apiRateLimiter, mediaAccess, async (req, res) => {
     const id = Number(req.params.id);
     if (!isValidCameraId(id)) {
       return res.status(400).json({ error: "camera id must be an integer between 1 and " + MAX_CAMERAS });
@@ -219,7 +220,7 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
   // Real one-shot photo: connects just long enough to capture ONE frame,
   // then disconnects - unlike a recording, this never keeps the upstream
   // connection open.
-  app.post("/api/camera/:id/snapshot", authenticate, async (req, res) => {
+  app.post("/api/camera/:id/snapshot", apiRateLimiter, authenticate, async (req, res) => {
     const id = Number(req.params.id);
     if (!isValidCameraId(id)) return res.status(400).json({ error: "camera id must be an integer between 1 and " + MAX_CAMERAS });
     let upstream: Response;
@@ -260,7 +261,7 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
   // multipart part).
   const activeCameraRecordings = new Map<number, { filePath: string; startedAt: string; reader: any; writeStream: fs.WriteStream; finished: Promise<void> }>();
 
-  app.post("/api/camera/:id/recording/start", authenticate, async (req, res) => {
+  app.post("/api/camera/:id/recording/start", apiRateLimiter, authenticate, async (req, res) => {
     const id = Number(req.params.id);
     if (!isValidCameraId(id)) return res.status(400).json({ error: "camera id must be an integer between 1 and " + MAX_CAMERAS });
     if (activeCameraRecordings.has(id)) return res.status(409).json({ error: `Camera ${id} is already recording.` });
@@ -311,7 +312,7 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
     res.json({ success: true, cameraId: id, filename, startedAt });
   });
 
-  app.post("/api/camera/:id/recording/stop", authenticate, async (req, res) => {
+  app.post("/api/camera/:id/recording/stop", apiRateLimiter, authenticate, async (req, res) => {
     const id = Number(req.params.id);
     if (!isValidCameraId(id)) return res.status(400).json({ error: "camera id must be an integer between 1 and " + MAX_CAMERAS });
     const active = activeCameraRecordings.get(id);
@@ -347,7 +348,7 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
 
   // Every saved snapshot/recording across every camera, newest first -
   // what STUDIO/SUITE's own camera media viewer lists.
-  app.get("/api/camera/media", authenticate, (req, res) => {
+  app.get("/api/camera/media", apiRateLimiter, authenticate, (req, res) => {
     const items: { cameraId: number; kind: "snapshots" | "recordings"; filename: string; sizeBytes: number; capturedAt: string; recording: boolean; durationMs?: number; frameCount?: number }[] = [];
     if (fs.existsSync(CAMERA_MEDIA_ROOT)) {
       for (const idDir of fs.readdirSync(CAMERA_MEDIA_ROOT)) {
@@ -390,13 +391,13 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
   // bytes on disk already carry their own boundary/Content-Type/
   // Content-Length per frame), so the same <img>/player that renders a
   // live camera can render a saved recording unchanged.
-  app.get("/api/camera/media/:cameraId/:kind/:filename", mediaAccess, (req, res) => {
+  app.get("/api/camera/media/:cameraId/:kind/:filename", apiRateLimiter, mediaAccess, (req, res) => {
     const cameraId = Number(req.params.cameraId);
     const kind = req.params.kind;
     if (!Number.isInteger(cameraId) || cameraId < 1 || (kind !== "snapshots" && kind !== "recordings")) {
       return res.status(400).json({ error: "invalid camera id or media kind" });
     }
-    const resolved = resolveWithinDataDir("camera-media", String(cameraId), kind, req.params.filename);
+    const resolved = resolveWithinDataDir("camera-media", String(cameraId), kind, String(req.params.filename));
     if (!resolved || !fs.existsSync(resolved)) return res.status(404).json({ error: "media file not found" });
     if (kind === "snapshots") {
       res.setHeader("Content-Type", "image/jpeg");
@@ -417,13 +418,13 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
   // <img>/player elements). Refuses a recording still actively being
   // written to, rather than deleting a file another part of this
   // process still holds an open write stream against.
-  app.delete("/api/camera/media/:cameraId/:kind/:filename", authenticate, (req, res) => {
+  app.delete("/api/camera/media/:cameraId/:kind/:filename", apiRateLimiter, authenticate, (req, res) => {
     const cameraId = Number(req.params.cameraId);
     const kind = req.params.kind;
     if (!Number.isInteger(cameraId) || cameraId < 1 || (kind !== "snapshots" && kind !== "recordings")) {
       return res.status(400).json({ error: "invalid camera id or media kind" });
     }
-    const resolved = resolveWithinDataDir("camera-media", String(cameraId), kind, req.params.filename);
+    const resolved = resolveWithinDataDir("camera-media", String(cameraId), kind, String(req.params.filename));
     if (!resolved || !fs.existsSync(resolved)) return res.status(404).json({ error: "media file not found" });
     const active = activeCameraRecordings.get(cameraId);
     if (active && active.filePath === resolved) {
@@ -457,6 +458,9 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
     if (typeof host !== "string" || !host.trim()) {
       return res.status(400).json({ error: "host is required" });
     }
+    if (!validCameraHost(host)) {
+      return res.status(400).json({ error: "host must be a host name or an IP address" });
+    }
     const realPort = Number.isInteger(port) && port > 0 && port <= 65535 ? port : 554;
     const result = await discoverRtspPath(host.trim(), realPort, username || "", password || "");
     res.json(result);
@@ -479,6 +483,9 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
     const { host, port, username, password, pan, tilt, zoom, channel } = req.body || {};
     if (typeof host !== "string" || !host.trim()) {
       return res.status(400).json({ error: "host is required" });
+    }
+    if (!validCameraHost(host)) {
+      return res.status(400).json({ error: "host must be a host name or an IP address" });
     }
     const clamp = (n: unknown): number => {
       const num = Number(n);
@@ -506,7 +513,7 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
   // re-implementing device enumeration a second time in Node, where
   // there's no reliable cross-platform way to do it without a native
   // dependency.
-  app.get("/api/camera/discover-usb-devices", authenticate, async (req, res) => {
+  app.get("/api/camera/discover-usb-devices", apiRateLimiter, authenticate, async (req, res) => {
     const exePath = visionStreamerExecutablePath();
     if (!fs.existsSync(exePath)) {
       return res.status(503).json({ error: `HYDRA-UMC-VISION-STREAMER not found at ${exePath}`, devices: [] });

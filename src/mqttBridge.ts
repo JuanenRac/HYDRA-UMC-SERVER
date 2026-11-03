@@ -114,6 +114,7 @@ export function validMqttUrl(value: unknown): string | null {
 /** A topic prefix: levels of letters, digits and . _ - joined by "/", no wildcards, no leading or trailing slash. */
 export function validMqttPrefix(value: unknown): string | null {
   if (typeof value !== "string") return null;
+  if (value.length > 240) return null; // bounded before any pattern runs on it
   const text = value.trim().replace(/^\/+|\/+$/g, "");
   if (text.length === 0 || text.length > 120) return null;
   if (!/^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/.test(text)) return null;

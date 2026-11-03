@@ -6,6 +6,7 @@
 // The safety limits every client is held to (read by any signed-in client, changed by an
 // administrator), the explicit arming of the jog, and the list of who controls which robot.
 import express from "express";
+import { apiRateLimiter } from "../auth";
 import { readControllerId, claimConflict, listClaims } from "../claimPolicy";
 import { ambiguousRobotBody } from "../robotIds";
 import type { AuditLog } from "../auditLog";
@@ -104,7 +105,7 @@ export function registerSafetyRoutes(app: express.Express, deps: SafetyRouteDeps
 
   // The audit record (administrators only): the newest entries, oldest first. ?limit= (1-1000, default 100), ?afterSeq=, ?type=, ?robotId=,
   // ?verify=1 checks the hash chain, ?format=jsonl downloads the lines as they are stored.
-  app.get("/api/audit", authenticate, requireAdmin, (req, res) => {
+  app.get("/api/audit", apiRateLimiter, authenticate, requireAdmin, (req, res) => {
     if (!audit) return res.status(404).json({ error: "the audit record is not available", code: "audit-unavailable" });
     const num = (value: unknown): number | undefined => {
       if (value === undefined) return undefined;

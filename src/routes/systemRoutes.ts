@@ -7,6 +7,7 @@
 // of server.ts unchanged. They need only the app, the two auth middlewares and
 // the log function, so they are registered through a small function.
 import express from "express";
+import { apiRateLimiter, sensitiveRateLimiter } from "../auth";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { getSupervisorSnapshot, getSystemMetrics } from "../systemMetrics";
@@ -37,7 +38,7 @@ export function registerSystemRoutes(app: express.Express, auth: { authenticate:
   // The actual read now lives in the module-level getSystemMetrics() above
   // (shared with GET /metrics's own hydra_system_* gauges below) - this
   // route is just that function's own JSON wire shape, unchanged.
-  app.get("/api/system/metrics", infoAccess, async (req, res) => {
+  app.get("/api/system/metrics", apiRateLimiter, infoAccess, async (req, res) => {
     res.json(await getSystemMetrics());
   });
 
@@ -46,7 +47,7 @@ export function registerSystemRoutes(app: express.Express, auth: { authenticate:
   // tier as /api/system/metrics right above (read-only host introspection;
   // see getSupervisorSnapshot's own header comment for the full field
   // list and what's real vs. honestly null on a non-Linux host).
-  app.get("/api/system/supervisor", infoAccess, async (req, res) => {
+  app.get("/api/system/supervisor", apiRateLimiter, infoAccess, async (req, res) => {
     res.json(await getSupervisorSnapshot());
   });
 
@@ -55,7 +56,7 @@ export function registerSystemRoutes(app: express.Express, auth: { authenticate:
   // tier as /api/system/metrics right above (read-only host introspection,
   // no auth) - this exposes local directory names and per-project manifest
   // fields, nothing about running robots/credentials.
-  app.get("/api/ecosystem/status", infoAccess, async (req, res) => {
+  app.get("/api/ecosystem/status", apiRateLimiter, infoAccess, async (req, res) => {
     res.json(await getEcosystemStatus());
   });
 
@@ -83,8 +84,9 @@ export function registerSystemRoutes(app: express.Express, auth: { authenticate:
   const SYSTEMD_UNIT_ACTIONS = ["start", "stop", "restart"] as const;
   type SystemdUnitAction = (typeof SYSTEMD_UNIT_ACTIONS)[number];
 
-  app.post("/api/ecosystem/service/:unit/:action", authenticate, requireAdmin, async (req, res) => {
-    const { unit, action } = req.params;
+  app.post("/api/ecosystem/service/:unit/:action", sensitiveRateLimiter, authenticate, requireAdmin, async (req, res) => {
+    const unit = String(req.params.unit);
+    const action = String(req.params.action);
     if (!SYSTEMD_UNIT_ACTIONS.includes(action as SystemdUnitAction)) {
       return res.status(400).json({ error: `action must be one of: ${SYSTEMD_UNIT_ACTIONS.join(", ")}` });
     }

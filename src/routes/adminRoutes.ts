@@ -8,6 +8,7 @@
 // WebSocket connections, the log file, the listen port and the stored server
 // config, all handed in through one small object so this file holds no state.
 import express from "express";
+import { apiRateLimiter } from "../auth";
 import fs from "fs";
 import { WebSocket } from "ws";
 import { SecurityConfig, SecurityConfigError } from "../securityConfig";
@@ -104,7 +105,7 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
   // stays small enough in practice that this is fine), not a byte-range
   // seek from the end - fine for a periodically-polled admin log viewer,
   // not meant for tailing a truly enormous file.
-  app.get("/api/admin/logs", authenticate, requireAdmin, (req, res) => {
+  app.get("/api/admin/logs", apiRateLimiter, authenticate, requireAdmin, (req, res) => {
     const requested = parseInt(String(req.query.lines || ""), 10);
     const limit = Number.isFinite(requested) && requested > 0 ? Math.min(requested, 2000) : 300;
     try {

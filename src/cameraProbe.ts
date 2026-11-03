@@ -223,7 +223,7 @@ export function psiaRequest(host: string, port: number, method: string, urlPath:
 // can be sent pre-emptively in one round trip, no challenge needed.
 export function hi3510PtzRequest(host: string, port: number, username: string, password: string, action: string, speed: number): Promise<PsiaResult> {
   return new Promise((resolve) => {
-    const auth = username ? `${username}:${password}@` : "";
+    const auth = username ? `${encodeURIComponent(username)}:${encodeURIComponent(password)}@` : "";
     const url = `http://${auth}${host}:${port}/cgi-bin/hi3510/ptzctrl.cgi?-step=0&-act=${encodeURIComponent(action)}&-speed=${speed}`;
     const req = http.get(url, { timeout: 4000 }, (res) => {
       let data = "";

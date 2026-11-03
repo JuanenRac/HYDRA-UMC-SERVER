@@ -5,6 +5,7 @@
 // =============================================================================
 // Saving work files and the model submission catalogue, moved out of server.ts unchanged.
 import express from "express";
+import { apiRateLimiter } from "../auth";
 import path from "path";
 import fs from "fs";
 import { realSettings, slugify, isPathInside } from "../serverPolicy";
@@ -34,7 +35,7 @@ export function registerWorksRoutes(app: express.Express, deps: WorksRouteDeps):
   // src/components/AuthGate.tsx's own header comment, which already
   // enumerated POST /api/settings and POST /api/robot/:id/command as the
   // writes gated behind login and never mentioned this one.
-  app.post("/api/upload-work", authenticate, (req, res) => {
+  app.post("/api/upload-work", apiRateLimiter, authenticate, (req, res) => {
     try {
       const { folderPath, fileName, content } = req.body || {};
       if (typeof folderPath !== "string" || typeof fileName !== "string") {
@@ -148,7 +149,7 @@ export function registerWorksRoutes(app: express.Express, deps: WorksRouteDeps):
     return isPathInside(dataPath, resolved) ? resolved : null;
   }
 
-  app.post("/api/models/submit", authenticate, requireAdmin, (req: any, res) => {
+  app.post("/api/models/submit", apiRateLimiter, authenticate, requireAdmin, (req: any, res) => {
     const who = req.user;
     const note = (outcome: "ok" | "refused" | "failed", detail: Record<string, unknown>) => {
       try { audit?.record({ type: "model-submit", outcome, userId: who?.id, username: who?.username, ip: req.ip, detail }); } catch { /* the audit never breaks the route */ }
@@ -235,11 +236,11 @@ export function registerWorksRoutes(app: express.Express, deps: WorksRouteDeps):
     }
   });
 
-  app.get("/api/models", infoAccess, (req, res) => {
+  app.get("/api/models", apiRateLimiter, infoAccess, (req, res) => {
     res.json({ models: readModelSubmissionsIndex() });
   });
 
-  app.get("/api/models/:category/:slug/download", infoAccess, (req, res) => {
+  app.get("/api/models/:category/:slug/download", apiRateLimiter, infoAccess, (req, res) => {
     const submissions = realSettings(getSettings())?.modelSubmissions;
     if (!submissions?.enabled) {
       return res.status(403).json({ error: "This server isn't accepting model submissions right now - enable it from Config > Models first." });

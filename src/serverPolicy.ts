@@ -307,7 +307,13 @@ export function safeIdSegment(id: unknown): string {
 // that slugifies to nothing (e.g. all punctuation/whitespace) becomes
 // "model" rather than an unusable empty folder name.
 export function slugify(name: string): string {
-  const slug = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const collapsed = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-");
+  // Trimmed with a plain scan: a regular expression for "hyphens at the end" takes quadratic time on a long run of them.
+  let start = 0;
+  let end = collapsed.length;
+  while (start < end && collapsed[start] === "-") start++;
+  while (end > start && collapsed[end - 1] === "-") end--;
+  const slug = collapsed.slice(start, end);
   return slug || "model";
 }
 
@@ -462,4 +468,15 @@ export function flashSigningQuery(query: Record<string, unknown>): { ok: true; p
   const patch = query.version_patch;
   if (patch !== undefined && (typeof patch !== "string" || !/^\d{1,5}$/.test(patch))) return { ok: false, error: "version_patch must be a whole number" };
   return { ok: true, params };
+}
+
+/**
+ * Whether a text can be the address of a camera: a host name, an IPv4 address or a bracketed IPv6 address and nothing else. A value
+ * with a slash, a question mark, a hash, an at sign or a space would change where the request goes once it is put into a URL.
+ */
+export function validCameraHost(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const text = value.trim();
+  if (text.length === 0 || text.length > 253) return false;
+  return /^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$/.test(text) || /^\[[0-9A-Fa-f:.]+\]$/.test(text);
 }

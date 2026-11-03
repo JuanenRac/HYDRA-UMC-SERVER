@@ -28,6 +28,7 @@ import {
   hi3510Action,
   safeIdSegment,
   slugify,
+  validCameraHost,
   viewerMayCall,
   flashSigningQuery,
 } from "../src/serverPolicy";
@@ -345,4 +346,17 @@ test("flashSigningQuery: only a well formed signature, version patch and install
   for (const query of [{ signature: "zz" }, { signature: "a".repeat(127) }, { signature: ["a"] }, { downgrade_from: "1.2" }, { downgrade_from: "1.2.3 " }, { downgrade_from: "a.b.c" }, { version_patch: "-1" }, { version_patch: "1e3" }]) {
     assert.equal(flashSigningQuery(query as any).ok, false, JSON.stringify(query));
   }
+});
+
+test("slugify keeps its result and stays fast on a long run of hyphens", () => {
+  assert.equal(slugify("--Hello   World--"), "hello-world");
+  assert.equal(slugify("---"), "model");
+  const started = Date.now();
+  assert.equal(slugify("a" + "-".repeat(200000) + "!"), "a");
+  assert.ok(Date.now() - started < 1000);
+});
+
+test("validCameraHost accepts host names and addresses only", () => {
+  for (const ok of ["192.168.0.210", "cam-1.local", "camera", "[fe80::1]"]) assert.equal(validCameraHost(ok), true, ok);
+  for (const bad of ["", " ", "a/b", "a?b", "user@host", "host#x", "a b", "host:80", "-x-", 5, null, "a".repeat(300)]) assert.equal(validCameraHost(bad as any), false, String(bad));
 });

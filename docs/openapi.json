@@ -1976,7 +1976,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/admin/push": {
@@ -2293,7 +2294,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/bridges": {
@@ -2631,7 +2633,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/camera/media": {
@@ -2658,7 +2661,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/camera/media/{cameraId}/{kind}/{filename}": {
@@ -2741,7 +2745,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       },
       "get": {
         "tags": [
@@ -2797,7 +2802,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/camera/ticket": {
@@ -2980,7 +2986,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/camera/{id}/recording/stop": {
@@ -3037,7 +3044,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/camera/{id}/snapshot": {
@@ -3104,7 +3112,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/camera/{id}/stream": {
@@ -3159,7 +3168,8 @@
               "type": "integer"
             }
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/cameras/status": {
@@ -3269,7 +3279,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/connections/events": {
@@ -3348,7 +3359,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/ecosystem/health": {
@@ -3483,7 +3495,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/ecosystem/status": {
@@ -3505,7 +3518,8 @@
               }
             }
           }
-        }
+        },
+        "x-rate-limited": true
       }
     },
     "/api/hardware/canota/flash": {
@@ -3915,7 +3929,8 @@
               }
             }
           }
-        }
+        },
+        "x-rate-limited": true
       }
     },
     "/api/models/submit": {
@@ -4001,7 +4016,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/models/{category}/{slug}/download": {
@@ -4064,7 +4080,8 @@
               "type": "string"
             }
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/operator/presence": {
@@ -5482,7 +5499,8 @@
               }
             }
           }
-        }
+        },
+        "x-rate-limited": true
       }
     },
     "/api/system/reboot": {
@@ -5548,7 +5566,8 @@
               }
             }
           }
-        }
+        },
+        "x-rate-limited": true
       }
     },
     "/api/telemetry/aggregate": {
@@ -5729,7 +5748,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/totp/confirm": {
@@ -5784,7 +5804,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/totp/disable": {
@@ -5853,7 +5874,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/totp/status": {
@@ -5880,7 +5902,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/upload-work": {
@@ -5963,7 +5986,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/users": {
@@ -6212,7 +6236,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/voice/confirm": {
@@ -6450,7 +6475,8 @@
               }
             }
           }
-        }
+        },
+        "x-rate-limited": true
       }
     }
   }

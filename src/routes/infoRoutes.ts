@@ -5,6 +5,7 @@
 // =============================================================================
 // The metrics scrape endpoint and the discovery endpoint, moved out of server.ts unchanged.
 import express from "express";
+import { apiRateLimiter } from "../auth";
 import os from "os";
 import path from "path";
 import fs from "fs";
@@ -35,7 +36,7 @@ export function registerInfoRoutes(
   // with the bearer-token scheme every other write route uses - Prometheus
   // itself supports a bearer_token in its scrape config if that's ever
   // wanted, but nothing here requires it today.
-  app.get("/metrics", infoAccess, async (req, res) => {
+  app.get("/metrics", apiRateLimiter, infoAccess, async (req, res) => {
     try {
       res.set("Content-Type", metricsRegistry.contentType);
       res.end(await metricsRegistry.metrics());
