@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **Bench test script:** `docs/BENCH_TESTS.md` lists the checks of the frame probe, the live state of a robot and the global stop that need a camera and a robot, all marked not executed.
+
 - **The motion commands are in the audit record:** play, pause, stop, trajectory, table, speed, tool, valve and pump are recorded as `robot-motion` with the account, the controller, the address and the robot, and a stream of jogs is recorded at most once per account and robot every `audit.motionIntervalSeconds` seconds (10 by default, 0 leaves the stream out, set in the safety limits)
 
 ## [0.8.2.2] - A relay of the tier plan of the data lake for administrators, the dead-man of the presence of the operator that lowers the speed when the heartbeat is lost, and screenshots of Server Admin in the README
