@@ -1,0 +1,7 @@
+{
+  "workflows": [
+    "package-build.yml",
+    "dist-build.yml"
+  ],
+  "max_minutes": 120
+}

@@ -1,0 +1,355 @@
+# =============================================================================
+# HYDRA-UMC-SERVER - Manual build of the production files (build here, sign locally)
+# Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
+# GPL-3.0-or-later - see LICENSE
+# =============================================================================
+# Started by hand only (workflow_dispatch): it never runs on a push or a pull request. It builds the production files (the esbuild bundle of the server and the build of its admin UI) from the exact commit it pins,
+# packs them as hydra-umc-server-dist-<version>.tgz with a fixed file order, dates and owners, builds it TWICE in two separate jobs and compares the bytes (the result is written in
+# the manifest; a difference is recorded, it does not stop the build), and uploads the archive with SHA256SUMS and a build manifest as one artifact with a
+# build-provenance attestation.
+#
+# It holds no key and signs nothing: the archive is UNSIGNED. It is signed on the maintainer's machine, from this artifact, with the release key that never leaves it.
+# With dry_run on (the default) nothing but the artifact is made; with it off a DRAFT release v<version>-dist with the unsigned archive is also prepared (it is never
+# published from here).
+# A failed or stuck build writes the Job Summary and opens (or updates) the issue "build-failed"; a later good build closes it.
+
+name: Production files build (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run: build and check only, no draft release"
+        type: boolean
+        required: true
+        default: true
+      ref:
+        description: "Branch, tag or commit of this repository"
+        type: string
+        required: true
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dist-build-${{ inputs.ref }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Plan the build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      sha: ${{ steps.plan.outputs.sha }}
+      epoch: ${{ steps.plan.outputs.epoch }}
+    steps:
+      - name: Only the owner starts a build
+        shell: bash
+        env:
+          ACTOR: ${{ github.actor }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          [ "$ACTOR" = "$OWNER" ] || { echo "::error::only the owner of the repository starts a build"; exit 1; }
+
+      - name: Check the inputs
+        shell: bash
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          [[ "$REF" =~ ^[A-Za-z0-9._/-]{1,100}$ ]] || { echo "::error::the ref has characters that a branch, tag or commit does not have"; exit 1; }
+
+      - name: Check out this repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Make sure the commit belongs to the main branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          # only code that is already in main is built: a branch or a fork commit that is not in main is refused
+          git merge-base --is-ancestor HEAD refs/remotes/origin/main || { echo "::error::the commit $(git rev-parse --short HEAD) is not part of the main branch; merge it first"; exit 1; }
+
+      - name: Work out the version and pin the commit
+        id: plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(python3 -c "import json; print(json.load(open('hydra-umc.project.json', encoding='utf-8'))['version'])")"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || { echo "::error::the version $version is not one the updater accepts"; exit 1; }
+          grep -q "^## \[$version\]" CHANGELOG.md || { echo "::error::CHANGELOG.md has no section for $version (raise the version BEFORE the build)"; exit 1; }
+          pkg="$(python3 -c "import json; print(json.load(open('package.json', encoding='utf-8'))['version'])")"
+          [ "$pkg" = "$version" ] || { echo "::error::package.json says $pkg, the manifest says $version"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "epoch=$(git log -1 --format=%ct HEAD)" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.id }}
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        id: [a, b]
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+      SOURCE_DATE_EPOCH: ${{ needs.plan.outputs.epoch }}
+    steps:
+      - name: Check out the exact commit that was planned
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "20"
+      - name: Install the dependencies (no install scripts)
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          (cd admin-ui && npm ci --ignore-scripts)
+
+      - name: Build the production files
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run build
+          (cd admin-ui && npm run build)
+
+      - name: Pack them with a fixed order, dates and owners
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          name="hydra-umc-server-dist-$VERSION"
+          tar --sort=name --format=gnu --mtime="@$SOURCE_DATE_EPOCH" --owner=0 --group=0 --numeric-owner --mode='u=rwX,go=rX' --transform "s,^dist,$name/dist," --transform "s,^admin-ui/dist,$name/admin-ui/dist," -cf "$RUNNER_TEMP/dist.tar" dist admin-ui/dist
+          gzip -n -9 -c "$RUNNER_TEMP/dist.tar" > "out/$name.tgz"
+          printf '{"node": "%s", "npm": "%s"}\n' "$(node --version)" "$(npm --version)" > out/toolchain.json
+          ls -l out
+
+      - name: Upload the archive
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: parts-${{ matrix.id }}
+          path: |
+            out/hydra-umc-server-dist-${{ needs.plan.outputs.version }}.tgz
+            out/toolchain.json
+          if-no-files-found: error
+          retention-days: 7
+
+  collect:
+    name: Compare, attest and prepare the draft
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+      SHA: ${{ needs.plan.outputs.sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download both builds
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: parts-*
+          path: parts
+
+      - name: Compare the two builds and write SHA256SUMS and the build manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          name="hydra-umc-server-dist-$VERSION.tgz"
+          a="$(sha256sum "parts/parts-a/$name" | cut -d' ' -f1)"
+          b="$(sha256sum "parts/parts-b/$name" | cut -d' ' -f1)"
+          mkdir files
+          cp "parts/parts-a/$name" files/
+          if [ "$a" = "$b" ]; then
+            same=true
+            echo "### Reproducible: two builds, same sha256 \`$a\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            same=false
+            echo "::warning::the two builds differ (a $a, b $b): recorded in the manifest as not reproducible"
+            echo "### NOT reproducible: build a \`$a\`, build b \`$b\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          cd files
+          sha256sum * > SHA256SUMS
+          SAME="$same" SHA_B="$b" python3 - <<'PY'
+          import json, os
+          files = []
+          for line in open("SHA256SUMS", encoding="utf-8"):
+              digest, name = line.strip().split("  ", 1)
+              files.append({"name": name, "sha256": digest, "bytes": os.path.getsize(name)})
+          tool = json.load(open("../parts/parts-a/toolchain.json", encoding="utf-8"))
+          json.dump({
+              "schema": "hydra-build/1", "repository": os.environ["GITHUB_REPOSITORY"], "project": "server-dist", "version": os.environ["VERSION"],
+              "commit": os.environ["SHA"], "built_on": "github-actions", "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_url": f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+              "toolchain": f"Node.js {tool['node']} (major 20), npm {tool['npm']}, npm ci --ignore-scripts, npm run build (esbuild) and the admin UI build (vite build); tar GNU sorted, owner 0, dates = commit date, gzip -n -9; built twice in two jobs",
+              "package_format": "tar.gz of the production files (unsigned)", "reproducible": os.environ["SAME"] == "true", "second_build_sha256": os.environ["SHA_B"],
+              "signed": False, "files": files,
+          }, open("build-manifest.json", "w", encoding="utf-8"), indent=2)
+          PY
+          cat SHA256SUMS
+          { echo "### HYDRA-UMC-SERVER $VERSION (unsigned production files)"; sed 's/^/- /' SHA256SUMS; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Attest the provenance of the files
+        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-path: |
+            files/*.tgz
+            files/SHA256SUMS
+
+      - name: Upload the build
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dist-server-${{ needs.plan.outputs.version }}
+          path: files/*
+          if-no-files-found: error
+          retention-days: 30
+
+  verify:
+    name: Verify the artifact as a stranger would
+    needs: [plan, collect]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      attestations: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SIGNER: ${{ github.repository }}/.github/workflows/dist-build.yml
+    steps:
+      - name: Download the build
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: dist-server-${{ needs.plan.outputs.version }}
+          path: build
+
+      - name: Check hashes, manifest, contents and attestation
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd build
+          sha256sum -c SHA256SUMS
+          python3 - <<'PY'
+          import json, tarfile
+          manifest = json.load(open("build-manifest.json", encoding="utf-8"))
+          assert manifest["signed"] is False and len(manifest["files"]) == 1, "unexpected manifest"
+          name = manifest["files"][0]["name"]
+          base = "hydra-umc-server-dist-" + manifest["version"]
+          with tarfile.open(name, "r:gz") as archive:
+              members = archive.getmembers()
+              names = [m.name for m in members]
+              assert all(m.isfile() or m.isdir() for m in members), "the archive has something that is not a file or a folder"
+              assert all(not n.startswith(("/", "..")) and ".." not in n.split("/") for n in names), "a path leaves the archive"
+              assert all(n == base or n.startswith(base + "/") for n in names), "an entry is outside the top folder"
+              for required in ["dist/server.cjs", "admin-ui/dist/index.html"]:
+                  assert (base + "/" + required) in names, "missing " + required
+          print("manifest ok:", manifest["project"], manifest["version"], len(members), "entries, reproducible:", manifest["reproducible"])
+          PY
+          for file in *.tgz SHA256SUMS; do
+            gh attestation verify "$file" --repo "$GITHUB_REPOSITORY" --signer-workflow "$SIGNER" --source-digest "$GITHUB_SHA" >/dev/null
+            echo "attestation ok: $file"
+          done
+
+  draft:
+    name: Prepare the draft release (owner approval)
+    needs: [plan, collect, verify]
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: release
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+      SHA: ${{ needs.plan.outputs.sha }}
+      GH_TOKEN: ${{ github.token }}
+      ACTOR: ${{ github.actor }}
+      OWNER: ${{ github.repository_owner }}
+    steps:
+      - name: Only the owner prepares a draft
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "$ACTOR" = "$OWNER" ] || { echo "::error::only the owner of the repository prepares a draft"; exit 1; }
+
+      - name: Download the verified build
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: dist-server-${{ needs.plan.outputs.version }}
+          path: files
+
+      - name: Prepare the draft release with the unsigned archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="v$VERSION-dist"
+          if gh release list --json tagName --jq '.[].tagName' | grep -qx "$tag"; then
+            echo "::error::the draft $tag already exists: delete it or raise the version before a new build"
+            exit 1
+          fi
+          gh release create "$tag" files/* --draft --target "$SHA" --title "HYDRA-UMC-SERVER $VERSION (unsigned production files)" \
+            --notes "Unsigned production files made by GitHub Actions. They are signed on the maintainer's machine and attached to the release v$VERSION; this draft is then deleted."
+          echo "- draft release \`$tag\` prepared with the unsigned archive" >> "$GITHUB_STEP_SUMMARY"
+
+  notify:
+    name: Tell the owner (issue build-failed)
+    if: ${{ always() }}
+    needs: [plan, build, collect, verify, draft]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RESULTS: ${{ needs.plan.result }} ${{ needs.build.result }} ${{ needs.collect.result }} ${{ needs.verify.result }}
+      DRAFT: ${{ needs.draft.result }}
+      DRY_RUN: ${{ inputs.dry_run }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Open, update or close the issue
+        shell: bash
+        run: |
+          set -euo pipefail
+          number="$(gh issue list --repo "$GITHUB_REPOSITORY" --label build-failed --state open --json number --jq '.[0].number // empty')"
+          bad=""
+          for r in $RESULTS; do [ "$r" = "success" ] || bad="$bad $r"; done
+          # the draft job is skipped on purpose in a dry run; in any other case it must have passed
+          if [ "$DRAFT" != "success" ] && ! { [ "$DRAFT" = "skipped" ] && [ "$DRY_RUN" = "true" ]; }; then bad="$bad draft:$DRAFT"; fi
+          if [ -n "$bad" ]; then
+            body="The build failed (plan / build / collect / verify: $RESULTS, draft: $DRAFT; anything but success counts as a failure: failure, timed out, cancelled or skipped). Run: $RUN_URL"
+            if [ -n "$number" ]; then
+              gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body "$body"
+            else
+              gh label create build-failed --repo "$GITHUB_REPOSITORY" --color B60205 --description "A build in GitHub Actions failed" 2>/dev/null || true
+              gh issue create --repo "$GITHUB_REPOSITORY" --label build-failed --title "Build failed" --body "$body"
+            fi
+            echo "### The build failed: issue build-failed updated" >> "$GITHUB_STEP_SUMMARY"
+          elif [ -n "$number" ]; then
+            gh issue close "$number" --repo "$GITHUB_REPOSITORY" --comment "A later build passed: $RUN_URL"
+          fi
+
+      - name: The notice itself failed
+        if: ${{ failure() }}
+        shell: bash
+        run: |
+          echo "::error::The build did not pass (${RESULTS}) and the issue build-failed could not be written. Run: ${RUN_URL}"
+          echo "### The build did not pass and the issue could not be written" >> "$GITHUB_STEP_SUMMARY"
+          echo "Results: ${RESULTS}. Run: ${RUN_URL}" >> "$GITHUB_STEP_SUMMARY"
