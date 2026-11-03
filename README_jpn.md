@@ -148,7 +148,7 @@ HYDRA-UMC SERVER は、HYDRA-UMC マルチロボット・マイクロファク�
 | ネットワーク上の誰にでも見えるカメラ映像 | ライブ映像、写真、録画には 5 分間有効の署名付きチケット（またはベアラートークン）が必要です。カメラは最大 8 台で、カメラのパスワードはプロセス一覧とログに出ません。`HYDRA_UMC_CAMERA_AUTH=open` は一時的な除外設定です | `src/mediaTickets.ts`, `src/serverPolicy.ts` |
 | 巨大または悪意のあるリクエスト、開放されたクロスオリジンアクセス | JSON の本文は 1 MB まで（大きなアップロード用ルートのみ 50 MB）。`CORS_ALLOWED_ORIGINS` は許可リストで、本番では未設定だとブラウザーのクロスオリジン要求をすべて拒否します（開発では警告付きで任意のオリジンを許可）。`settings.json` と `users.json` はファイルとして配信されません | `src/server.ts` |
 | 弱いアクセスオプションが有効のまま：音声テキスト、認識信頼度、MAVLink 署名、Bluetooth、MQTT、TLS | それぞれに、管理者が `PUT /api/admin/server-config`（管理者のみ）で編集するスイッチがあり、既定は保守的で、環境変数が保存値より優先されます。応答は `voice_heard_text_on`、`voice_confidence_off`、`mavlink_unsigned_allowed`、`mavlink_signing_off` などの警告を返します。音声リレーはクライアントが送る `options` を管理者の値で置き換え、MAVLink の鍵ファイルはパスを保存する前に確認されます（32 バイトまたは 16 進 64 文字） | `src/securityConfig.ts`, `src/routes/adminRoutes.ts`, `src/routes/assistantRoutes.ts` |
-| 誰が何をしたかの記録の改ざん | 追記のみの監査記録で、各エントリーはハッシュで連鎖します（`GET /api/audit`、`?verify=1` で連鎖を確認）。サーバーログはサイズでローテーションし、書き込みの前に秘密を除く秘匿処理が入ります | `src/auditLog.ts`, `src/logRotation.ts`, `src/redaction.ts` |
+| 誰が何をしたかの記録の改ざん | 追記のみの監査記録で、各エントリーはハッシュで連鎖します（`GET /api/audit`、`?verify=1` で連鎖を確認）。サーバーログはサイズでローテーションし、書き込みの前に秘密を除く秘匿処理が入ります。動作コマンド（`robot-motion`）とモデルの送信（`model-submit`）も記録し、ジョグの連続送信はアカウントとロボットごとに `audit.motionIntervalSeconds` 秒に最大 1 回記録します（既定は 10、0 で連続送信を除外） | `src/auditLog.ts`, `src/logRotation.ts`, `src/redaction.ts` |
 
 **絶対にしないこと：** 認証済みの安全機能として働くこと。制限と停止はこのプロセス内のソフトウェアで、背後にはハードウェアの非常停止経路も、ファームウェアが強制する制限も、実際のコントローラーボードもまだありません。
 

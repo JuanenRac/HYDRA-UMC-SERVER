@@ -148,7 +148,7 @@ HYDRA-UMC SERVER 是驱动 HYDRA-UMC 多机器人微工厂单元的独立后端�
 | 网络上任何人都能看到摄像头画面 | 实时画面、照片和录像需要有效期 5 分钟的签名票据（或持有者令牌）；最多 8 个摄像头；摄像头密码不会出现在进程列表和日志中；`HYDRA_UMC_CAMERA_AUTH=open` 是临时的退出开关 | `src/mediaTickets.ts`, `src/serverPolicy.ts` |
 | 超大或恶意的请求，以及开放的跨源访问 | JSON 请求体上限 1 MB（仅大文件上传路由为 50 MB）；`CORS_ALLOWED_ORIGINS` 是允许列表，在生产环境中未设置时拒绝所有浏览器跨源请求（开发环境允许任何来源并给出警告）；`settings.json` 和 `users.json` 绝不会作为文件提供 | `src/server.ts` |
 | 弱访问选项一直开着：语音文字、识别置信度、MAVLink 签名、蓝牙、MQTT、TLS | 每一项都有管理员通过 `PUT /api/admin/server-config`（仅管理员）编辑的开关，默认值保守，且环境变量优先于已保存的值；响应会列出 `voice_heard_text_on`、`voice_confidence_off`、`mavlink_unsigned_allowed` 和 `mavlink_signing_off` 等警告；语音中继会用管理员的设置替换客户端发送的任何 `options`，MAVLink 密钥文件在保存路径前会被检查（32 字节或 64 个十六进制字符） | `src/securityConfig.ts`, `src/routes/adminRoutes.ts`, `src/routes/assistantRoutes.ts` |
-| 被篡改的“谁做了什么”记录 | 只追加的审计记录，条目通过哈希链接（`GET /api/audit`，`?verify=1` 检查链条）；服务器日志按大小轮转；写入任何内容之前都会先脱敏以去除机密 | `src/auditLog.ts`, `src/logRotation.ts`, `src/redaction.ts` |
+| 被篡改的“谁做了什么”记录 | 只追加的审计记录，条目通过哈希链接（`GET /api/audit`，`?verify=1` 检查链条）；服务器日志按大小轮转；写入任何内容之前都会先脱敏以去除机密；它还会记录运动命令（`robot-motion`）和模型提交（`model-submit`），连续的点动按每个账户和机器人每 `audit.motionIntervalSeconds` 秒最多记录一次（默认 10，0 表示不记录该连续流） | `src/auditLog.ts`, `src/logRotation.ts`, `src/redaction.ts` |
 
 **它绝不做的事：** 充当经过认证的安全功能。限制和停止是此进程中的软件；其背后还没有硬件紧急停止路径、固件强制的限制或真实的控制板。
 
