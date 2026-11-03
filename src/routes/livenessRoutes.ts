@@ -7,6 +7,7 @@
 // POST /api/robot/:id/heartbeat for the bridge or controller that has real news of a robot (operator or administrator).
 import express from "express";
 import { RobotLivenessTracker, staleAfterFrom } from "../robotLiveness";
+import { ambiguousRobotBody } from "../robotIds";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
@@ -28,6 +29,8 @@ export function registerLivenessRoutes(app: express.Express, deps: LivenessRoute
 
   app.post("/api/robot/:id/heartbeat", authenticate, requireOperator, (req: any, res: any) => {
     const robotId = Number(req.params.id);
+    const ambiguous = ambiguousRobotBody(getSettings(), robotId);
+    if (ambiguous) return res.status(409).json(ambiguous);
     const known = (Array.isArray(getSettings()?.controllers) ? getSettings().controllers : []).some(
       (controller: any) => Array.isArray(controller?.robots) && controller.robots.some((robot: any) => robot?.id === robotId),
     );

@@ -9,6 +9,7 @@
 // the inline version read the variable.
 import express from "express";
 import { claimConflict, readControllerId } from "../claimPolicy";
+import { ambiguousRobotBody } from "../robotIds";
 import type { JogArming, SafetyLimits } from "../safetyLimits";
 import type { AuditLog } from "../auditLog";
 import { ifMatchAgrees, robotRevision, redactSettingsSecrets } from "../serverPolicy";
@@ -75,6 +76,8 @@ export function registerRobotRoutes(app: express.Express, deps: RobotRouteDeps):
   // One robot with its revision (the ETag), so a client does not have to read the whole tree. The credentials of the cameras are an administrator's.
   app.get("/api/robot/:id", authenticate, (req, res) => {
     const robotId = parseInt(req.params.id, 10);
+    const ambiguous = ambiguousRobotBody(getSettings(), robotId);
+    if (ambiguous) return res.status(409).json(ambiguous);
     const robot = findRobotById(robotId);
     if (!robot) return res.status(404).json({ error: "Robot not found" });
     const revision = robotRevision(robot);
@@ -93,6 +96,8 @@ export function registerRobotRoutes(app: express.Express, deps: RobotRouteDeps):
   //   operator role).
   app.post("/api/robot/:id/claim", authenticate, async (req, res) => {
     const robotId = parseInt(req.params.id);
+    const ambiguous = ambiguousRobotBody(getSettings(), robotId);
+    if (ambiguous) return res.status(409).json(ambiguous);
     const robot = findRobotById(robotId);
     if (!robot) {
       return res.status(404).json({ error: "Robot not found" });
@@ -179,6 +184,8 @@ export function registerRobotRoutes(app: express.Express, deps: RobotRouteDeps):
   // cancel() in HYDRA-UMC-ORCHESTRATOR for the same real reasoning).
   app.post("/api/robot/:id/release", authenticate, async (req, res) => {
     const robotId = parseInt(req.params.id);
+    const ambiguous = ambiguousRobotBody(getSettings(), robotId);
+    if (ambiguous) return res.status(409).json(ambiguous);
     const robot = findRobotById(robotId);
     if (!robot) {
       return res.status(404).json({ error: "Robot not found" });

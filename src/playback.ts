@@ -6,6 +6,7 @@
 // The server-authoritative playback engine and the robot reservation helpers, moved out
 // of server.ts unchanged.
 import { emitPush } from "./pushNotifications";
+import { isRobotIdAmbiguous } from "./robotIds";
 
 export interface PlaybackDeps {
   getSettings: () => any;
@@ -37,7 +38,9 @@ export function createPlayback(deps: PlaybackDeps) {
   const playbackTimers = new Map<number, NodeJS.Timeout>();
   const PLAYBACK_BASE_INTERVAL_MS = 600;
 
+  // An id used by more than one robot names none of them: it is never resolved to one picked at random (see src/robotIds.ts).
   function findRobotById(robotId: number): any {
+    if (isRobotIdAmbiguous(getSettings(), robotId)) return null;
     let found: any = null;
     getSettings().controllers?.forEach((c: any) => {
       const r = c.robots?.find((r: any) => r.id === robotId);
@@ -47,6 +50,7 @@ export function createPlayback(deps: PlaybackDeps) {
   }
 
   function findControllerIdForRobot(robotId: number): string | null {
+    if (isRobotIdAmbiguous(getSettings(), robotId)) return null;
     let found: string | null = null;
     getSettings().controllers?.forEach((c: any) => {
       if (c.robots?.some((r: any) => r.id === robotId)) found = c.id;

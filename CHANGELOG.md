@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **Behaviour change: robot ids are global.** Registering a robot whose id another robot already uses (in the same or another controller) through `POST /api/settings` or the `settings` message of the WebSocket is refused with `409` `robot_id_duplicated` and the list of controllers involved, and nothing is stored. A configuration that already repeats ids (from an older version) still starts, but the routes by such an id (`/api/robot/:id` and its `command`, `claim`, `release`, `heartbeat`, `jog-arm`, and `safety-limits?robotId=`) now answer `409` `robot_id_ambiguous` instead of acting on the first controller that had the id; the robots with a unique id are not affected. Each ambiguous id is written to the log at start and listed by the new `GET /api/admin/robot-ids` (administrator). Fix the repeated ids in the settings to get the routes back. See `docs/REMOTE_API.md` section 2v.
+
 ## [0.8.2.3] - The motion commands and the model submissions are in the audit record, the operator presence routes have named shapes, the interval of the jog flow in the audit is a safety limit and a bench test script lists what needs a robot
 
 - **Model submissions are in the audit record:** `POST /api/models/submit` (administrator only) records a `model-submit` entry with the account, the address, the model name, the category and whether it replaces an existing one; refusals carry the reason, and the model content is never recorded.

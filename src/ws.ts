@@ -8,6 +8,7 @@
 import http from "http";
 import jwt from "jsonwebtoken";
 import { WebSocketServer, WebSocket } from "ws";
+import { RobotIdDuplicatedError, ROBOT_ID_DUPLICATED, duplicatedRobotBody } from "./robotIds";
 import { realSettings, WS_TOKEN_SUBPROTOCOL, wsTokenFromSubprotocol, redactSettingsSecrets } from "./serverPolicy";
 import { findUser, effectiveTokenVersion, effectiveId } from "./users";
 import { authFailuresTotal, setWsClientsSource } from "./metrics";
@@ -275,6 +276,10 @@ export function attachWebSocketServer(
             await applySettingsUpdate(msg.payload, ws); // Skip originator to avoid echo
           }
         } catch (e) {
+          if (e instanceof RobotIdDuplicatedError) {
+            ws.send(JSON.stringify({ error: duplicatedRobotBody(e.conflicts).error, code: ROBOT_ID_DUPLICATED, conflicts: e.conflicts }));
+            return;
+          }
           console.error("Malformed WebSocket message", e);
         }
       });

@@ -102,6 +102,20 @@ export const RESPONSES = {
   "POST /api/system/bluetooth/power": ref("Success"),
   "POST /api/system/bluetooth/remove": ref("Success"),
   "POST /api/hardware/canota/flash": ref("CanotaFlash"),
+  // Local to this server (the SDK has no shape for it): the robot ids that more than one robot uses.
+  "GET /api/admin/robot-ids": {
+    type: "object",
+    required: ["ok", "ambiguousCount", "ambiguous"],
+    properties: {
+      ok: { type: "boolean", description: "False while at least one robot id is used by more than one robot." },
+      ambiguousCount: { type: "integer" },
+      ambiguous: {
+        type: "array",
+        description: "The routes by these ids answer 409 robot_id_ambiguous. Controller ids only.",
+        items: { type: "object", required: ["robotId", "controllers"], properties: { robotId: { type: "integer" }, controllers: { type: "array", items: { type: "string" } } } },
+      },
+    },
+  },
 };
 
 // "METHOD /path" -> { required: [...], fields: { name: schema } } for the request body.

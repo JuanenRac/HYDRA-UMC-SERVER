@@ -10,6 +10,7 @@
 import express from "express";
 import { calculateJoints } from "../kinematics";
 import { robotCommandsTotal } from "../metrics";
+import { ambiguousRobotBody } from "../robotIds";
 import { claimConflict, readControllerId, type ClaimConflict } from "../claimPolicy";
 import type { JogArming, SafetyLimits } from "../safetyLimits";
 import type { AuditLog } from "../auditLog";
@@ -236,6 +237,9 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     if (!getSettings().controllers) {
       return res.status(400).json({ error: "No settings loaded" });
     }
+
+    const ambiguous = ambiguousRobotBody(getSettings(), robotId);
+    if (ambiguous) return res.status(409).json(ambiguous);
 
     let targetRobot: any = null;
     getSettings().controllers.forEach((c: any) => {

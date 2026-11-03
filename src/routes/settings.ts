@@ -6,6 +6,7 @@
 // Reading and writing the settings tree, moved out of server.ts unchanged.
 import express from "express";
 import { ifMatchAgrees, settingsRevision, redactSettingsSecrets } from "../serverPolicy";
+import { RobotIdDuplicatedError, duplicatedRobotBody, robotIdConflicts } from "../robotIds";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
@@ -14,10 +15,12 @@ export interface SettingsRouteDeps {
   requireAdmin: Middleware;
   loadFullSettingsFromDisk: () => any;
   applySettingsUpdate: (payload: any) => Promise<{ robotId: unknown; requested: number; applied: number }[] | void>;
+  /** The settings as the server holds them; without it the robot id report is empty. */
+  getSettings?: () => any;
 }
 
 export function registerSettingsRoutes(app: express.Express, deps: SettingsRouteDeps): void {
-  const { authenticate, requireAdmin, loadFullSettingsFromDisk, applySettingsUpdate } = deps;
+  const { authenticate, requireAdmin, loadFullSettingsFromDisk, applySettingsUpdate, getSettings } = deps;
   // API routes FIRST
   // This had no auth middleware at all - any unauthenticated
   // caller could GET the full settings object (controller IPs,
@@ -38,6 +41,13 @@ export function registerSettingsRoutes(app: express.Express, deps: SettingsRoute
     }
   });
 
+  // The robot ids that more than one robot uses (a configuration of an older version can still hold them): the routes by those ids answer 409
+  // robot_id_ambiguous. Controller ids only, never names, addresses or credentials.
+  app.get("/api/admin/robot-ids", authenticate, requireAdmin, (req, res) => {
+    const conflicts = robotIdConflicts(getSettings ? getSettings() : {}).map((c) => ({ robotId: c.robotId, controllers: c.controllers }));
+    res.json({ ok: conflicts.length === 0, ambiguousCount: conflicts.length, ambiguous: conflicts });
+  });
+
   app.post("/api/settings", authenticate, requireAdmin, async (req, res) => {
     try {
       const payload = req.body;
@@ -49,6 +59,7 @@ export function registerSettingsRoutes(app: express.Express, deps: SettingsRoute
       const clamped = (await applySettingsUpdate(payload)) || [];
       res.json({ success: true, revision: settingsRevision(loadFullSettingsFromDisk()), ...(clamped.length ? { warnings: clamped.map((c) => ({ robotId: c.robotId, field: "heatedBed.targetTemp", requested: c.requested, applied: c.applied, code: "temperature-limit" })) } : {}) });
     } catch (e) {
+      if (e instanceof RobotIdDuplicatedError) return res.status(409).json(duplicatedRobotBody(e.conflicts));
       console.error("Error writing settings", e);
       res.status(500).json({ error: "Failed to save settings" });
     }

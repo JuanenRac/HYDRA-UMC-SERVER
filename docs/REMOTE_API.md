@@ -922,6 +922,15 @@ The server keeps a list of the clients that sign in (a Studio or Suite session, 
 
 A relay of the two routes `GET` / `PUT /downsample/plan` of HYDRA-UMC-DATALAKE, for the editor in Studio's Telemetry panel. Administrators only; the server presents the administration token of the data lake (`HYDRA_UMC_DATALAKE_ADMIN_TOKEN`, else `HYDRA_UMC_DATALAKE_TOKEN`), which no client sees. The body of the `PUT` (`{"plan": {...}, "expectedHash", "confirmDelete", "preview"}`) and `?preview=1` are forwarded as they are, and the answer comes back with its status and body: `400 invalid_plan`, `403 delete_not_allowed`, `409 plan_changed` / `confirm_delete_required`, `422 incoherent_plan` / `unknown_kind`. A data lake that was not started with the plan administration answers `404` (the editor shows it as off); no data lake configured answers `503`. A request only saves a plan; whether the rolled-up raw points are deleted is decided by the operator when starting the data lake, never by a request. The rules and the shapes are in the data lake's own API document.
 
+### 2v. Robot ids are global: `409 robot_id_duplicated` and `409 robot_id_ambiguous`
+
+`/api/robot/:id` names one robot of the whole installation, whatever controller holds it, so a robot id must be unique across all the controllers.
+
+- **Registering a repeated id is refused.** `POST /api/settings` (and the `settings` message of the WebSocket) with a tree in which an id is used by more than one robot, when the stored tree did not already repeat it, answers `409` with `{ "error": "...", "code": "robot_id_duplicated", "conflicts": [ { "robotId": 2, "controllers": ["c1", "c2"] } ] }` and stores nothing. Saving a tree that already repeated an id without adding another, or repairing it, still works.
+- **A configuration of an older version that already repeats ids still starts.** The ids are marked ambiguous: `GET /api/robot/:id`, `POST /api/robot/:id/command`, `/claim`, `/release`, `/heartbeat`, `/jog-arm` and `GET /api/safety-limits?robotId=` answer `409` with `{ "error": "...", "code": "robot_id_ambiguous", "robotId": 2, "controllers": ["c1", "c2"] }` instead of choosing one of the robots. The robots with a unique id keep working. The list holds controller ids only: never names, addresses or credentials.
+- **Where it is reported.** At start the log has one `[ROBOT-IDS]` line per ambiguous id, and `GET /api/admin/robot-ids` (administrator) answers `{ "ok": false, "ambiguousCount": 1, "ambiguous": [ { "robotId": 2, "controllers": ["c1", "c2"] } ] }` (`ok` is `true` and the list empty when every id is unique). A bridge that resolves a robot by id (MQTT, Bluetooth) finds none for an ambiguous id.
+- The error texts are in English with a stable `code`; the clients translate them by the code.
+
 ## 3. Live sync: `WebSocket /ws`
 
 Connect with `new WebSocket("ws://<host>:3000/ws", ["hydra.bearer", "<JWT_TOKEN>"])`

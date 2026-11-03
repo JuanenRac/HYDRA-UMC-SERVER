@@ -7,6 +7,7 @@
 // administrator), the explicit arming of the jog, and the list of who controls which robot.
 import express from "express";
 import { readControllerId, claimConflict, listClaims } from "../claimPolicy";
+import { ambiguousRobotBody } from "../robotIds";
 import type { AuditLog } from "../auditLog";
 import { HARD_LIMITS, SafetyLimitsError, defaultSafetyConfig, type JogArming, type SafetyLimits } from "../safetyLimits";
 
@@ -44,6 +45,8 @@ export function registerSafetyRoutes(app: express.Express, deps: SafetyRouteDeps
     const raw = req.query.robotId;
     const robotId = raw === undefined ? undefined : parseInt(String(raw), 10);
     if (robotId !== undefined && !Number.isInteger(robotId)) return res.status(400).json({ error: "robotId must be an integer" });
+    const ambiguous = robotId !== undefined ? ambiguousRobotBody(getSettings(), robotId) : null;
+    if (ambiguous) return res.status(409).json(ambiguous);
     if (robotId !== undefined && !findRobotById(robotId)) return res.status(404).json({ error: "Robot not found" });
     res.json(view(robotId));
   });
@@ -66,6 +69,8 @@ export function registerSafetyRoutes(app: express.Express, deps: SafetyRouteDeps
   // The explicit arming of the jog. It is always available; it is only demanded while jog.armRequired is on.
   app.post("/api/robot/:id/jog-arm", authenticate, (req, res) => {
     const robotId = parseInt(req.params.id, 10);
+    const ambiguous = ambiguousRobotBody(getSettings(), robotId);
+    if (ambiguous) return res.status(409).json(ambiguous);
     const robot = findRobotById(robotId);
     if (!robot) return res.status(404).json({ error: "Robot not found" });
     const user = (req as any).user;

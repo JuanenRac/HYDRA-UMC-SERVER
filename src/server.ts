@@ -45,6 +45,7 @@ import { registerSafetyRoutes } from "./routes/safetyRoutes";
 import { makePresenceGate, registerPresenceRoutes } from "./routes/presenceRoutes";
 import { OperatorPresence, presenceSettings } from "./operatorPresence";
 import { listClaims } from "./claimPolicy";
+import { RobotIdDuplicatedError, ambiguousRobotLogLines, newRobotIdConflicts } from "./robotIds";
 import { AuditLog, auditOptionsFromEnv } from "./auditLog";
 import { SecurityConfig, certFingerprint, resolveBleMode, resolveTls, securityEnvFrom } from "./securityConfig";
 import { applyNewInstallTlsDefault } from "./newInstallTls";
@@ -288,6 +289,12 @@ async function startServer() {
   const onClaimsChanged = () => hub.broadcastClaims(listClaims(getSettings(), isReservationActive, (id) => arming.expiresAt(id)));
 
   async function applySettingsUpdate(payload: any, originatorWs?: WebSocket): Promise<{ robotId: unknown; requested: number; applied: number }[]> {
+    // Robot ids are global: a tree that would repeat an id (one that was not already repeated) is refused before anything is stored or broadcast.
+    const added = newRobotIdConflicts(getSettings(), payload);
+    if (added.length > 0) {
+      industrialLog(`[ROBOT-IDS] settings refused: robot id(s) ${added.map((c) => `${c.robotId} (controllers: ${c.controllers.join(", ")})`).join("; ")} would be used by more than one robot.`);
+      throw new RobotIdDuplicatedError(added);
+    }
     // A heated-bed target above the limit of its model is lowered to the limit before it is stored or broadcast.
     const clamped = safety.clampTemperatures(payload);
     await queueSettingsWrite(payload);
@@ -307,6 +314,9 @@ async function startServer() {
   // (like every existing one in data/settings.json) get their own
   // stream serve process without needing a fresh settings save first.
   reconcileCameraProcesses(getSettings());
+
+  // Ids repeated by a configuration of an older version: the server starts, the routes by those ids answer 409 (see src/robotIds.ts) and the log says so.
+  for (const line of ambiguousRobotLogLines(getSettings())) industrialLog(line);
 
   registerStaticRoutes(app, { dataPath });
 
@@ -358,7 +368,7 @@ async function startServer() {
     logFile: LOG_FILE, getCurrentPort, loadServerConfig, saveServerConfig, security, audit,
   });
 
-  registerSettingsRoutes(app, { authenticate, requireAdmin, loadFullSettingsFromDisk, applySettingsUpdate });
+  registerSettingsRoutes(app, { authenticate, requireAdmin, loadFullSettingsFromDisk, applySettingsUpdate, getSettings });
 
   registerAssistantRoutes(app, { authenticate, getSettings, security });
 

@@ -1721,6 +1721,69 @@
         ]
       }
     },
+    "/api/admin/robot-ids": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/admin/robot-ids",
+        "description": "Requires a signed-in account with the admin role.",
+        "x-access": "admin",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok",
+                    "ambiguousCount",
+                    "ambiguous"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "description": "False while at least one robot id is used by more than one robot."
+                    },
+                    "ambiguousCount": {
+                      "type": "integer"
+                    },
+                    "ambiguous": {
+                      "type": "array",
+                      "description": "The routes by these ids answer 409 robot_id_ambiguous. Controller ids only.",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "robotId",
+                          "controllers"
+                        ],
+                        "properties": {
+                          "robotId": {
+                            "type": "integer"
+                          },
+                          "controllers": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/admin/safety-limits": {
       "put": {
         "tags": [
@@ -4029,6 +4092,16 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "Conflict with the current state. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "parameters": [
@@ -4282,6 +4355,16 @@
           },
           "404": {
             "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict with the current state. The body is documented in docs/REMOTE_API.md.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4565,6 +4648,16 @@
           },
           "404": {
             "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict with the current state. The body is documented in docs/REMOTE_API.md.",
             "content": {
               "application/json": {
                 "schema": {
