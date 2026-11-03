@@ -64,6 +64,9 @@ export const RESPONSES = {
   "POST /api/operator/presence": ref("OperatorPresenceAck"),
   "GET /api/operator/presence": ref("OperatorPresence"),
   "GET /health": ref("HealthReport"),
+  "GET /.well-known/jwks.json": ref("JwksDocument"),
+  "GET /api/admin/jwt-keys": ref("JwtKeys"),
+  "POST /api/admin/jwt-keys/rotate": ref("JwtKeyRotated"),
   "GET /api/robots/liveness": ref("RobotLiveness"),
   "GET /api/ecosystem/health": ref("EcosystemHealth"),
   "POST /api/push/devices": ref("PushDeviceRegistered"),
@@ -151,6 +154,11 @@ export const EXTRA_STATUSES = {
   // (the save itself is shared by POST and PUT, so its 200, 409 and 500 do not show in either handler)
   "PUT /api/settings": [200, 409, 412, 428, 500],
   "POST /api/settings": [200, 409, 500],
+  // The public key set: 404 while the server signs HS256 (the default), 503 when the key file cannot be read.
+  "GET /.well-known/jwks.json": [200, 404, 503],
+  "GET /api/admin/jwt-keys": [200, 500],
+  // 409 while the algorithm is HS256: there is nothing asymmetric to rotate.
+  "POST /api/admin/jwt-keys/rotate": [200, 409, 500],
   // 404 while ecosystemHealth.enabled is off (as if the route did not exist), 403 for a viewer.
   "GET /api/ecosystem/health": [403, 404],
   // 404 while push.enabled is off (as if the route did not exist).

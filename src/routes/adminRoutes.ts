@@ -12,6 +12,7 @@ import fs from "fs";
 import { WebSocket } from "ws";
 import { SecurityConfig, SecurityConfigError } from "../securityConfig";
 import type { AuditLog } from "../auditLog";
+import { jwtKeyStore } from "../jwtKeys";
 import { listUsers, createUser, updateUser, deleteUser, isUserRole, type UserRole } from "../users";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
@@ -134,7 +135,13 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
       saveServerConfig({ ...loadServerConfig(), port: portNum });
     }
     let security_result: ReturnType<SecurityConfig["update"]> | undefined;
-    const wantsSecurity = req.body && (req.body.aiAccess !== undefined || req.body.infoAuth !== undefined || req.body.tls !== undefined || req.body.ble !== undefined || req.body.mqtt !== undefined || req.body.voice !== undefined || req.body.mavlink !== undefined || req.body.robots !== undefined || req.body.connections !== undefined || req.body.health !== undefined || req.body.ecosystemHealth !== undefined || req.body.infoTickets !== undefined || req.body.presence !== undefined || req.body.push !== undefined || req.body.trustedNetworks !== undefined || req.body.rul !== undefined || req.body.safety !== undefined || req.body.camera !== undefined || req.body.install !== undefined || req.body.websocket !== undefined || req.body.logging !== undefined || req.body.jobDispatcher !== undefined);
+    // Choosing EdDSA creates the signing key now, so a key file that cannot be written refuses the change instead of breaking the next sign-in.
+    if (req.body?.auth?.jwtAlgorithm === "EdDSA") {
+      try { jwtKeyStore().ensureActive(); } catch (error) {
+        return res.status(500).json({ error: "The key file for EdDSA cannot be created or read; nothing was changed", code: "JWT_KEY_FILE_UNUSABLE" });
+      }
+    }
+    const wantsSecurity = req.body && (req.body.aiAccess !== undefined || req.body.infoAuth !== undefined || req.body.tls !== undefined || req.body.ble !== undefined || req.body.mqtt !== undefined || req.body.voice !== undefined || req.body.mavlink !== undefined || req.body.robots !== undefined || req.body.connections !== undefined || req.body.health !== undefined || req.body.ecosystemHealth !== undefined || req.body.infoTickets !== undefined || req.body.auth !== undefined || req.body.presence !== undefined || req.body.push !== undefined || req.body.trustedNetworks !== undefined || req.body.rul !== undefined || req.body.safety !== undefined || req.body.camera !== undefined || req.body.install !== undefined || req.body.websocket !== undefined || req.body.logging !== undefined || req.body.jobDispatcher !== undefined);
     if (wantsSecurity) {
       try {
         security_result = security.update(req.body, String((req as any).user?.username ?? "admin"));
@@ -164,6 +171,21 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
       warnings: security_result?.warnings ?? [],
       ...(security_result ? security_result.snapshot : {}),
     });
+  });
+
+  // The signing keys of the EdDSA sign-in tokens: their state (never the private part) and the rotation. Rotation is refused
+  // while HS256 is the algorithm, since there is nothing asymmetric to rotate.
+  const keysAnswer = () => ({ algorithm: security.jwtPolicy().algorithm, keys: jwtKeyStore().list(), jwksPath: "/.well-known/jwks.json" });
+  app.get("/api/admin/jwt-keys", authenticate, requireAdmin, (req, res) => {
+    try { res.json(keysAnswer()); } catch { res.status(500).json({ error: "The key file cannot be read", code: "JWT_KEY_FILE_UNUSABLE" }); }
+  });
+  app.post("/api/admin/jwt-keys/rotate", authenticate, requireAdmin, (req, res) => {
+    if (security.jwtPolicy().algorithm !== "EdDSA") return res.status(409).json({ error: "Asymmetric signing is off (auth.jwtAlgorithm is HS256): there is no key to rotate", code: "JWT_ASYMMETRIC_OFF" });
+    try {
+      const kid = jwtKeyStore().rotate();
+      industrialLog(`[SECURITY] ${String((req as any).user?.username ?? "admin")} rotated the token signing key; the new key is ${kid}, the previous one stays published for the overlap.`);
+      res.json({ success: true, kid, ...keysAnswer() });
+    } catch { res.status(500).json({ error: "The key file cannot be written; nothing was rotated", code: "JWT_KEY_FILE_UNUSABLE" }); }
   });
 
   // Graceful self-restart - only meaningful behind a process supervisor

@@ -14,6 +14,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import tls from "node:tls";
 import { DispatcherConfigError, readReplanOptions, validTimeout, writeReplanOptions, DEFAULT_STOP_ACK_TIMEOUT_SECONDS } from "./dispatcherConfigFile";
+import { DEFAULT_KEY_OVERLAP_SECONDS, JWT_ALGORITHMS, MAX_KEY_OVERLAP_SECONDS, MIN_KEY_OVERLAP_SECONDS, type JwtAlgorithm } from "./jwtKeys";
 import { MQTT_MODES, mqttEnvFrom, resolveMqttMode, resolveMqttSettings, validMqttPrefix, validMqttUrl, type MqttEnv, type MqttFile, type MqttMode, type MqttSettings } from "./mqttBridge";
 
 export type AiAccess = "open" | "admin";
@@ -130,6 +131,16 @@ export interface RulFile {
   timeoutMs?: number;
 }
 
+/** How the sign-in tokens are signed (src/jwtKeys.ts). */
+export interface AuthFile {
+  /** "HS256" (default: the shared JWT_SECRET) or "EdDSA" (Ed25519; the public keys are published at GET /.well-known/jwks.json). */
+  jwtAlgorithm?: JwtAlgorithm;
+  /** While signing with EdDSA, whether HS256 tokens still around are accepted (default: yes, so nobody is signed out; turn it off when the transition is over). */
+  acceptHs256?: boolean;
+  /** Seconds a retired signing key stays published and accepted after a rotation (60 to 31622400; 2592000 by default). Read from the file only. */
+  keyOverlapSeconds?: number;
+}
+
 /** The signed tickets that let a client without a bearer token read the information routes (POST /api/info/ticket, src/infoTickets.ts). */
 export interface InfoTicketsFile {
   /** Whether the tickets are issued and accepted (default: no; the route then answers 404 and a ticket in an address is ignored). */
@@ -226,6 +237,7 @@ export interface SecurityFile {
   health?: HealthFile;
   ecosystemHealth?: EcosystemHealthFile;
   infoTickets?: InfoTicketsFile;
+  auth?: AuthFile;
   presence?: PresenceFile;
   bridgeGateway?: BridgeGatewayFile;
   push?: PushFile;
@@ -257,6 +269,8 @@ export interface SecurityEnv {
   healthOpen?: string;
   ecosystemHealth?: string;
   infoTickets?: string;
+  jwtAlgorithm?: string;
+  jwtAcceptHs256?: string;
   presence?: string;
   presenceAction?: string;
   bridgeGateway?: string;
@@ -292,6 +306,8 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     healthOpen: env.HYDRA_UMC_HEALTH_OPEN,
     ecosystemHealth: env.HYDRA_UMC_ECOSYSTEM_HEALTH,
     infoTickets: env.HYDRA_UMC_INFO_TICKETS,
+    jwtAlgorithm: env.HYDRA_UMC_JWT_ALGORITHM,
+    jwtAcceptHs256: env.HYDRA_UMC_JWT_ACCEPT_HS256,
     presence: env.HYDRA_UMC_PRESENCE,
     presenceAction: env.HYDRA_UMC_PRESENCE_ACTION,
     bridgeGateway: env.HYDRA_UMC_BRIDGE_GATEWAY,
@@ -410,6 +426,30 @@ export function resolveInfoTickets(env: string | undefined, file: SecurityFile):
   if (isSet(env)) return { value: env.trim() === "1", source: "env" };
   if (typeof file.infoTickets?.enabled === "boolean") return { value: file.infoTickets.enabled, source: "config" };
   return { value: false, source: "default" };
+}
+
+const isJwtAlgorithm = (value: unknown): value is JwtAlgorithm => typeof value === "string" && (JWT_ALGORITHMS as readonly string[]).includes(value);
+
+/** What new sign-in tokens are signed with: the environment first (HS256 or EdDSA, any case; anything else is ignored), then the file, then HS256 (the shared secret, as always). */
+export function resolveJwtAlgorithm(env: string | undefined, file: SecurityFile): { value: JwtAlgorithm; source: Source } {
+  if (isSet(env)) {
+    const wanted = JWT_ALGORITHMS.find((name) => name.toLowerCase() === env.trim().toLowerCase());
+    if (wanted) return { value: wanted, source: "env" };
+  }
+  if (isJwtAlgorithm(file.auth?.jwtAlgorithm)) return { value: file.auth.jwtAlgorithm, source: "config" };
+  return { value: "HS256", source: "default" };
+}
+
+/** Whether HS256 tokens are still accepted while EdDSA is in use: only the exact word "0" in the environment switches it off; the default is yes (a transition must not sign anybody out). */
+export function resolveJwtAcceptHs256(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env) && (env.trim() === "0" || env.trim() === "1")) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.auth?.acceptHs256 === "boolean") return { value: file.auth.acceptHs256, source: "config" };
+  return { value: true, source: "default" };
+}
+
+export function resolveKeyOverlapSeconds(file: SecurityFile): number {
+  const value = file.auth?.keyOverlapSeconds;
+  return typeof value === "number" && Number.isFinite(value) && value >= MIN_KEY_OVERLAP_SECONDS && value <= MAX_KEY_OVERLAP_SECONDS ? Math.floor(value) : DEFAULT_KEY_OVERLAP_SECONDS;
 }
 
 /** The dead-man of the presence of the operator (POST /api/operator/presence): only the exact word "1" in the environment switches it on; the default is off. */
@@ -607,6 +647,8 @@ export interface SecuritySnapshot {
   health: { open: { value: boolean; source: Source } };
   ecosystemHealth: { enabled: { value: boolean; source: Source } };
   infoTickets: { enabled: { value: boolean; source: Source } };
+  /** How the sign-in tokens are signed; the overlap of a rotation is edited in the configuration file. */
+  auth: { jwtAlgorithm: { value: JwtAlgorithm; source: Source }; acceptHs256: { value: boolean; source: Source }; keyOverlapSeconds: number };
   /** The switch and the action of the dead-man of the presence of the operator; the times are edited in the configuration file. */
   presence: { enabled: { value: boolean; source: Source }; action: { value: PresenceActionValue; source: Source }; timeoutSeconds: number; slowFactor: number; recoverBeats: number; rampSeconds: number; leftImmediate: boolean };
   bridgeGateway: { enabled: { value: boolean; source: Source } };
@@ -716,6 +758,16 @@ export class SecurityConfig {
   /** Whether the server sends push notifications (off unless an administrator turned it on). */
   pushEnabled(): boolean {
     return resolvePush(this.options.env.push, this.file).value;
+  }
+
+  /** What new sign-in tokens are signed with, and whether HS256 tokens are still accepted (HS256 unless an administrator chose EdDSA). */
+  jwtPolicy(): { algorithm: JwtAlgorithm; acceptHs256: boolean } {
+    return { algorithm: resolveJwtAlgorithm(this.options.env.jwtAlgorithm, this.file).value, acceptHs256: resolveJwtAcceptHs256(this.options.env.jwtAcceptHs256, this.file).value };
+  }
+
+  /** Seconds a retired signing key stays published and accepted. */
+  keyOverlapSeconds(): number {
+    return resolveKeyOverlapSeconds(this.file);
   }
 
   /** Whether GET /api/ecosystem/health answers (off unless an administrator turned it on). */
@@ -848,6 +900,7 @@ export class SecurityConfig {
       health: { open: resolveHealthOpen(this.options.env.healthOpen, this.file) },
       ecosystemHealth: { enabled: resolveEcosystemHealth(this.options.env.ecosystemHealth, this.file) },
       infoTickets: { enabled: resolveInfoTickets(this.options.env.infoTickets, this.file) },
+      auth: { jwtAlgorithm: resolveJwtAlgorithm(this.options.env.jwtAlgorithm, this.file), acceptHs256: resolveJwtAcceptHs256(this.options.env.jwtAcceptHs256, this.file), keyOverlapSeconds: resolveKeyOverlapSeconds(this.file) },
       presence: (() => {
         const p = presenceTimes(this.file.presence);
         return { enabled: resolvePresence(this.options.env.presence, this.file), action: resolvePresenceAction(this.options.env.presenceAction, this.file), ...p };
@@ -1109,6 +1162,25 @@ export class SecurityConfig {
         if (ticketsPatch.enabled === true) warnings.push("info_tickets_on");
       }
       next.infoTickets = merged;
+    }
+
+    if (patch.auth !== undefined) {
+      const authPatch = patch.auth;
+      if (typeof authPatch !== "object" || authPatch === null || Array.isArray(authPatch)) throw new SecurityConfigError(400, "auth must be an object");
+      const merged: AuthFile = { ...(next.auth ?? {}) };
+      if (authPatch.jwtAlgorithm !== undefined) {
+        if (!isJwtAlgorithm(authPatch.jwtAlgorithm)) throw new SecurityConfigError(400, 'auth.jwtAlgorithm must be "HS256" or "EdDSA"');
+        if (resolveJwtAlgorithm(this.options.env.jwtAlgorithm, this.file).source === "env") throw lockedBy("HYDRA_UMC_JWT_ALGORITHM");
+        merged.jwtAlgorithm = authPatch.jwtAlgorithm;
+        if (authPatch.jwtAlgorithm === "EdDSA") warnings.push("jwt_eddsa_on");
+      }
+      if (authPatch.acceptHs256 !== undefined) {
+        if (typeof authPatch.acceptHs256 !== "boolean") throw new SecurityConfigError(400, "auth.acceptHs256 must be true or false");
+        if (resolveJwtAcceptHs256(this.options.env.jwtAcceptHs256, this.file).source === "env") throw lockedBy("HYDRA_UMC_JWT_ACCEPT_HS256");
+        merged.acceptHs256 = authPatch.acceptHs256;
+        if (authPatch.acceptHs256 === false) warnings.push("jwt_hs256_refused");
+      }
+      next.auth = merged;
     }
 
     if (patch.presence !== undefined) {
@@ -1398,6 +1470,9 @@ export class SecurityConfig {
     }
     if (patch.infoTickets !== undefined) {
       log(`[SECURITY] ${actor} turned the signed tickets of the information routes (POST /api/info/ticket) ${snapshot.infoTickets.enabled.value ? "on" : "off"}.`);
+    }
+    if (patch.auth !== undefined) {
+      log(`[SECURITY] ${actor} set the sign-in tokens: signed with ${snapshot.auth.jwtAlgorithm.value}${snapshot.auth.jwtAlgorithm.value === "EdDSA" ? ` (public keys at /.well-known/jwks.json), HS256 tokens ${snapshot.auth.acceptHs256.value ? "still accepted" : "REFUSED"}` : ""}.`);
     }
     if (patch.presence !== undefined) {
       log(`[SECURITY] ${actor} set the dead-man of the presence of the operator (POST /api/operator/presence): ${snapshot.presence.enabled.value ? "on" : "off"}, a lost heartbeat will ${snapshot.presence.action.value === "slow" ? "slow the robots down" : snapshot.presence.action.value === "pause" ? "pause the robots" : snapshot.presence.action.value === "stop" ? "stop the robots" : "only warn (no robot is touched)"}.`);

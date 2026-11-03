@@ -6,11 +6,11 @@
 // Token verification, the admin gate, the async handler wrapper and the rate limiters,
 // moved out of server.ts unchanged.
 import rateLimit from "express-rate-limit";
-import jwt from "jsonwebtoken";
 import { findUser, effectiveTokenVersion, effectiveId, ScryptOverloadError } from "./users";
 import { jwtSecretProblem } from "./secretsPolicy";
 import { authFailuresTotal } from "./metrics";
 import { viewerMayCall } from "./serverPolicy";
+import { verifyAccessToken, signAccessToken } from "./jwtKeys";
 
 export const NODE_ENV = process.env.NODE_ENV || "development";
 
@@ -46,6 +46,11 @@ if (JWT_SECRET_IS_DEFAULT) {
 // a bare number of seconds, ...).
 export const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "30d";
 
+/** Signs a login token with the algorithm in force (HS256 with JWT_SECRET by default; EdDSA when an administrator chose it). */
+export function signLoginToken(claims: Record<string, unknown>): string {
+  return signAccessToken(claims, JWT_SECRET, JWT_EXPIRES_IN);
+}
+
 // Middleware to verify JWT token - the decoded payload now carries
 // {username, role}, not just {username}, so requireAdmin below can gate
 // the routes an "operator" account shouldn't reach.
@@ -66,7 +71,8 @@ export function authenticate(req: any, res: any, next: any) {
   // algorithm-confusion class (a token crafted with a different
   // algorithm this secret happens to also validate under) rather than
   // relying on the library's own current default alone.
-  jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] }, (err: any, user: any) => {
+  // The algorithm comes from the configured policy (HS256 unless an administrator chose EdDSA), never from the token itself: see src/jwtKeys.ts.
+  verifyAccessToken(token, JWT_SECRET, (err: any, user: any) => {
     if (err) {
       // Same 403 status for both cases, deliberately (a real 401-vs-403 split was wanted at one point, but that
       // "token expired" vs "token has no
@@ -211,6 +217,17 @@ export const loginRateLimiter = rateLimit({
       error: "Too many login attempts - please wait before trying again.",
       retryAfterMs: LOGIN_RATE_LIMIT_WINDOW_MS,
     });
+  },
+});
+
+// The public key set is asked for by verifiers that cache it, so a modest budget per address is plenty.
+export const jwksRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    res.status(429).json({ error: "Too many requests for the key set - please wait before trying again.", retryAfterMs: 60 * 1000 });
   },
 });
 

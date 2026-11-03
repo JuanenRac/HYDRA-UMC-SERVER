@@ -1534,6 +1534,191 @@
           }
         }
       }
+    },
+    "JwksDocument": {
+      "type": "object",
+      "required": [
+        "keys"
+      ],
+      "description": "A JSON Web Key Set (RFC 7517) with the public Ed25519 keys that verify the EdDSA sign-in tokens: the active one and, during the overlap of a rotation, the previous one. Public parameters only.",
+      "properties": {
+        "keys": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "kty",
+              "crv",
+              "x",
+              "kid",
+              "use",
+              "alg"
+            ],
+            "properties": {
+              "kty": {
+                "type": "string",
+                "enum": [
+                  "OKP"
+                ]
+              },
+              "crv": {
+                "type": "string",
+                "enum": [
+                  "Ed25519"
+                ]
+              },
+              "x": {
+                "type": "string",
+                "description": "The public key, base64url."
+              },
+              "kid": {
+                "type": "string",
+                "description": "The key id (the RFC 7638 thumbprint, shortened); the header of each token names it."
+              },
+              "use": {
+                "type": "string",
+                "enum": [
+                  "sig"
+                ]
+              },
+              "alg": {
+                "type": "string",
+                "enum": [
+                  "EdDSA"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "JwtKeys": {
+      "type": "object",
+      "required": [
+        "algorithm",
+        "keys",
+        "jwksPath"
+      ],
+      "description": "The state of the token signing keys. Never any private part.",
+      "properties": {
+        "algorithm": {
+          "type": "string",
+          "enum": [
+            "HS256",
+            "EdDSA"
+          ]
+        },
+        "keys": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "kid",
+              "createdAt",
+              "retiredAt",
+              "active",
+              "acceptedUntil"
+            ],
+            "properties": {
+              "kid": {
+                "type": "string"
+              },
+              "createdAt": {
+                "type": "integer",
+                "description": "Unix seconds."
+              },
+              "retiredAt": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Unix seconds; null for the active key."
+              },
+              "active": {
+                "type": "boolean"
+              },
+              "acceptedUntil": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Unix seconds at which a retired key stops being accepted and published; null for the active key."
+              }
+            }
+          }
+        },
+        "jwksPath": {
+          "type": "string"
+        }
+      }
+    },
+    "JwtKeyRotated": {
+      "type": "object",
+      "required": [
+        "success",
+        "kid",
+        "algorithm",
+        "keys",
+        "jwksPath"
+      ],
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "kid": {
+          "type": "string",
+          "description": "The key id of the new active key."
+        },
+        "algorithm": {
+          "type": "string",
+          "enum": [
+            "HS256",
+            "EdDSA"
+          ]
+        },
+        "keys": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "kid",
+              "createdAt",
+              "retiredAt",
+              "active",
+              "acceptedUntil"
+            ],
+            "properties": {
+              "kid": {
+                "type": "string"
+              },
+              "createdAt": {
+                "type": "integer",
+                "description": "Unix seconds."
+              },
+              "retiredAt": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Unix seconds; null for the active key."
+              },
+              "active": {
+                "type": "boolean"
+              },
+              "acceptedUntil": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Unix seconds at which a retired key stops being accepted and published; null for the active key."
+              }
+            }
+          }
+        },
+        "jwksPath": {
+          "type": "string"
+        }
+      }
     }
   }
 }

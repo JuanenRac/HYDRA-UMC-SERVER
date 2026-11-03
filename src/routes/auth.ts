@@ -5,14 +5,14 @@
 // =============================================================================
 // Login, token refresh and logout, moved out of server.ts unchanged.
 import express from "express";
-import jwt from "jsonwebtoken";
 import { findUser, verifyPassword, effectiveTokenVersion, effectiveId } from "../users";
 import { issueRefreshToken, consumeRefreshToken, revokeRefreshToken } from "../refresh_tokens";
 import { authFailuresTotal } from "../metrics";
 import { totpStore } from "../totp";
 import { connectionTracker, identify, originOf, type Sighting } from "../connections";
 import { outsideNeedsSecondFactor, type TrustedNetworksSettings } from "../trustedNetworks";
-import { JWT_SECRET, JWT_EXPIRES_IN, asyncHandler, loginRateLimiter, refreshRateLimiter } from "../auth";
+import { signLoginToken, asyncHandler, loginRateLimiter, refreshRateLimiter, jwksRateLimiter } from "../auth";
+import { currentJwtPolicy, jwtKeyStore } from "../jwtKeys";
 
 /** Who is asking, as the history of connections describes a client (never a secret: kind, version, address and agent only). */
 function sightingOf(req: express.Request, user?: string): Sighting {
@@ -34,6 +34,25 @@ export interface AuthRouteDeps {
 const NEEDS_SECOND_FACTOR = { error: "from outside the house, signing in needs the second factor turned on for this account: turn it on from the house network or the VPN first", code: "second-factor-required", needs: "vpn" };
 
 export function registerAuthRoutes(app: express.Express, deps: AuthRouteDeps = {}): void {
+  // The public keys that verify the EdDSA sign-in tokens (RFC 7517). Public on purpose and only public parameters: the key id, the curve and the
+  // x coordinate. While the algorithm is HS256 (the default) there is nothing to publish and the route looks as if it did not exist.
+  app.get("/.well-known/jwks.json", jwksRateLimiter, (req, res) => {
+    if (currentJwtPolicy().algorithm !== "EdDSA") {
+      res.set("Cache-Control", "no-store");
+      return res.status(404).json({ error: "Not found" });
+    }
+    let body: string;
+    try {
+      body = JSON.stringify(jwtKeyStore().jwks());
+    } catch {
+      res.set("Cache-Control", "no-store");
+      return res.status(503).json({ error: "The key set is not available" });
+    }
+    // Five minutes: long enough to spare the server, short enough that a rotation reaches a verifier within one cycle.
+    res.set({ "Cache-Control": "public, max-age=300, must-revalidate", "X-Content-Type-Options": "nosniff", "Content-Type": "application/jwk-set+json; charset=utf-8" });
+    res.send(body);
+  });
+
   app.post("/api/login", loginRateLimiter, asyncHandler(async (req, res) => {
     const { username, password } = req.body || {};
     if (typeof username !== "string" || typeof password !== "string") {
@@ -82,10 +101,8 @@ export function registerAuthRoutes(app: express.Express, deps: AuthRouteDeps = {
     // `id` is this account's own real, never-reused identity -
     // see effectiveId()'s own doc comment for why tokenVersion alone
     // isn't enough once an account can be deleted and its username reused.
-    const token = jwt.sign(
-      { username: user.username, role: user.role, tokenVersion: effectiveTokenVersion(user), id: effectiveId(user) },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN as any }
+    const token = signLoginToken(
+      { username: user.username, role: user.role, tokenVersion: effectiveTokenVersion(user), id: effectiveId(user) }
     );
     // Issued alongside the access token so a client can recover from
     // its own real time-based expiry (see refresh_tokens.ts's own header
@@ -128,10 +145,8 @@ export function registerAuthRoutes(app: express.Express, deps: AuthRouteDeps = {
       authFailuresTotal.inc({ reason: "outside_without_second_factor" });
       return res.status(403).json(NEEDS_SECOND_FACTOR);
     }
-    const token = jwt.sign(
-      { username: result.user.username, role: result.user.role, tokenVersion: effectiveTokenVersion(result.user), id: effectiveId(result.user) },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN as any }
+    const token = signLoginToken(
+      { username: result.user.username, role: result.user.role, tokenVersion: effectiveTokenVersion(result.user), id: effectiveId(result.user) }
     );
     res.json({ success: true, token, refreshToken: result.refreshToken, role: result.user.role });
   }));

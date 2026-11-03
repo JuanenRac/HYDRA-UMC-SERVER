@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { SecurityConfig, type SecurityFile } from "../src/securityConfig.ts";
 import { LANGUAGES, MESSAGES, detectLanguage, translate } from "../admin-ui/src/i18n.ts";
 import {
-  SWITCHES, PRESENCE_ACTIONS, isLocked, jobDispatcherNeedsConfirmation, jobDispatcherPatch, needsConfirmation, parseRobotMapText, presenceActionPatch, readJobDispatcher, readPresenceAction, readSwitches,
+  SWITCHES, PRESENCE_ACTIONS, JWT_ALGORITHMS, isLocked, jwtAlgorithmPatch, readJwtAlgorithm, readJwtKeys, jobDispatcherNeedsConfirmation, jobDispatcherPatch, needsConfirmation, parseRobotMapText, presenceActionPatch, readJobDispatcher, readPresenceAction, readSwitches,
   robotMapToText, switchPatch, warningKeys,
 } from "../admin-ui/src/securityModel.ts";
 
@@ -15,9 +15,9 @@ function makeConfig(env: any = {}, initial: SecurityFile = {}) {
   return { config, stored: () => stored };
 }
 
-test("the twelve switches are exactly the ones the server reports, each on its conservative value by default", () => {
+test("the thirteen switches are exactly the ones the server reports, each on its conservative value by default", () => {
   const states = readSwitches(makeConfig().config.snapshot());
-  assert.equal(states.length, 12);
+  assert.equal(states.length, 13);
   assert.deepEqual(states.map((s) => s.def.id), SWITCHES.map((s) => s.id));
   for (const state of states) {
     assert.equal(state.source, "default", state.def.id);
@@ -118,7 +118,7 @@ test("every sentence the tab uses exists in the eight languages, with no placeho
     if (def.warning) used.add(def.warning);
     if (def.confirm) used.add(def.confirm);
   }
-  for (const key of ["presence_action_title", "presence_action_slow", "presence_action_pause", "presence_action_notify", "presence_action_stop", "warn_presence_notify", "jd_title", "jd_relay_label", "jd_relay_help", "jd_map_label", "jd_map_placeholder", "jd_map_help", "jd_map_invalid", "jd_replan_title", "jd_allow_label", "jd_timeout_label", "jd_timeout_invalid", "jd_replan_help", "jd_not_editable", "jd_save", "jd_confirm", "jd_warning_relay", "jd_warning_replan"]) used.add(key);
+  for (const key of ["presence_action_title", "presence_action_slow", "presence_action_pause", "presence_action_notify", "presence_action_stop", "warn_presence_notify", "jd_title", "jd_relay_label", "jd_relay_help", "jd_map_label", "jd_map_placeholder", "jd_map_help", "jd_map_invalid", "jd_replan_title", "jd_allow_label", "jd_timeout_label", "jd_timeout_invalid", "jd_replan_help", "jd_not_editable", "jd_save", "jd_confirm", "jd_warning_relay", "jd_warning_replan", "jwt_algorithm_title", "jwt_algorithm_hs256", "jwt_algorithm_eddsa", "warn_jwt_eddsa", "jwt_keys_title", "jwt_key_active", "jwt_key_retired", "jwt_rotate", "jwt_rotate_confirm", "jwt_rotated", "jwt_rotate_error"]) used.add(key);
   for (const language of LANGUAGES) {
     for (const key of used) {
       const text = MESSAGES[language][key];
@@ -152,4 +152,24 @@ test("the action of a lost heartbeat is read as the server reports it, chosen on
   assert.equal(readPresenceAction({}), null);
   assert.equal(readPresenceAction({ presence: { action: { value: "explode", source: "config" } } }), null);
   assert.ok(warningKeys(makeConfig().config.update({ presence: { action: "notify" } }, "root").warnings).includes("warn_presence_notify"));
+});
+
+test("the signing algorithm is read as the server reports it, chosen on its own, and the environment locks it", () => {
+  const { config } = makeConfig();
+  assert.deepEqual(readJwtAlgorithm(config.snapshot()), { algorithm: "HS256", source: "default" });
+  assert.deepEqual([...JWT_ALGORITHMS], ["HS256", "EdDSA"]);
+  const saved = makeConfig().config.update(jwtAlgorithmPatch("EdDSA"), "root");
+  assert.deepEqual(readJwtAlgorithm(saved.snapshot), { algorithm: "EdDSA", source: "config" });
+  assert.deepEqual(jwtAlgorithmPatch("HS256"), { auth: { jwtAlgorithm: "HS256" } });
+  assert.equal(isLocked(readJwtAlgorithm(makeConfig({ jwtAlgorithm: "EdDSA" }).config.snapshot())!.source), true);
+  assert.equal(readJwtAlgorithm({}), null);
+  assert.equal(readJwtAlgorithm({ auth: { jwtAlgorithm: { value: "none", source: "config" } } }), null);
+  assert.ok(warningKeys(saved.warnings).includes("warn_jwt_eddsa"));
+  // the switch that refuses HS256 tokens is conservative to leave on (nobody signed out) and reports its warning when turned off
+  const accept = readSwitches(config.snapshot()).find((s) => s.def.id === "auth.acceptHs256")!;
+  assert.equal(accept.value, true);
+  const off = makeConfig().config.update(switchPatch(accept.def, false), "root");
+  assert.ok(warningKeys(off.warnings).includes("warn_jwt_hs256_refused"));
+  assert.deepEqual(readJwtKeys({ keys: [{ kid: "a", active: true, acceptedUntil: null }, { kid: "b", active: false, acceptedUntil: 5 }, { nope: 1 }] }), [{ kid: "a", active: true, acceptedUntil: null }, { kid: "b", active: false, acceptedUntil: 5 }]);
+  assert.deepEqual(readJwtKeys(null), []);
 });

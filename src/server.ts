@@ -57,6 +57,7 @@ import type { BleGateway } from "./ble/bleGateway";
 import { issueMediaTicket, mediaTicketKey, verifyMediaTicket } from "./mediaTickets";
 import { infoTicketKey, verifyInfoTicket, type InfoTicketLimits } from "./infoTickets";
 import { registerAuthRoutes } from "./routes/auth";
+import { jwtKeyStore, setJwtPolicyProvider, setKeyOverlapProvider } from "./jwtKeys";
 import { classify as classifyAddress, makeTrustedNetworksGate } from "./trustedNetworks";
 import { registerConnectionRoutes } from "./routes/connectionRoutes";
 import { registerLivenessRoutes } from "./routes/livenessRoutes";
@@ -108,6 +109,7 @@ async function startServer() {
   sweepOrphanedTmpFiles(path.join(process.cwd(), "data"), industrialLog);
 
   const app = express();
+  app.disable("x-powered-by"); // no header names the framework (the public key set and every other answer)
   const PORT = resolvePort();
   setCurrentPort(PORT);
 
@@ -337,8 +339,8 @@ async function startServer() {
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
     save: (file) => {
-      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging } = file;
-      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging });
+      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging });
     },
     tlsActive: startupTls.enabled,
     bleActiveMode: resolveBleMode(securityEnvFrom(process.env).bleGatt, loadServerConfig()).value,
@@ -363,6 +365,12 @@ async function startServer() {
   // Whether the history of connections keeps the address and user agent of a client (off unless an administrator turned it on).
   setRecordAddress(() => security.connectionAddressRecorded());
 
+  // Which algorithm signs the login tokens and which ones the verifier accepts is read from the security options on every token.
+  setJwtPolicyProvider(() => security.jwtPolicy());
+  setKeyOverlapProvider(() => security.keyOverlapSeconds());
+  if (security.jwtPolicy().algorithm === "EdDSA") {
+    try { jwtKeyStore().ensureActive(); } catch (error) { throw new Error(`auth.jwtAlgorithm is EdDSA but the key file (${jwtKeyStore().file}) cannot be used: ${(error as Error).message}`); }
+  }
   registerAdminRoutes(app, {
     authenticate, requireAdmin, asyncHandler, industrialLog, wsClients,
     logFile: LOG_FILE, getCurrentPort, loadServerConfig, saveServerConfig, security, audit,

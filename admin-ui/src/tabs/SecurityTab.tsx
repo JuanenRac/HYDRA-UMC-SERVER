@@ -13,7 +13,7 @@ import { Lock, Save, ShieldCheck } from 'lucide-react';
 import { ApiError, apiFetch } from '../api';
 import { detectLanguage, translate, type Language } from '../i18n';
 import {
-  PRESENCE_ACTIONS, isLocked, jobDispatcherNeedsConfirmation, jobDispatcherPatch, needsConfirmation, parseRobotMapText, presenceActionPatch, readJobDispatcher,
+  JWT_ALGORITHMS, PRESENCE_ACTIONS, isLocked, jwtAlgorithmPatch, readJwtAlgorithm, readJwtKeys, type JwtAlgorithm, type JwtAlgorithmState, type JwtKeyRow, jobDispatcherNeedsConfirmation, jobDispatcherPatch, needsConfirmation, parseRobotMapText, presenceActionPatch, readJobDispatcher,
   readPresenceAction, readSwitches, robotMapToText, switchPatch, warningKeys, type JobDispatcherState, type PresenceAction, type PresenceActionState, type SwitchState,
 } from '../securityModel';
 
@@ -32,6 +32,8 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
   const [switches, setSwitches] = useState<SwitchState[]>([]);
   const [dispatcher, setDispatcher] = useState<JobDispatcherState | null>(null);
   const [presence, setPresence] = useState<PresenceActionState | null>(null);
+  const [jwt, setJwt] = useState<JwtAlgorithmState | null>(null);
+  const [jwtKeys, setJwtKeys] = useState<JwtKeyRow[]>([]);
   const [relay, setRelay] = useState(false);
   const [mapText, setMapText] = useState('');
   const [allow, setAllow] = useState(false);
@@ -45,11 +47,39 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
     const jd = readJobDispatcher(snapshot);
     setDispatcher(jd);
     setPresence(readPresenceAction(snapshot));
+    const algorithm = readJwtAlgorithm(snapshot);
+    setJwt(algorithm);
+    if (algorithm?.algorithm === 'EdDSA') void loadKeys();
+    else setJwtKeys([]);
     if (jd) {
       setRelay(jd.relayEnabled);
       setMapText(robotMapToText(jd.robotMap));
       setAllow(jd.allowUnconfirmed);
       setTimeoutText(String(jd.timeoutSeconds));
+    }
+  };
+
+  const loadKeys = async () => {
+    try {
+      setJwtKeys(readJwtKeys(await apiFetch<unknown>('/api/admin/jwt-keys')));
+    } catch {
+      setJwtKeys([]);
+    }
+  };
+
+  const rotate = async () => {
+    if (!window.confirm(t('jwt_rotate_confirm'))) return;
+    setBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      setJwtKeys(readJwtKeys(await apiFetch<unknown>('/api/admin/jwt-keys/rotate', { method: 'POST' })));
+      setMessage(t('jwt_rotated'));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) onAuthError(err);
+      else setError(t('jwt_rotate_error'));
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -135,6 +165,30 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
             {PRESENCE_ACTIONS.map(action => <option key={action} value={action}>{t(`presence_action_${action}`)}</option>)}
           </select>
           <span className="text-[10px] text-slate-500">{t(`source_${presence.source}`)}</span>
+        </div>
+      )}
+
+      {jwt && (
+        <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col gap-2" data-testid="security-jwt">
+          <label className="text-xs font-bold text-slate-200 flex items-center gap-2" htmlFor="jwt-algorithm">
+            {t('jwt_algorithm_title')}
+            {isLocked(jwt.source) && <Lock size={12} className="text-amber-400" />}
+          </label>
+          <select id="jwt-algorithm" data-testid="jwt-algorithm" value={jwt.algorithm} disabled={busy || isLocked(jwt.source)} onChange={e => void send(jwtAlgorithmPatch(e.target.value as JwtAlgorithm))} className={input}>
+            {JWT_ALGORITHMS.map(algorithm => <option key={algorithm} value={algorithm}>{t(`jwt_algorithm_${algorithm.toLowerCase()}`)}</option>)}
+          </select>
+          <span className="text-[10px] text-slate-500">{t(`source_${jwt.source}`)}</span>
+          {jwt.algorithm === 'EdDSA' && (
+            <div className="flex flex-col gap-1" data-testid="jwt-keys">
+              <h3 className="text-xs font-bold text-slate-200">{t('jwt_keys_title')}</h3>
+              {jwtKeys.map(key => (
+                <span key={key.kid} className="text-[11px] text-slate-400 font-mono">
+                  {key.kid} - {key.active ? t('jwt_key_active') : `${t('jwt_key_retired')} ${key.acceptedUntil ? new Date(key.acceptedUntil * 1000).toLocaleString() : ''}`}
+                </span>
+              ))}
+              <button type="button" data-testid="jwt-rotate" disabled={busy} onClick={() => void rotate()} className={button}>{t('jwt_rotate')}</button>
+            </div>
+          )}
         </div>
       )}
 

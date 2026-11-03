@@ -6,13 +6,13 @@
 // The live connection hub (settings and robot delta broadcasts) and the WebSocket endpoint
 // with its heartbeat, moved out of server.ts unchanged.
 import http from "http";
-import jwt from "jsonwebtoken";
 import { WebSocketServer, WebSocket } from "ws";
 import { RobotIdDuplicatedError, ROBOT_ID_DUPLICATED, duplicatedRobotBody } from "./robotIds";
 import { realSettings, WS_TOKEN_SUBPROTOCOL, wsTokenFromSubprotocol, redactSettingsSecrets } from "./serverPolicy";
 import { findUser, effectiveTokenVersion, effectiveId } from "./users";
 import { authFailuresTotal, setWsClientsSource } from "./metrics";
 import { JWT_SECRET } from "./auth";
+import { verifyAccessToken } from "./jwtKeys";
 import { setupDiscovery } from "./runtime";
 
 export function createWsHub(deps: {
@@ -179,7 +179,7 @@ export function attachWebSocketServer(
 
     // Same explicit HS256 pin as authenticate()'s own jwt.verify() above -
     // see that call site's own comment for why.
-    jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] }, (err: any, decoded: any) => {
+    verifyAccessToken(token, JWT_SECRET, (err: any, decoded: any) => {
       if (err) {
         authFailuresTotal.inc({ reason: "ws_token_invalid" });
         ws.send(JSON.stringify({ error: "Access denied: Invalid token" }));

@@ -38,6 +38,7 @@ export const SWITCHES: readonly SwitchDef[] = [
   { id: 'camera.credentialsViaEnv', section: 'camera', key: 'credentialsViaEnv', riskyWhen: false, label: 'sw_camera_env', warning: 'warn_camera_env', confirm: 'confirm_install', warningCode: 'camera_credentials_in_arguments' },
   { id: 'push.enabled', section: 'push', key: 'enabled', riskyWhen: null, label: 'sw_push', warning: 'warn_push', confirm: null, warningCode: 'push_enabled' },
   { id: 'presence.enabled', section: 'presence', key: 'enabled', riskyWhen: null, label: 'sw_presence', warning: 'warn_presence', confirm: null, warningCode: 'presence_on' },
+  { id: 'auth.acceptHs256', section: 'auth', key: 'acceptHs256', riskyWhen: null, label: 'sw_jwt_accept_hs256', warning: 'warn_jwt_hs256_refused', confirm: null, warningCode: 'jwt_hs256_refused' },
   { id: 'trustedNetworks.enabled', section: 'trustedNetworks', key: 'enabled', riskyWhen: null, label: 'sw_trusted_networks', warning: 'warn_trusted_networks', confirm: null, warningCode: 'trusted_networks_on' },
   { id: 'install.newInstallTls', section: 'install', key: 'newInstallTls', riskyWhen: false, label: 'sw_install_tls', warning: 'warn_install_tls', confirm: 'confirm_install', warningCode: 'new_install_tls_off' },
 ];
@@ -82,6 +83,7 @@ export function warningKeys(warnings: unknown): string[] {
   const keys: string[] = [];
   for (const def of SWITCHES) if (def.warning && def.warningCode && warnings.includes(def.warningCode)) keys.push(def.warning);
   if (warnings.includes('presence_action_notify')) keys.push('warn_presence_notify');
+  if (warnings.includes('jwt_eddsa_on')) keys.push('warn_jwt_eddsa');
   if (warnings.includes('job_stop_relay_on')) keys.push('jd_warning_relay');
   if (warnings.includes('replan_unconfirmed_allowed')) keys.push('jd_warning_replan');
   return keys;
@@ -188,4 +190,43 @@ export function readPresenceAction(snapshot: unknown): PresenceActionState | nul
 /** The request body that chooses the action (nothing else is sent). */
 export function presenceActionPatch(action: PresenceAction): { presence: { action: PresenceAction } } {
   return { presence: { action } };
+}
+
+// ------------------------------------------------------------------ how the sign-in tokens are signed
+
+export const JWT_ALGORITHMS = ['HS256', 'EdDSA'] as const;
+export type JwtAlgorithm = (typeof JWT_ALGORITHMS)[number];
+
+export interface JwtAlgorithmState {
+  algorithm: JwtAlgorithm;
+  source: Source;
+}
+
+/** The algorithm the server reports for new tokens; a server that predates it, or reports it damaged, gives null. */
+export function readJwtAlgorithm(snapshot: unknown): JwtAlgorithmState | null {
+  if (!isObject(snapshot) || !isObject(snapshot.auth) || !isObject(snapshot.auth.jwtAlgorithm)) return null;
+  const { value, source } = snapshot.auth.jwtAlgorithm;
+  if (typeof value !== 'string' || !(JWT_ALGORITHMS as readonly string[]).includes(value) || !isSource(source)) return null;
+  return { algorithm: value as JwtAlgorithm, source };
+}
+
+/** The request body that chooses the algorithm (nothing else is sent). */
+export function jwtAlgorithmPatch(algorithm: JwtAlgorithm): { auth: { jwtAlgorithm: JwtAlgorithm } } {
+  return { auth: { jwtAlgorithm: algorithm } };
+}
+
+export interface JwtKeyRow {
+  kid: string;
+  active: boolean;
+  acceptedUntil: number | null;
+}
+
+/** The signing keys GET /api/admin/jwt-keys reports (state only, never a private part); damaged rows are left out. */
+export function readJwtKeys(answer: unknown): JwtKeyRow[] {
+  if (!isObject(answer) || !Array.isArray(answer.keys)) return [];
+  const rows: JwtKeyRow[] = [];
+  for (const key of answer.keys) {
+    if (isObject(key) && typeof key.kid === 'string' && typeof key.active === 'boolean') rows.push({ kid: key.kid, active: key.active, acceptedUntil: typeof key.acceptedUntil === 'number' ? key.acceptedUntil : null });
+  }
+  return rows;
 }
