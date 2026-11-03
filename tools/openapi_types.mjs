@@ -92,6 +92,7 @@ export const RESPONSES = {
   "POST /api/system/reboot": ref("Success"),
   "POST /api/system/shutdown": ref("Success"),
   "POST /api/settings": ref("Success"),
+  "PUT /api/settings": ref("Success"),
   "PUT /api/users/{username}": ref("Success"),
   "DELETE /api/users/{username}": ref("Success"),
   "POST /api/users": ref("Success"),
@@ -146,6 +147,10 @@ export const REQUESTS = {
 
 // "METHOD /path" -> status codes that a shared middleware answers before the handler runs, so the handler's own source does not show them.
 export const EXTRA_STATUSES = {
+  // The whole tree is saved only when If-Match carries the ETag of the last GET: 428 without it, 412 when it is stale.
+  // (the save itself is shared by POST and PUT, so its 200, 409 and 500 do not show in either handler)
+  "PUT /api/settings": [200, 409, 412, 428, 500],
+  "POST /api/settings": [200, 409, 500],
   // 404 while ecosystemHealth.enabled is off (as if the route did not exist), 403 for a viewer.
   "GET /api/ecosystem/health": [403, 404],
   // 404 while push.enabled is off (as if the route did not exist).

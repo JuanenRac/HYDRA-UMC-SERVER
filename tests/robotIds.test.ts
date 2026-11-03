@@ -42,6 +42,7 @@ function settingsApp(initial: any) {
   const app: any = {
     get(route: string, ...chain: unknown[]) { handlers[`GET ${route}`] = chain[chain.length - 1] as any; },
     post(route: string, ...chain: unknown[]) { handlers[`POST ${route}`] = chain[chain.length - 1] as any; },
+    put(route: string, ...chain: unknown[]) { handlers[`PUT ${route}`] = chain[chain.length - 1] as any; },
   };
   let current = initial;
   registerSettingsRoutes(app, {

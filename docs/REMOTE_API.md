@@ -271,7 +271,7 @@ file-backed (`data/users.json`) store.
   single mistaken edit.
 - `DELETE /api/users/:username` - same last-admin guard as above.
 
-## 2c. Full state: `GET` / `POST /api/settings`, and the atomic `POST /api/robot/:id/command`
+## 2c. Full state: `GET` / `PUT` / `POST /api/settings`, and the atomic `POST /api/robot/:id/command`
 
 The same `GET`/`POST /api/settings` endpoint the web UI itself has always
 used - a remote client reads and writes through this exact contract, not
@@ -291,6 +291,15 @@ a separate one.
   tab, a command that moved a robot) instead of overwriting what the other one
   wrote; a client that sends no `If-Match` is saved as before. A successful save
   answers `{ success: true, revision }`.
+- `PUT /api/settings` (body: the same shape) is the same save with the condition **mandatory**
+  (optimistic concurrency), meant for the clients that edit the global configuration (racks, pick-and-place, catalogue,
+  cameras): read `GET /api/settings`, keep its `ETag` and send it back as `If-Match`. Without `If-Match` (or with only
+  `*`, which would switch the check off) the answer is `428` `{ error, code: "if_match_required", revision }`; when the tree
+  is no longer the version the client read the answer is `412` `{ error, code: "settings_changed", revision }` and nothing
+  is stored: read again, apply the change again, send the new `ETag`. A weak (`W/"..."`) or listed `If-Match` is
+  understood. A successful save answers `{ success: true, revision }` and the new `ETag`; the refusal of a repeated robot id
+  (`409`, section 2v) and the admin requirement (`403`) are the same as for `POST`. The revision covers the whole tree
+  including the live state of the robots, so a `412` can also mean that a robot moved meanwhile: read again.
   **Requires an `admin` token** (`403` for `operator`) -
   this is the same full-tree write the web UI's own panels still use for
   most of their edits, so an `operator` account is effectively

@@ -48,20 +48,41 @@ export function registerSettingsRoutes(app: express.Express, deps: SettingsRoute
     res.json({ ok: conflicts.length === 0, ambiguousCount: conflicts.length, ambiguous: conflicts });
   });
 
-  app.post("/api/settings", authenticate, requireAdmin, async (req, res) => {
+  async function save(req: any, res: any) {
     try {
       const payload = req.body;
-      // The tree changed since this client read it (another administrator's tab, a command that moved a robot): refuse instead of overwriting what the other one wrote.
-      const currentRevision = settingsRevision(loadFullSettingsFromDisk());
-      if (!ifMatchAgrees(req.headers["if-match"] as string | undefined, currentRevision)) {
-        return res.status(409).json({ error: "The settings changed since you read them: reload and apply your change again.", revision: currentRevision });
-      }
       const clamped = (await applySettingsUpdate(payload)) || [];
-      res.json({ success: true, revision: settingsRevision(loadFullSettingsFromDisk()), ...(clamped.length ? { warnings: clamped.map((c) => ({ robotId: c.robotId, field: "heatedBed.targetTemp", requested: c.requested, applied: c.applied, code: "temperature-limit" })) } : {}) });
+      const revision = settingsRevision(loadFullSettingsFromDisk());
+      res.setHeader("ETag", `"${revision}"`);
+      res.json({ success: true, revision, ...(clamped.length ? { warnings: clamped.map((c) => ({ robotId: c.robotId, field: "heatedBed.targetTemp", requested: c.requested, applied: c.applied, code: "temperature-limit" })) } : {}) });
     } catch (e) {
       if (e instanceof RobotIdDuplicatedError) return res.status(409).json(duplicatedRobotBody(e.conflicts));
       console.error("Error writing settings", e);
       res.status(500).json({ error: "Failed to save settings" });
     }
+  }
+
+  app.post("/api/settings", authenticate, requireAdmin, async (req, res) => {
+    // The tree changed since this client read it (another administrator's tab, a command that moved a robot): refuse instead of overwriting what the other one wrote.
+    const currentRevision = settingsRevision(loadFullSettingsFromDisk());
+    if (!ifMatchAgrees(req.headers["if-match"] as string | undefined, currentRevision)) {
+      return res.status(409).json({ error: "The settings changed since you read them: reload and apply your change again.", revision: currentRevision });
+    }
+    return save(req, res);
+  });
+
+  // The same save with the condition mandatory (optimistic concurrency): the body is the whole tree, as in the POST above, and the caller must say which version it read.
+  //   428 - no If-Match (or only `*`, which would turn the check off): read GET /api/settings and send its ETag back.
+  //   412 - the settings are not the version the caller read: the body carries the current revision; read again and apply the change again.
+  app.put("/api/settings", authenticate, requireAdmin, async (req, res) => {
+    const currentRevision = settingsRevision(loadFullSettingsFromDisk());
+    const header = typeof req.headers["if-match"] === "string" ? (req.headers["if-match"] as string) : undefined;
+    if (header === undefined || header.trim() === "" || header.trim() === "*") {
+      return res.status(428).json({ error: "PUT /api/settings needs an If-Match header with the ETag of GET /api/settings (a bare * is not accepted).", code: "if_match_required", revision: currentRevision });
+    }
+    if (!ifMatchAgrees(header, currentRevision)) {
+      return res.status(412).json({ error: "The settings changed since you read them (If-Match does not match): read them again and apply your change again.", code: "settings_changed", revision: currentRevision });
+    }
+    return save(req, res);
   });
 }

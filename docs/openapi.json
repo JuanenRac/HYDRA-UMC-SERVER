@@ -4171,7 +4171,7 @@
             }
           },
           "412": {
-            "description": "The robot changed since it was read (If-Match). The body is documented in docs/REMOTE_API.md.",
+            "description": "Changed since it was read (If-Match does not match). The body is documented in docs/REMOTE_API.md.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4273,7 +4273,7 @@
             }
           },
           "412": {
-            "description": "The robot changed since it was read (If-Match). The body is documented in docs/REMOTE_API.md.",
+            "description": "Changed since it was read (If-Match does not match). The body is documented in docs/REMOTE_API.md.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4527,7 +4527,7 @@
             }
           },
           "412": {
-            "description": "The robot changed since it was read (If-Match). The body is documented in docs/REMOTE_API.md.",
+            "description": "Changed since it was read (If-Match does not match). The body is documented in docs/REMOTE_API.md.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4740,6 +4740,71 @@
           },
           "409": {
             "description": "Conflict with the current state. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "PUT /api/settings",
+        "description": "Requires a signed-in account with the admin role.",
+        "x-access": "admin",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Success"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict with the current state. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Changed since it was read (If-Match does not match). The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "A precondition (If-Match) is required. The body is documented in docs/REMOTE_API.md.",
             "content": {
               "application/json": {
                 "schema": {
