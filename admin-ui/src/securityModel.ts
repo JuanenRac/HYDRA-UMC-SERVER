@@ -265,7 +265,7 @@ export function readRateLimits(snapshot: unknown): RateLimitsState | null {
     const entry = snapshot.rateLimits[key];
     if (!isObject(entry) || !isSource(entry.source)) return null;
     const { value, min, max } = entry;
-    if (typeof value !== 'number' || typeof min !== 'number' || typeof max !== 'number' || !Number.isInteger(value)) return null;
+    if (typeof value !== 'number' || !Number.isFinite(value) || typeof min !== 'number' || typeof max !== 'number') return null;
     out[key] = { value, source: entry.source, min, max };
   }
   return out as RateLimitsState;
@@ -284,9 +284,10 @@ export function rateLimitsPatch(current: RateLimitsState, texts: Record<RateLimi
   const body: Partial<Record<RateLimitKey, number>> = {};
   for (const { key } of RATE_LIMIT_FIELDS) {
     const entry = current[key];
+    if (isLocked(entry.source)) continue; // fixed by the environment of the server: not edited, not sent
     const n = parseRateLimitText(texts[key], entry);
     if (n === null) return null;
-    if (!isLocked(entry.source) && n !== entry.value) body[key] = n;
+    if (n !== entry.value) body[key] = n;
   }
   return { rateLimits: body };
 }

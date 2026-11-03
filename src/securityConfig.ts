@@ -703,15 +703,15 @@ export function validRateLimitNumber(key: RateLimitKey, value: unknown): value i
 }
 
 /**
- * One limiter number: the environment first (the window variables keep their old unit, milliseconds; a value outside the range is ignored, never clamped
- * silently), then the saved file, then the default.
+ * One limiter number: the environment first (the window variables keep their old unit, milliseconds; the deployment may set any positive number, the
+ * ranges bind what is saved from Server Admin), then the saved file, then the default.
  */
 export function resolveRateLimitNumber(key: RateLimitKey, env: SecurityEnv, file: SecurityFile): { value: number; source: Source } {
   const raw = env.rateLimitNumbers?.[key];
   if (isSet(raw)) {
     const parsed = Number(raw.trim());
-    const seconds = key.endsWith("WindowSeconds") ? parsed / 1000 : parsed;
-    if (validRateLimitNumber(key, seconds)) return { value: seconds, source: "env" };
+    const value = key.endsWith("WindowSeconds") ? parsed / 1000 : parsed;
+    if (Number.isFinite(value) && value > 0 && value <= 2_147_483) return { value, source: "env" };
   }
   const saved = file.rateLimits?.[key];
   if (validRateLimitNumber(key, saved)) return { value: saved, source: "config" };

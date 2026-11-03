@@ -35,8 +35,10 @@ test("the environment wins: the old variables keep their meaning (windows in mil
   assert.equal(s.loginMax.value, 7);
   assert.equal(s.loginMax.source, "env");
   assert.equal(s.loginWindowSeconds.value, 120);
-  // 5 is below the range of apiMax: the variable is ignored, not clamped
-  assert.deepEqual([s.apiMax.value, s.apiMax.source], [600, "default"]);
+  // the deployment may set a number below the range of Server Admin (a bench, a test); what is not a positive number is ignored
+  assert.deepEqual([s.apiMax.value, s.apiMax.source], [5, "env"]);
+  const junk = makeConfig(securityEnvFrom({ API_RATE_LIMIT_MAX: "abc", SENSITIVE_RATE_LIMIT_MAX: "-2", STOP_ALL_RATE_LIMIT_MAX: "0" } as any)).config.snapshot().rateLimits;
+  assert.deepEqual([junk.apiMax.source, junk.sensitiveMax.source, junk.stopAllMax.source], ["default", "default", "default"]);
   for (const word of ["on", "yes", "1", "x"]) assert.equal(makeConfig({ rateLimits: word }).config.rateLimits().enabled, true, word);
   for (const word of ["off", " OFF ", "false", "0", "no"]) assert.equal(makeConfig({ rateLimits: word }).config.rateLimits().enabled, false, word);
 });
