@@ -6,7 +6,7 @@ All notable changes to this project are documented here.
 
 - **Model submissions are in the audit record:** `POST /api/models/submit` (administrator only) records a `model-submit` entry with the account, the address, the model name, the category and whether it replaces an existing one; refusals carry the reason, and the model content is never recorded.
 
-- **Named shapes for the operator presence routes:** `GET` and `POST /api/operator/presence` answer with `OperatorPresence` and `OperatorPresenceAck` in `docs/openapi.json`, instead of inline schemas.
+- **Named shapes for the operator presence routes:** `GET` and `POST /api/operator/presence` answer with `OperatorPresence` and `OperatorPresenceAck` in `docs/openapi.json`, instead of inline schemas; the two shapes now come from the copy of the shapes file of the SDK like all the others.
 
 - **Bench test script:** `docs/BENCH_TESTS.md` lists the checks of the frame probe, the live state of a robot and the global stop that need a camera and a robot, all marked not executed.
 

@@ -1434,6 +1434,106 @@
           "description": "The answer the bridge published on the result topic, as it published it; null when none arrived in time."
         }
       }
+    },
+    "OperatorPresenceAck": {
+      "type": "object",
+      "required": [
+        "accepted",
+        "duplicate",
+        "stale",
+        "state",
+        "sequence",
+        "action",
+        "timeoutSeconds"
+      ],
+      "properties": {
+        "accepted": {
+          "type": "boolean"
+        },
+        "duplicate": {
+          "type": "boolean"
+        },
+        "stale": {
+          "type": "boolean"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "present",
+            "lost",
+            "left",
+            "recovering"
+          ]
+        },
+        "sequence": {
+          "type": "integer"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "slow",
+            "pause",
+            "notify",
+            "stop"
+          ]
+        },
+        "timeoutSeconds": {
+          "type": "number"
+        }
+      }
+    },
+    "OperatorPresence": {
+      "type": "object",
+      "required": [
+        "state",
+        "lastSequence",
+        "secondsSinceBeat",
+        "action",
+        "timeoutSeconds",
+        "degradedRobots"
+      ],
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "unknown",
+            "present",
+            "lost",
+            "left",
+            "recovering"
+          ]
+        },
+        "lastSequence": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "secondsSinceBeat": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "slow",
+            "pause",
+            "notify",
+            "stop"
+          ]
+        },
+        "timeoutSeconds": {
+          "type": "number"
+        },
+        "degradedRobots": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        }
+      }
     }
   }
 }

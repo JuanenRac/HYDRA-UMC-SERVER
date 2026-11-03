@@ -24,20 +24,6 @@ export function loadShapes(file = SHAPES_FILE) {
   return document.shapes;
 }
 
-// Shapes the SERVER names itself while the SDK does not carry them yet (the presence routes).
-export const LOCAL_SHAPES = {
-  OperatorPresenceAck: {
-    type: "object",
-    required: ["accepted", "duplicate", "stale", "state", "sequence", "action", "timeoutSeconds"],
-    properties: { accepted: bool, duplicate: bool, stale: bool, state: { type: "string", enum: ["present", "lost", "left", "recovering"] }, sequence: int, action: { type: "string", enum: ["slow", "pause", "notify", "stop"] }, timeoutSeconds: num },
-  },
-  OperatorPresence: {
-    type: "object",
-    required: ["state", "lastSequence", "secondsSinceBeat", "action", "timeoutSeconds", "degradedRobots"],
-    properties: { state: { type: "string", enum: ["unknown", "present", "lost", "left", "recovering"] }, lastSequence: { type: ["integer", "null"] }, secondsSinceBeat: { type: ["integer", "null"] }, action: { type: "string", enum: ["slow", "pause", "notify", "stop"] }, timeoutSeconds: num, degradedRobots: { type: "array", items: int } },
-  },
-};
-
 export const SCHEMAS = loadShapes();
 
 const ref = (name) => ({ $ref: `#/components/schemas/${name}` });

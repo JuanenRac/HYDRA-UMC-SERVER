@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { SCHEMAS, LOCAL_SHAPES, SHAPES_FILE, loadShapes } from "../tools/openapi_types.mjs";
+import { SCHEMAS, SHAPES_FILE, loadShapes } from "../tools/openapi_types.mjs";
 import { compareShapesFile } from "../tools/verify_sdk_contract.mjs";
 
 // The shapes of the answers belong to the SDK: this server carries a byte copy and builds its inventory from it.
@@ -19,12 +19,10 @@ test("the shapes of the inventory are the ones of the copy of the SDK, and nothi
   assert.ok(!/^\s+(LoginResult|TotpStatus|SystemMetrics|UserList):\s*\{/m.test(source), "a shape is written in the server again");
 });
 
-test("the generated inventory carries those shapes, in that order, followed by the few the server names itself", () => {
+test("the generated inventory carries exactly those shapes, in that order", () => {
   const inventory = JSON.parse(fs.readFileSync(new URL("../docs/openapi.json", import.meta.url), "utf8"));
-  assert.deepEqual(Object.keys(inventory.components.schemas), Object.keys({ ...SCHEMAS, ...LOCAL_SHAPES }));
-  assert.deepEqual(inventory.components.schemas, { ...SCHEMAS, ...LOCAL_SHAPES });
-  assert.deepEqual(Object.keys(LOCAL_SHAPES).sort(), ["OperatorPresence", "OperatorPresenceAck"]);
-  for (const name of Object.keys(LOCAL_SHAPES)) assert.ok(!(name in SCHEMAS), `${name} is also a shape of the SDK`);
+  assert.deepEqual(Object.keys(inventory.components.schemas), Object.keys(SCHEMAS));
+  assert.deepEqual(inventory.components.schemas, SCHEMAS);
 });
 
 test("a file that is not a file of shapes is refused instead of read", () => {
