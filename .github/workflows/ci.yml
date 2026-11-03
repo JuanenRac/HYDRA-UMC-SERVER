@@ -19,10 +19,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
       - name: Check out HYDRA-UMC-SDK contract client
         if: ${{ hashFiles('tools/verify_discovery_contract.mjs') != '' }}
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           repository: JuanenRac/HYDRA-UMC-SDK
           ref: v0.5.1
@@ -30,7 +32,7 @@ jobs:
           persist-credentials: false
       - name: Check out HYDRA-UMC-VOICE-UI relay gateway
         if: ${{ hashFiles('tools/verify_voice_relay_contract.mjs') != '' }}
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           repository: JuanenRac/HYDRA-UMC-VOICE-UI
           ref: main
@@ -38,7 +40,7 @@ jobs:
           persist-credentials: false
       - name: Check out HYDRA-UMC-CONNECTOR-HUB adapter catalog
         if: ${{ hashFiles('tools/verify_connector_hub_relay_contract.mjs') != '' }}
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           repository: JuanenRac/HYDRA-UMC-CONNECTOR-HUB
           ref: main
@@ -51,7 +53,7 @@ jobs:
       # The Node checks keep steps of their own: the checkouts above and the environment the contract tests read.
       - name: Set up Node.js
         if: ${{ hashFiles('package.json') != '' }}
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: "20"
           cache: npm
