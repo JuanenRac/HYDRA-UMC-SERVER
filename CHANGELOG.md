@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **Model submissions are in the audit record:** `POST /api/models/submit` (administrator only) records a `model-submit` entry with the account, the address, the model name, the category and whether it replaces an existing one; refusals carry the reason, and the model content is never recorded.
+
+- **Named shapes for the operator presence routes:** `GET` and `POST /api/operator/presence` answer with `OperatorPresence` and `OperatorPresenceAck` in `docs/openapi.json`, instead of inline schemas.
+
 - **Bench test script:** `docs/BENCH_TESTS.md` lists the checks of the frame probe, the live state of a robot and the global stop that need a camera and a robot, all marked not executed.
 
 - **The motion commands are in the audit record:** play, pause, stop, trajectory, table, speed, tool, valve and pump are recorded as `robot-motion` with the account, the controller, the address and the robot, and a stream of jogs is recorded at most once per account and robot every `audit.motionIntervalSeconds` seconds (10 by default, 0 leaves the stream out, set in the safety limits)

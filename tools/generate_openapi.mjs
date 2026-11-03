@@ -13,7 +13,7 @@
 //   node tools/generate_openapi.mjs           rewrite docs/openapi.json
 //   node tools/generate_openapi.mjs --check   fail if the file is out of date
 // =============================================================================
-import { SCHEMAS, RESPONSES, REQUESTS, EXTRA_STATUSES, EMPTY_BODY_STATUSES, errorResponse, jsonContent } from "./openapi_types.mjs";
+import { SCHEMAS, LOCAL_SHAPES, RESPONSES, REQUESTS, EXTRA_STATUSES, EMPTY_BODY_STATUSES, errorResponse, jsonContent } from "./openapi_types.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -186,7 +186,7 @@ function buildDocument() {
       description:
         "Generated from the routes registered in src/. It lists paths, methods, required access, the status codes each handler can return, and the names of the JSON body fields and query parameters it reads. Routes with a stable shape carry typed request and response schemas; the others are described in docs/REMOTE_API.md.",
     },
-    components: { securitySchemes: { bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" } }, schemas: SCHEMAS },
+    components: { securitySchemes: { bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" } }, schemas: { ...SCHEMAS, ...LOCAL_SHAPES } },
     paths,
   };
 }

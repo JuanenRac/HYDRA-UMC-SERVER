@@ -18,10 +18,12 @@ export interface WorksRouteDeps {
   infoAccess: Middleware;
   dataPath: string;
   getSettings: () => any;
+  /** The audit record; a model submission writes one entry (account, address, name, category, whether it replaces; never the model). */
+  audit?: { record: (event: any) => unknown };
 }
 
 export function registerWorksRoutes(app: express.Express, deps: WorksRouteDeps): { resolveWithinDataDir: (...segments: string[]) => string | null } {
-  const { authenticate, requireAdmin, infoAccess, dataPath, getSettings } = deps;
+  const { authenticate, requireAdmin, infoAccess, dataPath, getSettings, audit } = deps;
   // authenticate (not requireAdmin): saving/loading a robot's own
   // trajectory files is an operational action, same tier as POST
   // /api/robot/:id/command below - it writes to disk so it must not be
@@ -146,10 +148,15 @@ export function registerWorksRoutes(app: express.Express, deps: WorksRouteDeps):
     return isPathInside(dataPath, resolved) ? resolved : null;
   }
 
-  app.post("/api/models/submit", authenticate, requireAdmin, (req, res) => {
+  app.post("/api/models/submit", authenticate, requireAdmin, (req: any, res) => {
+    const who = req.user;
+    const note = (outcome: "ok" | "refused" | "failed", detail: Record<string, unknown>) => {
+      try { audit?.record({ type: "model-submit", outcome, userId: who?.id, username: who?.username, ip: req.ip, detail }); } catch { /* the audit never breaks the route */ }
+    };
     try {
       const submissions = realSettings(getSettings())?.modelSubmissions;
       if (!submissions?.enabled) {
+        note("refused", { reason: "submissions-disabled" });
         return res.status(403).json({ error: "This server isn't accepting model submissions right now - enable it from Config > Models first." });
       }
       const { name, category, urdfFilename, urdfXml, meshFiles, overwrite } = req.body || {};
@@ -166,6 +173,7 @@ export function registerWorksRoutes(app: express.Express, deps: WorksRouteDeps):
       const index = readModelSubmissionsIndex();
       const existing = index.find((e: any) => e.slug === slug && e.category === category);
       if (existing && !overwrite) {
+        note("refused", { reason: "exists", name: slug, category, replaces: false });
         return res.status(409).json({ error: `A model named "${slug}" already exists in category "${category}" - resubmit with overwrite:true to replace it, or pick a different name.`, slug });
       }
 
@@ -218,9 +226,11 @@ export function registerWorksRoutes(app: express.Express, deps: WorksRouteDeps):
       const nextIndex = existing ? index.map((e: any) => (e.slug === slug && e.category === category ? entry : e)) : [...index, entry];
       writeModelSubmissionsIndex(nextIndex);
 
+      note("ok", { name: slug, category, replaces: !!existing, meshFiles: Array.isArray(meshFiles) ? meshFiles.length : 0 });
       res.json({ success: true, slug });
     } catch (e: any) {
       console.error("Error accepting model submission", e);
+      note("failed", { reason: "write-error" });
       res.status(500).json({ error: e.message || "Error saving submitted model" });
     }
   });

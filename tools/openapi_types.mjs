@@ -24,6 +24,20 @@ export function loadShapes(file = SHAPES_FILE) {
   return document.shapes;
 }
 
+// Shapes the SERVER names itself while the SDK does not carry them yet (the presence routes).
+export const LOCAL_SHAPES = {
+  OperatorPresenceAck: {
+    type: "object",
+    required: ["accepted", "duplicate", "stale", "state", "sequence", "action", "timeoutSeconds"],
+    properties: { accepted: bool, duplicate: bool, stale: bool, state: { type: "string", enum: ["present", "lost", "left", "recovering"] }, sequence: int, action: { type: "string", enum: ["slow", "pause", "notify", "stop"] }, timeoutSeconds: num },
+  },
+  OperatorPresence: {
+    type: "object",
+    required: ["state", "lastSequence", "secondsSinceBeat", "action", "timeoutSeconds", "degradedRobots"],
+    properties: { state: { type: "string", enum: ["unknown", "present", "lost", "left", "recovering"] }, lastSequence: { type: ["integer", "null"] }, secondsSinceBeat: { type: ["integer", "null"] }, action: { type: "string", enum: ["slow", "pause", "notify", "stop"] }, timeoutSeconds: num, degradedRobots: { type: "array", items: int } },
+  },
+};
+
 export const SCHEMAS = loadShapes();
 
 const ref = (name) => ({ $ref: `#/components/schemas/${name}` });
@@ -61,17 +75,8 @@ export const RESPONSES = {
   "POST /api/stop-all": ref("StopAllResult"),
   "POST /api/stop-all/release": ref("GlobalStopReleased"),
   "POST /api/info/ticket": ref("InfoTicket"),
-  // The answers of the presence routes are described here, not in the shapes copied from the SDK (the SDK does not know them yet).
-  "POST /api/operator/presence": {
-    type: "object",
-    required: ["accepted", "duplicate", "stale", "state", "sequence", "action", "timeoutSeconds"],
-    properties: { accepted: { type: "boolean" }, duplicate: { type: "boolean" }, stale: { type: "boolean" }, state: { type: "string", enum: ["present", "lost", "left", "recovering"] }, sequence: { type: "integer" }, action: { type: "string", enum: ["slow", "pause", "notify", "stop"] }, timeoutSeconds: { type: "number" } },
-  },
-  "GET /api/operator/presence": {
-    type: "object",
-    required: ["state", "lastSequence", "secondsSinceBeat", "action", "timeoutSeconds", "degradedRobots"],
-    properties: { state: { type: "string", enum: ["unknown", "present", "lost", "left", "recovering"] }, lastSequence: { type: ["integer", "null"] }, secondsSinceBeat: { type: ["integer", "null"] }, action: { type: "string", enum: ["slow", "pause", "notify", "stop"] }, timeoutSeconds: { type: "number" }, degradedRobots: { type: "array", items: { type: "integer" } } },
-  },
+  "POST /api/operator/presence": ref("OperatorPresenceAck"),
+  "GET /api/operator/presence": ref("OperatorPresence"),
   "GET /health": ref("HealthReport"),
   "GET /api/robots/liveness": ref("RobotLiveness"),
   "GET /api/ecosystem/health": ref("EcosystemHealth"),

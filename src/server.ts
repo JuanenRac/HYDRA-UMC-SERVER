@@ -474,7 +474,7 @@ async function startServer() {
     return authenticate(req, res, next);
   };
   const issueMediaTicketFor = (username: string) => issueMediaTicket(MEDIA_KEY, username, Date.now());
-  const { resolveWithinDataDir } = registerWorksRoutes(app, { authenticate, requireAdmin, infoAccess, dataPath, getSettings });
+  const { resolveWithinDataDir } = registerWorksRoutes(app, { authenticate, requireAdmin, infoAccess, dataPath, getSettings, audit });
 
   registerCameraRoutes(app, { authenticate, requireAdmin, mediaAccess, issueMediaTicket: issueMediaTicketFor, dataPath, resolveWithinDataDir, cameraProcesses });
 
