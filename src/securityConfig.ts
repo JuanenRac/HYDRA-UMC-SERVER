@@ -217,6 +217,54 @@ export interface JobDispatcherFile {
   };
 }
 
+/** The request limits per address (src/auth.ts). The switch and every number can be changed from Server Admin; each number keeps the range of RATE_LIMIT_BOUNDS. */
+export interface RateLimitsFile {
+  /** Whether the limiters answer 429 when a budget is used up (default: yes; with "no" none of them limits, which only a bench should want). */
+  enabled?: boolean;
+  /** Failed sign-ins allowed per address in the sign-in window. */
+  loginMax?: number;
+  /** The sign-in window, in seconds (the refresh route shares it). */
+  loginWindowSeconds?: number;
+  /** Token renewals allowed per address in the sign-in window. */
+  refreshMax?: number;
+  /** Requests of the read and write API routes allowed per address in the API window. */
+  apiMax?: number;
+  /** Requests of the code and service routes allowed per address in the API window. */
+  sensitiveMax?: number;
+  /** The API window, in seconds. */
+  apiWindowSeconds?: number;
+  /** Global stop requests allowed per address in the global stop window. */
+  stopAllMax?: number;
+  /** The global stop window, in seconds. */
+  stopAllWindowSeconds?: number;
+}
+
+export const RATE_LIMIT_KEYS = ["loginMax", "loginWindowSeconds", "refreshMax", "apiMax", "sensitiveMax", "apiWindowSeconds", "stopAllMax", "stopAllWindowSeconds"] as const;
+export type RateLimitKey = (typeof RATE_LIMIT_KEYS)[number];
+/** Default and whole-number range of every number: the lowest values cannot lock an administrator out for good, the highest cannot turn a limiter into a formality. */
+export const RATE_LIMIT_BOUNDS: Record<RateLimitKey, { def: number; min: number; max: number }> = {
+  loginMax: { def: 5, min: 3, max: 100 },
+  loginWindowSeconds: { def: 900, min: 60, max: 86400 },
+  refreshMax: { def: 120, min: 10, max: 10000 },
+  apiMax: { def: 600, min: 60, max: 100000 },
+  sensitiveMax: { def: 30, min: 5, max: 10000 },
+  apiWindowSeconds: { def: 60, min: 10, max: 3600 },
+  stopAllMax: { def: 60, min: 10, max: 10000 },
+  stopAllWindowSeconds: { def: 60, min: 10, max: 3600 },
+};
+/** The environment variable that still fixes each number (the names the server has always read) and the switch. */
+export const RATE_LIMIT_ENV_NAMES: Record<RateLimitKey, string> = {
+  loginMax: "LOGIN_RATE_LIMIT_MAX",
+  loginWindowSeconds: "LOGIN_RATE_LIMIT_WINDOW_MS",
+  refreshMax: "REFRESH_RATE_LIMIT_MAX",
+  apiMax: "API_RATE_LIMIT_MAX",
+  sensitiveMax: "SENSITIVE_RATE_LIMIT_MAX",
+  apiWindowSeconds: "API_RATE_LIMIT_WINDOW_MS",
+  stopAllMax: "STOP_ALL_RATE_LIMIT_MAX",
+  stopAllWindowSeconds: "STOP_ALL_RATE_LIMIT_WINDOW_MS",
+};
+export const RATE_LIMITS_ENV_SWITCH = "HYDRA_UMC_RATE_LIMITS";
+
 export const MAX_ROBOT_MAP_ENTRIES = 1000;
 const ROBOT_MAP_KEY = /^[A-Za-z0-9._:-]{1,64}$/;
 
@@ -250,6 +298,7 @@ export interface SecurityFile {
   install?: InstallFile;
   websocket?: WebsocketFile;
   logging?: LoggingFile;
+  rateLimits?: RateLimitsFile;
 }
 
 export interface SecurityEnv {
@@ -284,6 +333,9 @@ export interface SecurityEnv {
   voiceRequireSignature?: string;
   cameraCredentialsViaEnv?: string;
   newInstallTls?: string;
+  /** HYDRA_UMC_RATE_LIMITS ("off" switches the limiters off) and the variables of the numbers (RATE_LIMIT_ENV_NAMES), as written. */
+  rateLimits?: string;
+  rateLimitNumbers?: Partial<Record<RateLimitKey, string>>;
   jobStopRelay?: string;
   jobDispatcherConfig?: string;
 }
@@ -321,6 +373,8 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     voiceRequireSignature: env.HYDRA_UMC_VOICE_CONFIRM_REQUIRE_SIGNATURE,
     cameraCredentialsViaEnv: env.HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV,
     newInstallTls: env.HYDRA_UMC_NEW_INSTALL_TLS,
+    rateLimits: env[RATE_LIMITS_ENV_SWITCH],
+    rateLimitNumbers: Object.fromEntries(RATE_LIMIT_KEYS.map((key) => [key, env[RATE_LIMIT_ENV_NAMES[key]]])) as Partial<Record<RateLimitKey, string>>,
     jobStopRelay: env.HYDRA_UMC_JOB_STOP_RELAY,
     jobDispatcherConfig: env.HYDRA_UMC_JOB_DISPATCHER_CONFIG,
   };
@@ -635,6 +689,63 @@ export class SecurityConfigError extends Error {
   }
 }
 
+/** Are the request limiters on? Yes, unless the environment says "off" (or false/0/no) or an administrator turned them off. */
+export function resolveRateLimitsEnabled(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: !["off", "false", "0", "no"].includes(env.trim().toLowerCase()), source: "env" };
+  if (typeof file.rateLimits?.enabled === "boolean") return { value: file.rateLimits.enabled, source: "config" };
+  return { value: true, source: "default" };
+}
+
+/** Is `value` a whole number inside the range of this limiter number? */
+export function validRateLimitNumber(key: RateLimitKey, value: unknown): value is number {
+  const bounds = RATE_LIMIT_BOUNDS[key];
+  return typeof value === "number" && Number.isInteger(value) && value >= bounds.min && value <= bounds.max;
+}
+
+/**
+ * One limiter number: the environment first (the window variables keep their old unit, milliseconds; a value outside the range is ignored, never clamped
+ * silently), then the saved file, then the default.
+ */
+export function resolveRateLimitNumber(key: RateLimitKey, env: SecurityEnv, file: SecurityFile): { value: number; source: Source } {
+  const raw = env.rateLimitNumbers?.[key];
+  if (isSet(raw)) {
+    const parsed = Number(raw.trim());
+    const seconds = key.endsWith("WindowSeconds") ? parsed / 1000 : parsed;
+    if (validRateLimitNumber(key, seconds)) return { value: seconds, source: "env" };
+  }
+  const saved = file.rateLimits?.[key];
+  if (validRateLimitNumber(key, saved)) return { value: saved, source: "config" };
+  return { value: RATE_LIMIT_BOUNDS[key].def, source: "default" };
+}
+
+export interface RateLimitSettings {
+  enabled: boolean;
+  loginMax: number;
+  loginWindowMs: number;
+  refreshMax: number;
+  apiMax: number;
+  sensitiveMax: number;
+  apiWindowMs: number;
+  stopAllMax: number;
+  stopAllWindowMs: number;
+}
+
+/** The limiter settings in force (the window in milliseconds, as express-rate-limit takes it). */
+export function rateLimitSettings(env: SecurityEnv, file: SecurityFile): RateLimitSettings {
+  const n = (key: RateLimitKey) => resolveRateLimitNumber(key, env, file).value;
+  return {
+    enabled: resolveRateLimitsEnabled(env.rateLimits, file).value,
+    loginMax: n("loginMax"),
+    loginWindowMs: n("loginWindowSeconds") * 1000,
+    refreshMax: n("refreshMax"),
+    apiMax: n("apiMax"),
+    sensitiveMax: n("sensitiveMax"),
+    apiWindowMs: n("apiWindowSeconds") * 1000,
+    stopAllMax: n("stopAllMax"),
+    stopAllWindowMs: n("stopAllWindowSeconds") * 1000,
+  };
+}
+
 export interface SecuritySnapshot {
   aiAccess: { value: AiAccess; source: Source };
   infoAuth: { value: boolean; source: Source };
@@ -678,6 +789,8 @@ export interface SecuritySnapshot {
   install: { newInstallTls: { value: boolean; source: Source } };
   websocket: { allowQueryToken: { value: boolean; source: Source } };
   logging: { redactSecrets: { value: boolean; source: Source } };
+  /** The request limiters per address: the switch and every number, each with where it comes from. A change reaches the limiters at once (their counters start again). */
+  rateLimits: { enabled: { value: boolean; source: Source } } & Record<RateLimitKey, { value: number; source: Source; min: number; max: number }>;
   /** The signing key itself is never part of this; only where its file is. */
   mavlink: { signingKeyFile: { value: string; source: Source }; signingAllowUnsigned: { value: boolean; source: Source }; signing: boolean; appliesOnRestart: boolean };
 }
@@ -709,6 +822,11 @@ export class SecurityConfig {
 
   constructor(private options: SecurityConfigOptions) {
     this.file = options.load();
+  }
+
+  /** The limiter settings in force right now (read by src/auth.ts on every request, so a change applies at once). */
+  rateLimits(): RateLimitSettings {
+    return rateLimitSettings(this.options.env, this.file);
   }
 
   aiAdminOnly(): boolean {
@@ -925,6 +1043,10 @@ export class SecurityConfig {
       install: { newInstallTls: resolveNewInstallTls(this.options.env.newInstallTls, this.file) },
       websocket: { allowQueryToken: resolveWsQueryToken(this.options.env.wsQueryToken, this.file) },
       logging: { redactSecrets: resolveLogRedaction(this.options.env.logRedaction, this.file) },
+      rateLimits: {
+        enabled: resolveRateLimitsEnabled(this.options.env.rateLimits, this.file),
+        ...(Object.fromEntries(RATE_LIMIT_KEYS.map((key) => [key, { ...resolveRateLimitNumber(key, this.options.env, this.file), min: RATE_LIMIT_BOUNDS[key].min, max: RATE_LIMIT_BOUNDS[key].max }])) as Record<RateLimitKey, { value: number; source: Source; min: number; max: number }>),
+      },
       voice: {
         includeHeardText: resolveVoiceHeardText(this.options.env.voiceHeardText, this.file),
         minConfidence: resolveVoiceMinConfidence(this.options.env.voiceMinConfidence, this.file),
@@ -1418,6 +1540,30 @@ export class SecurityConfig {
       if (!signing) warnings.push("mavlink_signing_off");
     }
 
+    if (patch.rateLimits !== undefined) {
+      const limitsPatch = patch.rateLimits;
+      if (typeof limitsPatch !== "object" || limitsPatch === null || Array.isArray(limitsPatch)) throw new SecurityConfigError(400, "rateLimits must be an object");
+      const known = new Set<string>(["enabled", ...RATE_LIMIT_KEYS]);
+      for (const field of Object.keys(limitsPatch)) if (!known.has(field)) throw new SecurityConfigError(400, `rateLimits.${field} is not a known option`);
+      const merged: RateLimitsFile = { ...(next.rateLimits ?? {}) };
+      if (limitsPatch.enabled !== undefined) {
+        if (typeof limitsPatch.enabled !== "boolean") throw new SecurityConfigError(400, "rateLimits.enabled must be true or false");
+        if (resolveRateLimitsEnabled(this.options.env.rateLimits, this.file).source === "env") throw lockedBy(RATE_LIMITS_ENV_SWITCH);
+        merged.enabled = limitsPatch.enabled;
+        if (limitsPatch.enabled === false) warnings.push("rate_limits_off");
+      }
+      for (const key of RATE_LIMIT_KEYS) {
+        if (limitsPatch[key] === undefined) continue;
+        const bounds = RATE_LIMIT_BOUNDS[key];
+        if (!validRateLimitNumber(key, limitsPatch[key])) throw new SecurityConfigError(400, `rateLimits.${key} must be a whole number from ${bounds.min} to ${bounds.max}`);
+        if (resolveRateLimitNumber(key, this.options.env, this.file).source === "env") throw lockedBy(RATE_LIMIT_ENV_NAMES[key]);
+        merged[key] = limitsPatch[key];
+      }
+      next.rateLimits = merged;
+      const effective = rateLimitSettings(this.options.env, { ...next, rateLimits: merged });
+      if (effective.enabled && (effective.loginMax > 20 || effective.sensitiveMax > 300)) warnings.push("rate_limits_loose");
+    }
+
     this.options.save(next);
     this.file = next;
     // the file is on disk and the settings are saved: now the dispatcher is asked to read it (the answer comes later)
@@ -1455,6 +1601,10 @@ export class SecurityConfig {
     }
     if (patch.websocket !== undefined) {
       log(`[SECURITY] ${actor} ${snapshot.websocket.allowQueryToken.value ? "allowed a token in the address of the WebSocket (it is recorded in proxy and server logs)" : "forbade a token in the address of the WebSocket"}.`);
+    }
+    if (patch.rateLimits !== undefined) {
+      const r = snapshot.rateLimits;
+      log(`[SECURITY] ${actor} set the request limits per address: ${r.enabled.value ? "ON" : "OFF"}; sign-in ${r.loginMax.value} failed per ${r.loginWindowSeconds.value} s, renewals ${r.refreshMax.value}, API ${r.apiMax.value} and code/service routes ${r.sensitiveMax.value} per ${r.apiWindowSeconds.value} s, global stop ${r.stopAllMax.value} per ${r.stopAllWindowSeconds.value} s.`);
     }
     if (patch.logging !== undefined) {
       log(`[SECURITY] ${actor} turned the blanking of secrets in the log ${snapshot.logging.redactSecrets.value ? "on" : "OFF"}.`);

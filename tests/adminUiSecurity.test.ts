@@ -4,7 +4,7 @@ import { SecurityConfig, type SecurityFile } from "../src/securityConfig.ts";
 import { LANGUAGES, MESSAGES, detectLanguage, translate } from "../admin-ui/src/i18n.ts";
 import {
   SWITCHES, PRESENCE_ACTIONS, JWT_ALGORITHMS, isLocked, jwtAlgorithmPatch, readJwtAlgorithm, readJwtKeys, jobDispatcherNeedsConfirmation, jobDispatcherPatch, needsConfirmation, parseRobotMapText, presenceActionPatch, readJobDispatcher, readPresenceAction, readSwitches,
-  robotMapToText, switchPatch, warningKeys,
+  robotMapToText, switchPatch, warningKeys, RATE_LIMIT_FIELDS, parseRateLimitText, rateLimitsPatch, readRateLimits,
 } from "../admin-ui/src/securityModel.ts";
 
 // The Security tab of the admin UI: what it reads from GET /api/admin/server-config, what it sends and what it says, checked against the real SecurityConfig.
@@ -15,9 +15,9 @@ function makeConfig(env: any = {}, initial: SecurityFile = {}) {
   return { config, stored: () => stored };
 }
 
-test("the thirteen switches are exactly the ones the server reports, each on its conservative value by default", () => {
+test("the fourteen switches are exactly the ones the server reports, each on its conservative value by default", () => {
   const states = readSwitches(makeConfig().config.snapshot());
-  assert.equal(states.length, 13);
+  assert.equal(states.length, 14);
   assert.deepEqual(states.map((s) => s.def.id), SWITCHES.map((s) => s.id));
   for (const state of states) {
     assert.equal(state.source, "default", state.def.id);
@@ -172,4 +172,23 @@ test("the signing algorithm is read as the server reports it, chosen on its own,
   assert.ok(warningKeys(off.warnings).includes("warn_jwt_hs256_refused"));
   assert.deepEqual(readJwtKeys({ keys: [{ kid: "a", active: true, acceptedUntil: null }, { kid: "b", active: false, acceptedUntil: 5 }, { nope: 1 }] }), [{ kid: "a", active: true, acceptedUntil: null }, { kid: "b", active: false, acceptedUntil: 5 }]);
   assert.deepEqual(readJwtKeys(null), []);
+});
+
+test("the request limits: the tab reads the numbers, sends only what changed and refuses what the server would refuse", () => {
+  const { config } = makeConfig({ rateLimitNumbers: { apiMax: "900" } });
+  const state = readRateLimits(config.snapshot())!;
+  assert.deepEqual(state.loginMax, { value: 5, source: "default", min: 3, max: 100 });
+  assert.equal(state.apiMax.source, "env");
+  assert.equal(readRateLimits({ rateLimits: { loginMax: { value: 5 } } }), null);
+  assert.equal(readRateLimits({}), null);
+  const texts = Object.fromEntries(RATE_LIMIT_FIELDS.map(({ key }) => [key, String(state[key].value)])) as any;
+  assert.deepEqual(rateLimitsPatch(state, texts), { rateLimits: {} });
+  assert.deepEqual(rateLimitsPatch(state, { ...texts, loginMax: " 8 ", apiMax: "1000" }), { rateLimits: { loginMax: 8 } });
+  for (const bad of ["", "2", "101", "1.5", "-3", "abc", "1e2"]) assert.equal(rateLimitsPatch(state, { ...texts, loginMax: bad }), null, bad);
+  assert.equal(parseRateLimitText("100", state.loginMax), 100);
+  const sent = rateLimitsPatch(state, { ...texts, loginMax: "8", stopAllMax: "90" })!;
+  const answer = config.update(sent, "root");
+  assert.deepEqual([answer.snapshot.rateLimits.loginMax.value, answer.snapshot.rateLimits.stopAllMax.value], [8, 90]);
+  assert.deepEqual(warningKeys(config.update({ rateLimits: { enabled: false } }, "root").warnings), ["warn_rate_limits_off"]);
+  assert.deepEqual(warningKeys(["rate_limits_loose"]), ["warn_rate_limits_loose"]);
 });

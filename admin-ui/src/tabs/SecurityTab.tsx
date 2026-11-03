@@ -14,6 +14,7 @@ import { ApiError, apiFetch } from '../api';
 import { detectLanguage, translate, type Language } from '../i18n';
 import {
   JWT_ALGORITHMS, PRESENCE_ACTIONS, isLocked, jwtAlgorithmPatch, readJwtAlgorithm, readJwtKeys, type JwtAlgorithm, type JwtAlgorithmState, type JwtKeyRow, jobDispatcherNeedsConfirmation, jobDispatcherPatch, needsConfirmation, parseRobotMapText, presenceActionPatch, readJobDispatcher,
+  RATE_LIMIT_FIELDS, rateLimitsPatch, readRateLimits, type RateLimitKey, type RateLimitsState,
   readPresenceAction, readSwitches, robotMapToText, switchPatch, warningKeys, type JobDispatcherState, type PresenceAction, type PresenceActionState, type SwitchState,
 } from '../securityModel';
 
@@ -34,6 +35,8 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
   const [presence, setPresence] = useState<PresenceActionState | null>(null);
   const [jwt, setJwt] = useState<JwtAlgorithmState | null>(null);
   const [jwtKeys, setJwtKeys] = useState<JwtKeyRow[]>([]);
+  const [limits, setLimits] = useState<RateLimitsState | null>(null);
+  const [limitTexts, setLimitTexts] = useState<Record<RateLimitKey, string> | null>(null);
   const [relay, setRelay] = useState(false);
   const [mapText, setMapText] = useState('');
   const [allow, setAllow] = useState(false);
@@ -47,6 +50,9 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
     const jd = readJobDispatcher(snapshot);
     setDispatcher(jd);
     setPresence(readPresenceAction(snapshot));
+    const rl = readRateLimits(snapshot);
+    setLimits(rl);
+    setLimitTexts(rl ? (Object.fromEntries(RATE_LIMIT_FIELDS.map(({ key }) => [key, String(rl[key].value)])) as Record<RateLimitKey, string>) : null);
     const algorithm = readJwtAlgorithm(snapshot);
     setJwt(algorithm);
     if (algorithm?.algorithm === 'EdDSA') void loadKeys();
@@ -117,6 +123,18 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
     void send(switchPatch(state.def, next));
   };
 
+  const saveLimits = () => {
+    if (!limits || !limitTexts) return;
+    const patch = rateLimitsPatch(limits, limitTexts);
+    if (!patch) {
+      setMessage('');
+      setError(t('rl_invalid'));
+      return;
+    }
+    if (Object.keys(patch.rateLimits).length === 0) return;
+    void send(patch);
+  };
+
   const saveDispatcher = () => {
     if (!dispatcher) return;
     const patch = jobDispatcherPatch({ relayEnabled: relay, robotMapText: mapText, replanEditable: dispatcher.replanEditable, allowUnconfirmed: allow, timeoutText });
@@ -154,6 +172,24 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
           </div>
         ))}
       </div>
+
+      {limits && limitTexts && (
+        <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col gap-3" data-testid="security-rate-limits">
+          <h3 className="text-xs font-bold text-slate-200">{t('rl_title')}</h3>
+          <p className="text-[10px] text-slate-500">{t('rl_help')}</p>
+          {RATE_LIMIT_FIELDS.map(({ key, label }) => (
+            <div key={key} className="flex flex-col gap-0.5">
+              <label className="text-xs font-bold text-slate-200 flex items-center gap-2" htmlFor={`rl-${key}`}>
+                {t(label)}
+                {isLocked(limits[key].source) && <Lock size={12} className="text-amber-400" />}
+              </label>
+              <input id={`rl-${key}`} data-testid={`rl-${key}`} type="text" inputMode="numeric" value={limitTexts[key]} disabled={busy || isLocked(limits[key].source)} onChange={e => setLimitTexts({ ...limitTexts, [key]: e.target.value })} className={`${input} w-32`} />
+              <span className="text-[10px] text-slate-500">{limits[key].min} - {limits[key].max} · {t(`source_${limits[key].source}`)}</span>
+            </div>
+          ))}
+          <button onClick={saveLimits} disabled={busy} className={button} data-testid="rl-save"><Save size={14} /> {t('rl_save')}</button>
+        </div>
+      )}
 
       {presence && (
         <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col gap-2" data-testid="security-presence">

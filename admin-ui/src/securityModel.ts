@@ -40,6 +40,7 @@ export const SWITCHES: readonly SwitchDef[] = [
   { id: 'presence.enabled', section: 'presence', key: 'enabled', riskyWhen: null, label: 'sw_presence', warning: 'warn_presence', confirm: null, warningCode: 'presence_on' },
   { id: 'auth.acceptHs256', section: 'auth', key: 'acceptHs256', riskyWhen: null, label: 'sw_jwt_accept_hs256', warning: 'warn_jwt_hs256_refused', confirm: null, warningCode: 'jwt_hs256_refused' },
   { id: 'trustedNetworks.enabled', section: 'trustedNetworks', key: 'enabled', riskyWhen: null, label: 'sw_trusted_networks', warning: 'warn_trusted_networks', confirm: null, warningCode: 'trusted_networks_on' },
+  { id: 'rateLimits.enabled', section: 'rateLimits', key: 'enabled', riskyWhen: false, label: 'sw_rate_limits', warning: 'warn_rate_limits_off', confirm: 'confirm_rate_limits', warningCode: 'rate_limits_off' },
   { id: 'install.newInstallTls', section: 'install', key: 'newInstallTls', riskyWhen: false, label: 'sw_install_tls', warning: 'warn_install_tls', confirm: 'confirm_install', warningCode: 'new_install_tls_off' },
 ];
 
@@ -82,6 +83,7 @@ export function warningKeys(warnings: unknown): string[] {
   if (!Array.isArray(warnings)) return [];
   const keys: string[] = [];
   for (const def of SWITCHES) if (def.warning && def.warningCode && warnings.includes(def.warningCode)) keys.push(def.warning);
+  if (warnings.includes('rate_limits_loose')) keys.push('warn_rate_limits_loose');
   if (warnings.includes('presence_action_notify')) keys.push('warn_presence_notify');
   if (warnings.includes('jwt_eddsa_on')) keys.push('warn_jwt_eddsa');
   if (warnings.includes('job_stop_relay_on')) keys.push('jd_warning_relay');
@@ -229,4 +231,62 @@ export function readJwtKeys(answer: unknown): JwtKeyRow[] {
     if (isObject(key) && typeof key.kid === 'string' && typeof key.active === 'boolean') rows.push({ kid: key.kid, active: key.active, acceptedUntil: typeof key.acceptedUntil === 'number' ? key.acceptedUntil : null });
   }
   return rows;
+}
+
+// ------------------------------------------------------------------ the request limits per address
+
+/** The numbers of the limiters, in the order the screen shows them; `label` is the key of the text. */
+export const RATE_LIMIT_FIELDS = [
+  { key: 'loginMax', label: 'rl_login_max' },
+  { key: 'loginWindowSeconds', label: 'rl_login_window' },
+  { key: 'refreshMax', label: 'rl_refresh_max' },
+  { key: 'apiMax', label: 'rl_api_max' },
+  { key: 'sensitiveMax', label: 'rl_sensitive_max' },
+  { key: 'apiWindowSeconds', label: 'rl_api_window' },
+  { key: 'stopAllMax', label: 'rl_stopall_max' },
+  { key: 'stopAllWindowSeconds', label: 'rl_stopall_window' },
+] as const;
+export type RateLimitKey = (typeof RATE_LIMIT_FIELDS)[number]['key'];
+
+export interface RateLimitNumber {
+  value: number;
+  source: Source;
+  min: number;
+  max: number;
+}
+
+export type RateLimitsState = Record<RateLimitKey, RateLimitNumber>;
+
+/** The numbers the server reports (the switch is one of SWITCHES); null when the server predates them or reports one damaged. */
+export function readRateLimits(snapshot: unknown): RateLimitsState | null {
+  if (!isObject(snapshot) || !isObject(snapshot.rateLimits)) return null;
+  const out: Partial<RateLimitsState> = {};
+  for (const { key } of RATE_LIMIT_FIELDS) {
+    const entry = snapshot.rateLimits[key];
+    if (!isObject(entry) || !isSource(entry.source)) return null;
+    const { value, min, max } = entry;
+    if (typeof value !== 'number' || typeof min !== 'number' || typeof max !== 'number' || !Number.isInteger(value)) return null;
+    out[key] = { value, source: entry.source, min, max };
+  }
+  return out as RateLimitsState;
+}
+
+/** The number typed in a box, or null when it is not a whole number inside the range. */
+export function parseRateLimitText(text: string, entry: Pick<RateLimitNumber, 'min' | 'max'>): number | null {
+  const trimmed = text.trim();
+  if (!/^\d{1,9}$/.test(trimmed)) return null;
+  const n = Number(trimmed);
+  return n >= entry.min && n <= entry.max ? n : null;
+}
+
+/** The request body with only the numbers that changed and are not fixed by the environment; null when one typed number is not valid, `{}`-bodied (no keys) when nothing changed. */
+export function rateLimitsPatch(current: RateLimitsState, texts: Record<RateLimitKey, string>): { rateLimits: Partial<Record<RateLimitKey, number>> } | null {
+  const body: Partial<Record<RateLimitKey, number>> = {};
+  for (const { key } of RATE_LIMIT_FIELDS) {
+    const entry = current[key];
+    const n = parseRateLimitText(texts[key], entry);
+    if (n === null) return null;
+    if (!isLocked(entry.source) && n !== entry.value) body[key] = n;
+  }
+  return { rateLimits: body };
 }

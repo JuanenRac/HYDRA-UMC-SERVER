@@ -254,6 +254,7 @@ CORS 通过一个可配置的白名单（`CORS_ALLOWED_ORIGINS`，见下文“�
 - `HYDRA_UMC_LOG_REDACTION=off`（`logging.redactSecrets`）- 不再遮蔽日志中的机密；默认会遮蔽。
 - `HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV=off`（`camera.credentialsViaEnv`）- IP 摄像头的密码放在其进程的命令行而不是环境中；默认通过环境传递（下次启动摄像头进程时生效）。
 - `HYDRA_UMC_NEW_INSTALL_TLS=off`（`install.newInstallTls`）- 新安装不会自行开启 TLS；默认在已有自有认证机构的证书时会开启（仅在安装首次启动时读取）。
+- `HYDRA_UMC_RATE_LIMITS=off`（`rateLimits.enabled`）- 关闭按地址的请求限制（登录、续期、API、代码和服务路由、全局停止）；默认开启。每个数字（`rateLimits.loginMax`、`loginWindowSeconds`、`refreshMax`、`apiMax`、`sensitiveMax`、`apiWindowSeconds`、`stopAllMax`、`stopAllWindowSeconds`）也可在 Server Admin 中在固定范围内设置，环境变量 `LOGIN_RATE_LIMIT_MAX`、`API_RATE_LIMIT_MAX` 等仍优先于已保存的值。更改立即生效。
 
 - **谁在连接：** `GET /api/connections/clients` 和 `GET /api/connections/events` 以 HYDRA-UMC-SDK 的封闭契约 `ConnectionClient` 和 `ConnectionEvent` 作答（首次见到、成功或失败的登录、第二因素、登出、已结束的会话）。管理员能看到全部条目，其他账号只能看到自己的；不保存密码、令牌或机密。
 - **生存信号：** `GET /api/robots/liveness` 说明服务器是否收到名册中每个机器人的消息（`live`、`stale` 或 `unknown`，并带最后一条消息的时长），而不是重复只记录操作员所开关内容的 `online` 标志；`data/server-config.json` 的 `liveness.staleAfterS` 设定上限（默认 30 秒）。

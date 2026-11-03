@@ -254,6 +254,7 @@ CORS は、設定可能な許可リスト（`CORS_ALLOWED_ORIGINS`、下記「�
 - `HYDRA_UMC_LOG_REDACTION=off`（`logging.redactSecrets`）- ログの秘密情報の伏せ字をやめます。既定では伏せ字にします。
 - `HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV=off`（`camera.credentialsViaEnv`）- IP カメラのパスワードを、プロセスの環境ではなくコマンドラインに載せます。既定では環境経由です（次にカメラのプロセスが起動するときに適用）。
 - `HYDRA_UMC_NEW_INSTALL_TLS=off`（`install.newInstallTls`）- 新規インストールが自動的に TLS を有効にしません。既定では、自前の認証局の証明書が既にあれば有効にします（インストールの初回起動時にのみ読み込み）。
+- `HYDRA_UMC_RATE_LIMITS=off`（`rateLimits.enabled`）- アドレスごとのリクエスト制限（サインイン、更新、API、コード・サービス系ルート、全体停止）をオフにします。既定ではオンです。各数値（`rateLimits.loginMax`、`loginWindowSeconds`、`refreshMax`、`apiMax`、`sensitiveMax`、`apiWindowSeconds`、`stopAllMax`、`stopAllWindowSeconds`）も Server Admin で決まった範囲内で設定でき、`LOGIN_RATE_LIMIT_MAX`、`API_RATE_LIMIT_MAX` などの環境変数は保存された値より優先されます。変更はすぐに適用されます。
 
 - **接続者：** `GET /api/connections/clients` と `GET /api/connections/events` は、HYDRA-UMC-SDK の閉じた契約 `ConnectionClient` と `ConnectionEvent` で応答します（初回確認、成功または失敗したサインイン、第 2 要素、サインアウト、終了したセッション）。管理者はすべての項目を、その他のアカウントは自分の分だけを見ます。パスワード、トークン、秘密情報は保存されません。
 - **生存信号：** `GET /api/robots/liveness` は、名簿の各ロボットについてサーバーに便りがあったか（`live`、`stale`、`unknown`、最後の便りからの経過時間付き）を返します。オペレーターが入れた内容しか記録しない `online` フラグを繰り返すものではありません。`data/server-config.json` の `liveness.staleAfterS` で上限を設定します（既定は 30 秒）。

@@ -6,6 +6,8 @@
 // Token verification, the admin gate, the async handler wrapper and the rate limiters,
 // moved out of server.ts unchanged.
 import rateLimit from "express-rate-limit";
+import type { RequestHandler } from "express";
+import { rateLimitSettings, securityEnvFrom, type RateLimitSettings } from "./securityConfig";
 import { findUser, effectiveTokenVersion, effectiveId, ScryptOverloadError } from "./users";
 import { jwtSecretProblem } from "./secretsPolicy";
 import { authFailuresTotal } from "./metrics";
@@ -193,32 +195,56 @@ export function requireOperator(req: any, res: any, next: any) {
 // sane (5 attempts / 15 minutes / IP) so a fresh checkout is protected with
 // zero configuration, matching the JWT_SECRET/CORS fallback pattern used
 // elsewhere in this file.
-const LOGIN_RATE_LIMIT_WINDOW_MS = Number(process.env.LOGIN_RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000;
-const LOGIN_RATE_LIMIT_MAX = Number(process.env.LOGIN_RATE_LIMIT_MAX) || 5;
-// Refresh tokens are unguessable 32-byte values, not passwords, and every
-// signed-in client refreshes on its own schedule (often behind one shared
-// NAT address), so the refresh route gets its own, much higher budget.
-const REFRESH_RATE_LIMIT_MAX = Number(process.env.REFRESH_RATE_LIMIT_MAX) || 120;
-export const loginRateLimiter = rateLimit({
-  windowMs: LOGIN_RATE_LIMIT_WINDOW_MS,
-  limit: LOGIN_RATE_LIMIT_MAX,
-  // Only failed attempts count: a script that logs in once per run (a CLI)
-  // must not lock itself out, while password guessing is still capped.
-  skipSuccessfulRequests: true,
-  standardHeaders: true, // sets RateLimit-* response headers a well-behaved client can read
-  legacyHeaders: false,
-  // Overrides express-rate-limit's own generic default body (a bare
-  // "Too many requests" string, no JSON, easy to mistake for a network/
-  // proxy error) with the same {error} shape every other route in this
-  // file already responds with, plus a wait hint - never a bare 500, this
-  // IS the intended, correctly-functioning response when tripped.
-  handler: (req, res) => {
-    res.status(429).json({
-      error: "Too many login attempts - please wait before trying again.",
-      retryAfterMs: LOGIN_RATE_LIMIT_WINDOW_MS,
-    });
-  },
-});
+// Every limiter reads its numbers from the request limits in force (the environment of the deployment first, then what an administrator saved
+// in Server Admin, then the defaults) at the moment of each request, so a change applies at once and the switch can turn all of them off.
+// A limiter is rebuilt when its numbers change (its counters then start again).
+type LimitPick = (s: RateLimitSettings) => { limit: number; windowMs: number };
+type LimitedHandler = (req: any, res: any, windowMs: number) => void;
+
+let rateLimitSource: () => RateLimitSettings = () => rateLimitSettings(securityEnvFrom(process.env), {});
+/** The server gives the limiters the settings of its security configuration (data/server-config.json); without it they use the environment and the defaults. */
+export function setRateLimitSettingsProvider(provider: (() => RateLimitSettings) | null): void {
+  rateLimitSource = provider ?? (() => rateLimitSettings(securityEnvFrom(process.env), {}));
+}
+
+function configurableLimiter(pick: LimitPick, onLimit: LimitedHandler, options: { skipSuccessfulRequests?: boolean } = {}): RequestHandler {
+  let built: { key: string; handler: RequestHandler } | null = null;
+  return (req, res, next) => {
+    const settings = rateLimitSource();
+    if (!settings.enabled) return next();
+    const { limit, windowMs } = pick(settings);
+    const key = `${limit}:${windowMs}`;
+    if (!built || built.key !== key) {
+      built = {
+        key,
+        handler: rateLimit({
+          windowMs,
+          limit,
+          standardHeaders: true, // sets RateLimit-* response headers a well-behaved client can read
+          legacyHeaders: false,
+          // the instance is rebuilt on purpose when an administrator changes its numbers, so the library's check for one created per request does not apply
+          validate: { creationStack: false },
+          ...options,
+          // Replaces express-rate-limit's generic default body (a bare "Too many requests" string, easy to mistake for a network/proxy error)
+          // with the {error} shape every other route answers with, plus a wait hint.
+          handler: (rq, rs) => onLimit(rq, rs, windowMs),
+        }),
+      };
+    }
+    return built.handler(req, res, next);
+  };
+}
+
+const tooMany = (message: string): LimitedHandler => (_req, res, windowMs) => {
+  res.status(429).json({ error: message, retryAfterMs: windowMs });
+};
+
+// Only failed sign-in attempts count: a script that logs in once per run (a CLI) must not lock itself out, while password guessing is still capped.
+export const loginRateLimiter = configurableLimiter(
+  (s) => ({ limit: s.loginMax, windowMs: s.loginWindowMs }),
+  tooMany("Too many login attempts - please wait before trying again."),
+  { skipSuccessfulRequests: true },
+);
 
 // The public key set is asked for by verifiers that cache it, so a modest budget per address is plenty.
 export const jwksRateLimiter = rateLimit({
@@ -226,63 +252,35 @@ export const jwksRateLimiter = rateLimit({
   limit: 60,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => !rateLimitSource().enabled,
   handler: (req, res) => {
     res.status(429).json({ error: "Too many requests for the key set - please wait before trying again.", retryAfterMs: 60 * 1000 });
   },
 });
 
-export const refreshRateLimiter = rateLimit({
-  windowMs: LOGIN_RATE_LIMIT_WINDOW_MS,
-  limit: REFRESH_RATE_LIMIT_MAX,
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: (req, res) => {
-    res.status(429).json({
-      error: "Too many refresh attempts - please wait before trying again.",
-      retryAfterMs: LOGIN_RATE_LIMIT_WINDOW_MS,
-    });
-  },
-});
+// Refresh tokens are unguessable 32-byte values, not passwords, and every signed-in client refreshes on its own schedule (often behind one shared NAT
+// address), so the refresh route gets its own, much higher budget, in the sign-in window.
+export const refreshRateLimiter = configurableLimiter(
+  (s) => ({ limit: s.refreshMax, windowMs: s.loginWindowMs }),
+  tooMany("Too many refresh attempts - please wait before trying again."),
+);
 
-// The global stop (POST /api/stop-all) is a safety function: it has its own, much higher budget than the login (an emergency stop must not be starved by anything else),
-// but it is still bounded, per address, so a loop of calls cannot saturate the server.
-const STOP_ALL_RATE_LIMIT_MAX = Number(process.env.STOP_ALL_RATE_LIMIT_MAX) || 60;
-const STOP_ALL_RATE_LIMIT_WINDOW_MS = Number(process.env.STOP_ALL_RATE_LIMIT_WINDOW_MS) || 60 * 1000;
-export const stopAllRateLimiter = rateLimit({
-  windowMs: STOP_ALL_RATE_LIMIT_WINDOW_MS,
-  limit: STOP_ALL_RATE_LIMIT_MAX,
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: (req, res) => {
-    res.status(429).json({
-      error: "Too many global stop requests from this address - the robots were not touched by this call, use the per-robot stop meanwhile.",
-      retryAfterMs: STOP_ALL_RATE_LIMIT_WINDOW_MS,
-    });
-  },
-});
+// The global stop (POST /api/stop-all) is a safety function: it has its own, much higher budget than the login (an emergency stop must not be starved by
+// anything else), but it is still bounded, per address, so a loop of calls cannot saturate the server.
+export const stopAllRateLimiter = configurableLimiter(
+  (s) => ({ limit: s.stopAllMax, windowMs: s.stopAllWindowMs }),
+  tooMany("Too many global stop requests from this address - the robots were not touched by this call, use the per-robot stop meanwhile."),
+);
 
-// The general budget per address for the API routes that read or change things: generous (a kiosk, a phone and a browser behind one
-// address all poll), so only a loop that hammers the server is stopped. Both the window and the maximum can be set in the environment.
-const API_RATE_LIMIT_WINDOW_MS = Number(process.env.API_RATE_LIMIT_WINDOW_MS) || 60 * 1000;
-const API_RATE_LIMIT_MAX = Number(process.env.API_RATE_LIMIT_MAX) || 600;
-export const apiRateLimiter = rateLimit({
-  windowMs: API_RATE_LIMIT_WINDOW_MS,
-  limit: API_RATE_LIMIT_MAX,
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: (req, res) => {
-    res.status(429).json({ error: "Too many requests from this address - please wait before trying again.", retryAfterMs: API_RATE_LIMIT_WINDOW_MS });
-  },
-});
+// The general budget per address for the API routes that read or change things: generous (a kiosk, a phone and a browser behind one address all poll),
+// so only a loop that hammers the server is stopped.
+export const apiRateLimiter = configurableLimiter(
+  (s) => ({ limit: s.apiMax, windowMs: s.apiWindowMs }),
+  tooMany("Too many requests from this address - please wait before trying again."),
+);
 
 // A tighter budget for the routes that check a one-time code or password again, or that start and stop services: guessing is capped.
-const SENSITIVE_RATE_LIMIT_MAX = Number(process.env.SENSITIVE_RATE_LIMIT_MAX) || 30;
-export const sensitiveRateLimiter = rateLimit({
-  windowMs: API_RATE_LIMIT_WINDOW_MS,
-  limit: SENSITIVE_RATE_LIMIT_MAX,
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: (req, res) => {
-    res.status(429).json({ error: "Too many attempts from this address - please wait before trying again.", retryAfterMs: API_RATE_LIMIT_WINDOW_MS });
-  },
-});
+export const sensitiveRateLimiter = configurableLimiter(
+  (s) => ({ limit: s.sensitiveMax, windowMs: s.apiWindowMs }),
+  tooMany("Too many attempts from this address - please wait before trying again."),
+);
