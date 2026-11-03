@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.8.2.3] - The motion commands and the model submissions are in the audit record, the operator presence routes have named shapes, the interval of the jog flow in the audit is a safety limit and a bench test script lists what needs a robot
+
 - **Model submissions are in the audit record:** `POST /api/models/submit` (administrator only) records a `model-submit` entry with the account, the address, the model name, the category and whether it replaces an existing one; refusals carry the reason, and the model content is never recorded.
 
 - **Named shapes for the operator presence routes:** `GET` and `POST /api/operator/presence` answer with `OperatorPresence` and `OperatorPresenceAck` in `docs/openapi.json`, instead of inline schemas; the two shapes now come from the copy of the shapes file of the SDK like all the others.
