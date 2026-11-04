@@ -20,7 +20,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { X509Certificate } from "node:crypto";
-import { getEcosystemStatus, probeTcp, SERVICE_PROBE_HOST, type EcosystemProjectStatus } from "./ecosystemStatus";
+import { getEcosystemStatus, healthFallbackFor, probeTcp, SERVICE_PROBE_HOST, type EcosystemProjectStatus } from "./ecosystemStatus";
 
 export type ServiceState = "ok" | "degraded" | "down" | "unknown";
 export type ServiceReason =
@@ -314,7 +314,13 @@ export function buildEcosystemHealth(input: BuildInput): EcosystemHealthReport {
 }
 
 /** One GET of a health path: the status, the state and version of a JSON body (read up to 16 KiB), and how long it took. Never throws. */
-export function fetchHealthDetail(port: number, healthPath: string, timeoutMs: number, host: string = SERVICE_PROBE_HOST): Promise<ProbeDetail> {
+export async function fetchHealthDetail(port: number, healthPath: string, timeoutMs: number, host: string = SERVICE_PROBE_HOST): Promise<ProbeDetail> {
+  const first = await fetchHealthDetailOnce(port, healthPath, timeoutMs, host);
+  const fallback = healthFallbackFor(healthPath, first.httpStatus);
+  return fallback ? fetchHealthDetailOnce(port, fallback, timeoutMs, host) : first;
+}
+
+function fetchHealthDetailOnce(port: number, healthPath: string, timeoutMs: number, host: string): Promise<ProbeDetail> {
   return new Promise((resolve) => {
     const started = Date.now();
     let done = false;

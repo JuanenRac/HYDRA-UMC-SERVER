@@ -5,7 +5,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { getEcosystemStatus, probeHttp, probeService, probeTcp } from "../src/ecosystemStatus.ts";
+import { getEcosystemStatus, healthFallbackFor, probeHttp, probeService, probeTcp } from "../src/ecosystemStatus.ts";
 
 // Characterisation of the existing status scan: what it reads from the manifests, which probes it runs and how it
 // answers when nothing is there. It only touches a temporary directory and sockets of its own on 127.0.0.1.
@@ -95,5 +95,21 @@ test("a root that does not exist gives available false instead of an error", asy
     assert.deepEqual(status.projects, []);
   } finally {
     if (previous === undefined) delete process.env.HYDRA_UMC_ECOSYSTEM_ROOT; else process.env.HYDRA_UMC_ECOSYSTEM_ROOT = previous;
+  }
+});
+
+test("the uniform /health route falls back to /stats only when it answers 404", async () => {
+  const closed = await listen((req, res) => { res.statusCode = req.url === "/stats" ? 200 : 404; res.end("{}"); });
+  const broken = await listen((req, res) => { res.statusCode = req.url === "/health" ? 503 : 200; res.end("{}"); });
+  try {
+    assert.equal(await probeHttp(closed.port, "/health"), true, "a closed /health (404) is probed on /stats");
+    assert.equal(await probeHttp(closed.port, "/other"), false, "no fallback for any other route");
+    assert.equal(await probeHttp(broken.port, "/health"), false, "a 503 on /health is a real failure, not a closed switch");
+    assert.equal(healthFallbackFor("/health", 404), "/stats");
+    assert.equal(healthFallbackFor("/health", 503), null);
+    assert.equal(healthFallbackFor("/stats", 404), null);
+  } finally {
+    closed.server.close();
+    broken.server.close();
   }
 });

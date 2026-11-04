@@ -82,19 +82,35 @@ export function probeTcp(port: number, host: string = SERVICE_PROBE_HOST, timeou
   });
 }
 
-export function probeHttp(port: number, healthPath: string): Promise<boolean> {
+/** Health route services sign with when /health is closed (404). Services keep GET /health closed unless their own switch opens it; /stats always answers. */
+export const HEALTH_PATH_DEFAULT = "/health";
+export const HEALTH_PATH_FALLBACK = "/stats";
+
+/** The fallback path to retry, or null: only a 404 on the uniform /health route retries on /stats. */
+export function healthFallbackFor(healthPath: string, status: number | undefined): string | null {
+  return healthPath === HEALTH_PATH_DEFAULT && status === 404 ? HEALTH_PATH_FALLBACK : null;
+}
+
+function probeHttpOnce(port: number, healthPath: string): Promise<{ ok: boolean; status?: number }> {
   return new Promise((resolve) => {
     const req = http.get(
       { host: SERVICE_PROBE_HOST, port, path: healthPath, timeout: SERVICE_PROBE_TIMEOUT_MS },
       (res) => {
         const ok = typeof res.statusCode === "number" && res.statusCode >= 200 && res.statusCode < 300;
         res.resume(); // drain so the socket can close cleanly, we don't need the body
-        resolve(ok);
+        resolve({ ok, status: res.statusCode });
       }
     );
     req.on("timeout", () => req.destroy());
-    req.on("error", () => resolve(false));
+    req.on("error", () => resolve({ ok: false }));
   });
+}
+
+export async function probeHttp(port: number, healthPath: string): Promise<boolean> {
+  const first = await probeHttpOnce(port, healthPath);
+  if (first.ok) return true;
+  const fallback = healthFallbackFor(healthPath, first.status);
+  return fallback ? (await probeHttpOnce(port, fallback)).ok : false;
 }
 
 export function probeService(port: number, healthPath: string | null): Promise<boolean> {
