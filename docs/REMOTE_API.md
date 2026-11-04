@@ -502,8 +502,8 @@ destination folder (relative to this server's own `data/` directory,
 created automatically on first accepted submission).
 
 - `POST /api/models/submit` (body: `{ "name", "category", "urdfFilename",
-  "urdfXml", "meshFiles": [{ "filename", "base64" }, ...], "overwrite"?
-  }`) - **requires an `admin` token**. `403` if model submissions aren't
+  "urdfXml", "meshFiles": [{ "filename", "base64" }, ...], "overwrite"?,
+  "attribution"? }`) - **requires an `admin` token**. `403` if model submissions aren't
   enabled server-side. Writes the URDF + every mesh file under
   `data/<destinationFolder>/<category>/<slug>/` (slug derived from
   `name`), and records the submission in `data/model_submissions.json`.
@@ -514,14 +514,17 @@ created automatically on first accepted submission).
   guard before any file is written. Every attempt is recorded in the audit
   record (`GET /api/audit`) as `model-submit` with the account, the address and
   `detail` = `{ name, category, replaces, meshFiles }` (a refusal carries
-  `detail.reason`); the model itself is never recorded.
+  `detail.reason`); the model itself is never recorded. `attribution` is the licence and credit of the
+  model as text (at most 8000 characters, `400` above that or when it is not text): it is kept in the index, beside the model as
+  `ATTRIBUTION.txt` and in the answer of the download route, and the audit record only counts its characters (`attributionChars`).
+  With `modelSubmissions.requireAttribution` on (Config > Models, off by default) a submission without it is refused with `400`.
 - `GET /api/models` -> `{ "models": [{ "slug", "name", "category",
-  "submittedAt", "folder" }, ...] }` - every submission recorded so far,
+  "submittedAt", "folder", "attribution"? }, ...] }` - every submission recorded so far,
   regardless of which client submitted it. No auth required, matches
   this API's own GET-is-open convention.
 - `GET /api/models/:category/:slug/download` -> `{ "slug", "name",
   "category", "urdfFilename", "urdfXml", "meshFiles": [{ "filename",
-  "base64" }, ...] }` - the full submission bundle, base64-encoded
+  "base64" }, ...], "attribution"? }` - the full submission bundle, base64-encoded
   inline (no auth required, but still `403` if model submissions are
   disabled server-side) - this is what lets HYDRA-UMC-EDITOR-URDF pull
   an already-submitted model back down for further editing before

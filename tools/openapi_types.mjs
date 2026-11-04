@@ -134,6 +134,14 @@ export const REQUESTS = {
   "POST /api/logout": { required: [], fields: { refreshToken: str } },
   "POST /api/users": { required: ["username", "password", "role"], fields: { username: str, password: str, role: str } },
   "POST /api/upload-work": { required: ["folderPath", "fileName", "content"], fields: { folderPath: str, fileName: str, content: str } },
+  "POST /api/models/submit": {
+    required: ["name", "category", "urdfXml"],
+    fields: {
+      name: str, category: str, urdfFilename: str, urdfXml: str, overwrite: bool,
+      meshFiles: { type: "array", items: { type: "object", required: ["filename", "base64"], properties: { filename: str, base64: str } } },
+      attribution: { type: "string", maxLength: 8000, description: "Licence and credit of the model and its meshes; required when the operator turned requireAttribution on." },
+    },
+  },
   "POST /api/system/bluetooth/power": { required: ["on"], fields: { on: bool } },
   "POST /api/system/bluetooth/pair": { required: ["mac"], fields: { mac: str } },
   "POST /api/system/bluetooth/remove": { required: ["mac"], fields: { mac: str } },

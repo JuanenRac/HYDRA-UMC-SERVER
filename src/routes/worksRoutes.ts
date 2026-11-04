@@ -149,6 +149,8 @@ export function registerWorksRoutes(app: express.Express, deps: WorksRouteDeps):
     return isPathInside(dataPath, resolved) ? resolved : null;
   }
 
+  const MAX_ATTRIBUTION_CHARS = 8000;
+
   app.post("/api/models/submit", apiRateLimiter, authenticate, requireAdmin, (req: any, res) => {
     const who = req.user;
     const note = (outcome: "ok" | "refused" | "failed", detail: Record<string, unknown>) => {
@@ -160,9 +162,22 @@ export function registerWorksRoutes(app: express.Express, deps: WorksRouteDeps):
         note("refused", { reason: "submissions-disabled" });
         return res.status(403).json({ error: "This server isn't accepting model submissions right now - enable it from Config > Models first." });
       }
-      const { name, category, urdfFilename, urdfXml, meshFiles, overwrite } = req.body || {};
+      const { name, category, urdfFilename, urdfXml, meshFiles, overwrite, attribution } = req.body || {};
       if (typeof name !== "string" || !name.trim() || typeof category !== "string" || typeof urdfXml !== "string") {
         return res.status(400).json({ error: "name, category, and urdfXml are required" });
+      }
+      // The licence and credit of the meshes travel in their own field (the caller also keeps them as a comment at the top of the URDF).
+      // Optional unless the operator turned `requireAttribution` on; always text, trimmed and capped, never interpreted.
+      if (attribution !== undefined && attribution !== null && typeof attribution !== "string") {
+        return res.status(400).json({ error: "attribution must be text" });
+      }
+      const attributionText = typeof attribution === "string" ? attribution.trim() : "";
+      if (attributionText.length > MAX_ATTRIBUTION_CHARS) {
+        return res.status(400).json({ error: `attribution is too long (max ${MAX_ATTRIBUTION_CHARS} characters)` });
+      }
+      if (submissions.requireAttribution === true && !attributionText) {
+        note("refused", { reason: "attribution-required" });
+        return res.status(400).json({ error: "This server requires the licence and credit of the model in the attribution field." });
       }
       const slug = slugify(name);
       const destFolderRel = String(submissions.destinationFolder || "models/submitted");
@@ -212,6 +227,13 @@ export function registerWorksRoutes(app: express.Express, deps: WorksRouteDeps):
       fs.mkdirSync(destFolder, { recursive: true });
       fs.writeFileSync(path.join(destFolder, safeUrdfFilename), urdfXml, "utf-8");
 
+      const attributionFile = path.join(destFolder, "ATTRIBUTION.txt");
+      if (attributionText) {
+        fs.writeFileSync(attributionFile, attributionText + "\n", "utf-8");
+      } else if (fs.existsSync(attributionFile)) {
+        fs.rmSync(attributionFile, { force: true }); // an overwrite without credit must not keep the credit of the old model
+      }
+
       const meshDir = path.join(destFolder, "meshes");
       if (Array.isArray(meshFiles) && meshFiles.length > 0) {
         fs.mkdirSync(meshDir, { recursive: true });
@@ -223,11 +245,11 @@ export function registerWorksRoutes(app: express.Express, deps: WorksRouteDeps):
         }
       }
 
-      const entry = { slug, name: name.trim(), category, submittedAt: new Date().toISOString(), folder: path.relative(dataPath, destFolder).split(path.sep).join("/") };
+      const entry = { slug, name: name.trim(), category, submittedAt: new Date().toISOString(), folder: path.relative(dataPath, destFolder).split(path.sep).join("/"), ...(attributionText ? { attribution: attributionText } : {}) };
       const nextIndex = existing ? index.map((e: any) => (e.slug === slug && e.category === category ? entry : e)) : [...index, entry];
       writeModelSubmissionsIndex(nextIndex);
 
-      note("ok", { name: slug, category, replaces: !!existing, meshFiles: Array.isArray(meshFiles) ? meshFiles.length : 0 });
+      note("ok", { name: slug, category, replaces: !!existing, meshFiles: Array.isArray(meshFiles) ? meshFiles.length : 0, ...(attributionText ? { attributionChars: attributionText.length } : {}) });
       res.json({ success: true, slug });
     } catch (e: any) {
       console.error("Error accepting model submission", e);
@@ -263,7 +285,7 @@ export function registerWorksRoutes(app: express.Express, deps: WorksRouteDeps):
       const meshFiles = fs.existsSync(meshDir)
         ? fs.readdirSync(meshDir).map(filename => ({ filename, base64: fs.readFileSync(path.join(meshDir, filename)).toString("base64") }))
         : [];
-      res.json({ slug, name: entry.name, category, urdfFilename: urdfFile || "", urdfXml, meshFiles });
+      res.json({ slug, name: entry.name, category, urdfFilename: urdfFile || "", urdfXml, meshFiles, ...(entry.attribution ? { attribution: entry.attribution } : {}) });
     } catch (e: any) {
       console.error("Error reading submitted model", e);
       res.status(500).json({ error: e.message || "Error reading submitted model" });

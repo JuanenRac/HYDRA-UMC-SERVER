@@ -4048,19 +4048,55 @@
           }
         },
         "requestBody": {
-          "required": false,
-          "description": "JSON body. Only the field names the handler reads are listed; types and limits are checked in the handler.",
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "name",
+                  "category",
+                  "urdfXml"
+                ],
                 "properties": {
-                  "category": {},
-                  "meshFiles": {},
-                  "name": {},
-                  "overwrite": {},
-                  "urdfFilename": {},
-                  "urdfXml": {}
+                  "name": {
+                    "type": "string"
+                  },
+                  "category": {
+                    "type": "string"
+                  },
+                  "urdfFilename": {
+                    "type": "string"
+                  },
+                  "urdfXml": {
+                    "type": "string"
+                  },
+                  "overwrite": {
+                    "type": "boolean"
+                  },
+                  "meshFiles": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "filename",
+                        "base64"
+                      ],
+                      "properties": {
+                        "filename": {
+                          "type": "string"
+                        },
+                        "base64": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "attribution": {
+                    "type": "string",
+                    "maxLength": 8000,
+                    "description": "Licence and credit of the model and its meshes; required when the operator turned requireAttribution on."
+                  }
                 }
               }
             }
