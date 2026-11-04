@@ -14,6 +14,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import tls from "node:tls";
 import { DispatcherConfigError, readReplanOptions, validTimeout, writeReplanOptions, DEFAULT_STOP_ACK_TIMEOUT_SECONDS } from "./dispatcherConfigFile";
+import { applyBridgesPatch, resolveBridgeSettings, type BridgesFile, type BridgesSnapshot } from "./bridgeSettings";
 import { DEFAULT_KEY_OVERLAP_SECONDS, JWT_ALGORITHMS, MAX_KEY_OVERLAP_SECONDS, MIN_KEY_OVERLAP_SECONDS, type JwtAlgorithm } from "./jwtKeys";
 import { MQTT_MODES, mqttEnvFrom, resolveMqttMode, resolveMqttSettings, validMqttPrefix, validMqttUrl, type MqttEnv, type MqttFile, type MqttMode, type MqttSettings } from "./mqttBridge";
 
@@ -299,6 +300,8 @@ export interface SecurityFile {
   websocket?: WebsocketFile;
   logging?: LoggingFile;
   rateLimits?: RateLimitsFile;
+  /** The switches of the machine bridges (src/bridgeSettings.ts); announced to the bridges while the gateway is on. */
+  bridges?: BridgesFile;
 }
 
 export interface SecurityEnv {
@@ -791,12 +794,16 @@ export interface SecuritySnapshot {
   logging: { redactSecrets: { value: boolean; source: Source } };
   /** The request limiters per address: the switch and every number, each with where it comes from. A change reaches the limiters at once (their counters start again). */
   rateLimits: { enabled: { value: boolean; source: Source } } & Record<RateLimitKey, { value: number; source: Source; min: number; max: number }>;
+  /** The switches of the machine bridges, each with its value, where it comes from, its default and whether turning it on asks for a confirmation. Off by default for everything that moves hardware. */
+  bridges: BridgesSnapshot & { delivery: "gateway_on" | "gateway_off" };
   /** The signing key itself is never part of this; only where its file is. */
   mavlink: { signingKeyFile: { value: string; source: Source }; signingAllowUnsigned: { value: boolean; source: Source }; signing: boolean; appliesOnRestart: boolean };
 }
 
 export interface SecurityConfigOptions {
   env: SecurityEnv;
+  /** Called once the switches of the bridges are saved, so the gateway can announce them (src/bridgeGateway.ts). */
+  afterBridgesWritten?: () => void;
   load: () => SecurityFile;
   /** Writes the whole saved file (this class passes the stored object with its own fields merged in). */
   save: (file: SecurityFile) => void;
@@ -1043,6 +1050,7 @@ export class SecurityConfig {
       install: { newInstallTls: resolveNewInstallTls(this.options.env.newInstallTls, this.file) },
       websocket: { allowQueryToken: resolveWsQueryToken(this.options.env.wsQueryToken, this.file) },
       logging: { redactSecrets: resolveLogRedaction(this.options.env.logRedaction, this.file) },
+      bridges: { ...resolveBridgeSettings(this.file.bridges), delivery: resolveBridgeGateway(this.options.env.bridgeGateway, this.file).value ? "gateway_on" : "gateway_off" },
       rateLimits: {
         enabled: resolveRateLimitsEnabled(this.options.env.rateLimits, this.file),
         ...(Object.fromEntries(RATE_LIMIT_KEYS.map((key) => [key, { ...resolveRateLimitNumber(key, this.options.env, this.file), min: RATE_LIMIT_BOUNDS[key].min, max: RATE_LIMIT_BOUNDS[key].max }])) as Record<RateLimitKey, { value: number; source: Source; min: number; max: number }>),
@@ -1564,10 +1572,21 @@ export class SecurityConfig {
       if (effective.enabled && (effective.loginMax > 20 || effective.sensitiveMax > 300)) warnings.push("rate_limits_loose");
     }
 
+    if (patch.bridges !== undefined) {
+      try {
+        const result = applyBridgesPatch(this.file.bridges, patch.bridges);
+        next.bridges = result.next;
+        warnings.push(...result.warnings);
+      } catch (error) {
+        throw new SecurityConfigError(400, error instanceof Error ? error.message : "bridges is not valid");
+      }
+    }
+
     this.options.save(next);
     this.file = next;
     // the file is on disk and the settings are saved: now the dispatcher is asked to read it (the answer comes later)
     if (replanWritten) this.options.afterReplanWritten?.();
+    if (patch.bridges !== undefined) this.options.afterBridgesWritten?.();
     if (patch.mavlink !== undefined) this.mavlinkTouched = true;
     const snapshot = this.snapshot();
     if (patch.aiAccess !== undefined) log(`[SECURITY] ${actor} set the local AI relay access to ${snapshot.aiAccess.value}.`);
@@ -1605,6 +1624,10 @@ export class SecurityConfig {
     if (patch.rateLimits !== undefined) {
       const r = snapshot.rateLimits;
       log(`[SECURITY] ${actor} set the request limits per address: ${r.enabled.value ? "ON" : "OFF"}; sign-in ${r.loginMax.value} failed per ${r.loginWindowSeconds.value} s, renewals ${r.refreshMax.value}, API ${r.apiMax.value} and code/service routes ${r.sensitiveMax.value} per ${r.apiWindowSeconds.value} s, global stop ${r.stopAllMax.value} per ${r.stopAllWindowSeconds.value} s.`);
+    }
+    if (patch.bridges !== undefined) {
+      const changed = Object.entries(patch.bridges as Record<string, Record<string, unknown>>).flatMap(([b, o]) => Object.entries(o).map(([k, v]) => `${b}.${k}=${String(v)}`));
+      log(`[SECURITY] ${actor} set the switches of the machine bridges (${changed.join(", ")}); ${snapshot.bridges.delivery === "gateway_on" ? "they are announced to the bridges" : "the bridge gateway is off, so nothing is announced"}.`);
     }
     if (patch.logging !== undefined) {
       log(`[SECURITY] ${actor} turned the blanking of secrets in the log ${snapshot.logging.redactSecrets.value ? "on" : "OFF"}.`);

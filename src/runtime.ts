@@ -74,6 +74,7 @@ export interface ServerConfig {
   websocket?: WebsocketFile;
   logging?: LoggingFile;
   rateLimits?: RateLimitsFile;
+  bridges?: import("./bridgeSettings").BridgesFile;
   /** How old the last news of a robot may be before it is called stale, in seconds (src/robotLiveness.ts; 30 by default). */
   liveness?: { staleAfterS?: number };
 }

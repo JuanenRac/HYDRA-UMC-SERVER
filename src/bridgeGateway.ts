@@ -86,6 +86,8 @@ export interface BridgeGatewayOptions {
   connect?: MqttConnect;
   log: (message: string) => void;
   now?: () => number;
+  /** The switches of the bridges as retained messages, read each time they are announced (src/bridgeSettings.ts). */
+  getBridgeSettings?: () => Array<{ name: string; payload: string }>;
 }
 
 export class BridgeGateway {
@@ -121,6 +123,7 @@ export class BridgeGateway {
       client.on("connect", () => {
         this.connected = true;
         this.options.log(`[GATEWAY] connected to ${redactUrl(this.options.url)}, bridges under ${prefix}`);
+        this.announceSettings();
         for (const topic of [`${prefix}/+/state`, `${prefix}/+/availability`, `${prefix}/+/health`, `${prefix}/+/cmd/+/result`]) {
           client.subscribe(topic, { qos: 1 }, (error) => {
             if (error) this.options.log(`[GATEWAY] could not subscribe to ${topic}: ${error.message}`);
@@ -135,6 +138,20 @@ export class BridgeGateway {
     } catch (error) {
       this.client = null;
       this.options.log(`[GATEWAY] could not start: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** Publishes the switches of every bridge on `<prefix>/<bridge>/settings`, retained, so a bridge that starts later still reads them. Never throws; does nothing while not connected (it runs again on connect). */
+  announceSettings(): void {
+    const client = this.client;
+    if (!client || !this.connected || !this.options.getBridgeSettings) return;
+    const prefix = this.options.getSettings().prefix;
+    try {
+      for (const message of this.options.getBridgeSettings()) client.publish(`${prefix}/${message.name}/settings`, message.payload, { qos: 1, retain: true }, (error) => {
+        if (error) this.options.log(`[GATEWAY] could not publish the settings of ${message.name}: ${error.message}`);
+      });
+    } catch (error) {
+      this.options.log(`[GATEWAY] could not publish the settings: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
