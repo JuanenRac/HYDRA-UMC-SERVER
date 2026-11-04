@@ -8,10 +8,15 @@ import express from "express";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { loopbackCallerProblem } from "../serverPolicy";
+import type { AuditLog } from "../auditLog";
 
 const execFileAsync = promisify(execFile);
 
-export function registerPowerRoutes(app: express.Express): void {
+export function registerPowerRoutes(app: express.Express, deps: { audit?: Pick<AuditLog, "record"> } = {}): void {
+  const { audit } = deps;
+  // The audit record keeps who asked for the power action (the kiosk on this machine, or a refused caller), so a restart is never silent.
+  const auditPower = (type: "power-reboot" | "power-shutdown", outcome: "ok" | "refused" | "failed", req: express.Request, reason?: string) =>
+    audit?.record({ type, outcome, ip: req.ip, detail: reason ? { reason } : {} });
   // Real, deliberately UNauthenticated power controls for THIS device's own
   // kiosk (HYDRA-UMC-OS's install_kiosk.sh) - the shutdown/restart buttons
   // on STUDIO's own pre-login screen (AuthGate.tsx) have to work before an
@@ -30,6 +35,7 @@ export function registerPowerRoutes(app: express.Express): void {
     const problem = loopbackCallerProblem(req.socket.remoteAddress, req.headers);
     if (problem === null) return true;
     res.status(403).json({ error: problem });
+    auditPower(req.path === "/api/system/shutdown" ? "power-shutdown" : "power-reboot", "refused", req, problem);
     return false;
   }
 
@@ -42,11 +48,14 @@ export function registerPowerRoutes(app: express.Express): void {
   // this service otherwise runs as the unprivileged hydra-umc-server user
   // (NoNewPrivileges, see its own systemd unit) and could not reboot/power
   // off the host on its own.
-  async function runPowerAction(action: "reboot" | "poweroff", res: express.Response) {
+  async function runPowerAction(action: "reboot" | "poweroff", req: express.Request, res: express.Response) {
+    const type = action === "reboot" ? "power-reboot" : "power-shutdown";
     res.json({ success: true });
     try {
       await execFileAsync("systemctl", [action]);
+      auditPower(type, "ok", req);
     } catch (error) {
+      auditPower(type, "failed", req, "systemctl failed");
       // The response above already went out - this can only ever reach the
       // server's own log now, never a second HTTP response.
       console.error(`[POWER] systemctl ${action} failed:`, error);
@@ -55,11 +64,11 @@ export function registerPowerRoutes(app: express.Express): void {
 
   app.post("/api/system/reboot", (req, res) => {
     if (!requireLoopbackCaller(req, res)) return;
-    void runPowerAction("reboot", res);
+    void runPowerAction("reboot", req, res);
   });
 
   app.post("/api/system/shutdown", (req, res) => {
     if (!requireLoopbackCaller(req, res)) return;
-    void runPowerAction("poweroff", res);
+    void runPowerAction("poweroff", req, res);
   });
 }

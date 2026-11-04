@@ -205,6 +205,7 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
   // own fetch() doesn't see a connection-reset instead of a clean 200.
   app.post("/api/admin/restart", authenticate, requireAdmin, (req, res) => {
     res.json({ success: true });
+    audit?.record({ type: "server-restart", outcome: "ok", userId: (req as any).user?.id, username: (req as any).user?.username, ip: req.ip });
     industrialLog("[ADMIN] Restart requested via admin UI - exiting for the process supervisor to restart.");
     setTimeout(() => process.exit(0), 250);
   });

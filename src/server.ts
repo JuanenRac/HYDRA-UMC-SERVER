@@ -543,7 +543,7 @@ async function startServer() {
 
   registerInfoRoutes(app, { infoAccess, getSettings, REMOTE_API_VERSION, healthOpen: () => security.healthOpen() });
 
-  registerPowerRoutes(app);
+  registerPowerRoutes(app, { audit });
 
   // Wrapping express in a plain http.Server (instead of app.listen's own
   // implicit one) is what lets the WebSocketServer below share the same
