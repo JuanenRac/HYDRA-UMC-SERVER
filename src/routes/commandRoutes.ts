@@ -20,6 +20,7 @@ import { ifMatchAgrees, robotRevision } from "../serverPolicy";
 import { applyTableMove, planTableMove, type TablePlan } from "../tableCommand";
 import { EDIT_COMMANDS, cleanPoints, editAffectedIds, planRobotEdit } from "../robotEdit";
 import { emitPush } from "../pushNotifications";
+import { acceptedEvent, commandOperation, correlationFor, newOperationId, type CommandLifecycleEvent } from "../commandLifecycle";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
@@ -58,6 +59,8 @@ export interface CommandRouteDeps {
   announceGlobalStopReleased?: (reason: string) => boolean;
   /** The guard of the administrator-only routes. */
   requireAdmin?: Middleware;
+  /** Tells the clients that opened the WebSocket with remoteApiVersion=2 what became of a command (a CommandLifecycleEvent). */
+  broadcastCommandLifecycle?: (event: CommandLifecycleEvent) => void;
 }
 
 /** The playback state a stopped robot ends in; shared by the single-robot "stop" and the global stop so they can never disagree. */
@@ -866,10 +869,23 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     broadcastRobotDelta(deltas, getSettings());
     const newRevision = robotRevision(targetRobot);
     res.setHeader("ETag", `"${newRevision}"`);
+    // The server accepted and applied the command: it says so in the closed shapes of the SDK (an Operation and the first lifecycle event).
+    // The later states (RUNNING, COMPLETED...) need a controller that reports them; the server never invents one.
+    const operationId = newOperationId();
+    const lifecycle = acceptedEvent(operationId, robotId, command);
+    const operation = commandOperation(operationId, correlationFor(req.headers?.["x-correlation-id"], operationId), robotId, command);
+    try {
+      deps.broadcastCommandLifecycle?.(lifecycle);
+    } catch {
+      // announcing a state must never break a command
+    }
     res.json({
       success: true,
       affectedCount: affectedIds.length,
       revision: newRevision,
+      operation_id: operationId,
+      operation,
+      lifecycle,
       ...(tablePlan ? { applied: { robotId, x: tablePlan.x, y: tablePlan.y, ...(tablePlan.rz !== undefined ? { rz: tablePlan.rz } : {}) } } : {}),
       ...(warnings.length ? { warnings } : {}),
     });

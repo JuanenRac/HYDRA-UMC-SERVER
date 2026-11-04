@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **`POST /api/robot/:id/command` answers with an Operation and the first lifecycle event:** an accepted command now carries `operation_id`, `operation` (the closed `Operation` shape of the SDK: kind `robot.command`, status `authorized`, the robot as target, the `X-Correlation-Id` of the caller when it fits the pattern) and `lifecycle` (the closed `CommandLifecycleEvent`, state `ACCEPTED`, sequence 1). The same event goes over the WebSocket as `{ "type": "command-lifecycle", "schema": 2, "event" }` to the clients that opened `/ws` with `?remoteApiVersion=2`. The old fields are unchanged. The server only vouches for ACCEPTED; RUNNING, COMPLETED, FAILED and CANCELLED need a controller that reports them and are not announced yet. A refused command announces nothing.
+
 - **The health probes fall back from `/health` to `/stats`:** the status scan and the ecosystem health report probe the uniform `GET /health` route of a service and, when it answers `404` (the service keeps it closed until its own switch opens it), probe `/stats` instead. Any other answer on `/health` (for example `503`) counts as the service reports it, and no other route has a fallback.
 
 - **The AI dashboard can be framed by its own origin only:** the page served at `/dashboard-ai` now answers with `Content-Security-Policy: frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN`, so the panel of STUDIO can show it (`/dashboard-ai/?embed=1`, the same origin and the same login) and a page of another origin cannot. Tested against a real listener.

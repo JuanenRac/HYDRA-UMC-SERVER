@@ -398,6 +398,7 @@ async function startServer() {
     arming,
     audit,
     onClaimsChanged,
+    broadcastCommandLifecycle: (event) => hub.broadcastCommandLifecycle(event),
     robotEnableAllowed: () => security.robotEnableAllowed(),
     // A global stop is also announced on the MQTT bridge only when an administrator allowed it (safety.publishGlobalStop, off by default).
     announceGlobalStop: () => (security.globalStopPublished() ? mqttBridge?.publishSafety("SAFE_STOP", "global stop") ?? false : undefined),

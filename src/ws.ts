@@ -135,7 +135,15 @@ export function createWsHub(deps: {
     }
   }
 
-  return { wsClients, broadcastSettings, broadcastRobotDelta, broadcastClaims };
+  /** Tells the clients that declared schema 2 what became of a command (the closed CommandLifecycleEvent of the SDK). */
+  function broadcastCommandLifecycle(event: unknown) {
+    const msg = JSON.stringify({ type: "command-lifecycle", schema: 2, event });
+    for (const client of wsClients) {
+      if (client.readyState === WebSocket.OPEN && (client as any).schema >= 2) client.send(msg);
+    }
+  }
+
+  return { wsClients, broadcastSettings, broadcastRobotDelta, broadcastClaims, broadcastCommandLifecycle };
 }
 
 export type WsHub = ReturnType<typeof createWsHub>;

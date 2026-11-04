@@ -27,6 +27,7 @@ function setup(settings: any = makeSettings()) {
   const deltas: any[] = [];
   const started: number[] = [];
   const stopped: number[] = [];
+  const lifecycle: any[] = [];
   registerCommandRoutes(app, {
     authenticate: () => undefined,
     getSettings: () => settings,
@@ -36,6 +37,7 @@ function setup(settings: any = makeSettings()) {
     broadcastRobotDelta: (batch: any[]) => { deltas.push(...batch); },
     startServerPlayback: (id: number) => { started.push(id); },
     stopServerPlayback: (id: number) => { stopped.push(id); },
+    broadcastCommandLifecycle: (event: any) => { lifecycle.push(event); },
   } as any);
   const call = async (id: string, body: any, user: any = { id: "alice-id", username: "alice", role: "operator" }) => {
     let status = 200;
@@ -44,7 +46,7 @@ function setup(settings: any = makeSettings()) {
     await handler!({ params: { id }, body, user }, res);
     return { status, json };
   };
-  return { call, settings, writes, deltas, started, stopped };
+  return { call, settings, writes, deltas, started, stopped, lifecycle };
 }
 
 const robot = (s: any, id: number) => s.controllers[0].robots.find((r: any) => r.id === id);
@@ -253,4 +255,25 @@ test("the Prometheus command label comes from a closed list and never from clien
     assert.ok(["stop-all", "unknown", "stop", "play", "pause", "jog", "reset", "jogStep", "reset3D", "tool", "valve", "pump", "speed", "trajectory", "vision"].includes(label), label);
   }
   assert.ok(labels.includes("reset3D"));
+});
+
+test("an accepted command is answered with its Operation and first lifecycle event, and announced once", async () => {
+  const t = setup();
+  const r = await t.call("1", { command: "stop" });
+  assert.equal(r.status, 200);
+  assert.match(r.json.operation_id, /^cmd-[0-9a-f-]{36}$/);
+  assert.equal(r.json.operation.operation_id, r.json.operation_id);
+  assert.equal(r.json.operation.kind, "robot.command");
+  assert.deepEqual(r.json.operation.target, { kind: "robot", id: "1" });
+  assert.equal(r.json.lifecycle.state, "ACCEPTED");
+  assert.equal(r.json.lifecycle.sequence, 1);
+  assert.equal(r.json.lifecycle.command, "stop");
+  assert.deepEqual(t.lifecycle, [r.json.lifecycle]);
+});
+
+test("a refused command announces nothing", async () => {
+  const t = setup();
+  assert.equal((await t.call("2", { command: "play" })).status, 409);
+  assert.equal((await t.call("1", { command: "nope" })).status, 400);
+  assert.equal(t.lifecycle.length, 0);
 });
