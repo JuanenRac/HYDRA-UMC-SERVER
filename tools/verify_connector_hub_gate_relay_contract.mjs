@@ -183,7 +183,8 @@ async function main() {
     await stopChild(child);
     await stopChild(childNoGate);
     await stopChild(hub);
-    await Promise.all([work, workNoGate].map((dir) => rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })));
+    // Removing the temporary folders is a courtesy: on Windows a stopped child can still hold its working folder for a moment.
+    await Promise.all([work, workNoGate].map((dir) => rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }).catch(() => undefined)));
   }
 }
 
