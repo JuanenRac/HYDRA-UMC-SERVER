@@ -24,6 +24,9 @@ export interface UpstreamDeps {
   DATALAKE_TIMEOUT_MS: number;
   CONNECTOR_HUB_URL: string;
   CONNECTOR_HUB_TIMEOUT_MS: number;
+  /** The address of the decision gate of the connector hub (empty: the gate relay answers 503). */
+  CONNECTOR_HUB_GATE_URL?: string;
+  requireOperator?: Middleware;
   SPI_BRIDGE_URL: string;
   SPI_BRIDGE_VERSION_TIMEOUT_MS: number;
   SPI_BRIDGE_FLASH_TIMEOUT_MS: number;
@@ -34,6 +37,8 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
     authenticate, requireAdmin, industrialLog, wsClients, DATALAKE_URL, DATALAKE_TIMEOUT_MS, CONNECTOR_HUB_URL,
     CONNECTOR_HUB_TIMEOUT_MS, SPI_BRIDGE_URL, SPI_BRIDGE_VERSION_TIMEOUT_MS, SPI_BRIDGE_FLASH_TIMEOUT_MS,
   } = deps;
+  const CONNECTOR_HUB_GATE_URL = deps.CONNECTOR_HUB_GATE_URL ?? "";
+  const requireOperator: Middleware = deps.requireOperator ?? ((_req, _res, next) => (next as () => unknown)());
 
   // Real, authenticated read-only proxy to HYDRA-UMC-DATALAKE's own /query
   // and /aggregate (see DATALAKE_URL's own comment above for why this is a
@@ -146,6 +151,47 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
       return res.status(400).json({ error: "adapterId must start with an alphanumeric character and contain only letters, digits, '_' or '-'" });
     }
     await proxyToConnectorHub(res, `/catalog/${encodeURIComponent(req.params.adapterId)}`);
+  });
+
+  // The decision gate of the connector hub, with the identity of the caller. The hub only believes a token this server issued
+  // (EdDSA with the public key set, or HS256 while the hub still accepts it), so the relay forwards the Authorization header of the
+  // request as it came and adds nothing of its own: the hub decides, and a denial or a refusal (401, 403, 503) is passed on
+  // with its own body. The role is checked here too, before anything leaves this server: a decision needs an operator or an
+  // administrator, the record of decisions any signed-in account (the hub refuses a role that may not read it).
+  async function relayToConnectorHubGate(req: express.Request, res: express.Response, method: "GET" | "POST", path: string) {
+    if (!CONNECTOR_HUB_GATE_URL) {
+      return res.status(503).json({ error: "The decision gate of HYDRA-UMC-CONNECTOR-HUB is not configured on this Server", available: false });
+    }
+    const authorization = req.headers.authorization;
+    if (typeof authorization !== "string" || !/^Bearer\s+\S+$/i.test(authorization)) {
+      return res.status(401).json({ error: "A bearer token is required" });
+    }
+    const body = method === "POST" ? req.body : undefined;
+    if (method === "POST" && (!body || typeof body !== "object" || Array.isArray(body))) {
+      return res.status(400).json({ error: "The body must be a JSON object" });
+    }
+    try {
+      const upstream = await fetch(`${CONNECTOR_HUB_GATE_URL}${path}`, {
+        method,
+        headers: { authorization, ...(method === "POST" ? { "content-type": "application/json" } : {}) },
+        body: method === "POST" ? JSON.stringify(body) : undefined,
+        redirect: "error",
+        signal: AbortSignal.timeout(CONNECTOR_HUB_TIMEOUT_MS),
+      });
+      const answer = await upstream.json().catch(() => null);
+      res.status(upstream.status).json(answer && typeof answer === "object" ? answer : { error: "HYDRA-UMC-CONNECTOR-HUB answered with something that is not JSON" });
+    } catch (error) {
+      const timedOut = error instanceof DOMException && error.name === "TimeoutError";
+      res.status(503).json({ error: timedOut ? "The decision gate of HYDRA-UMC-CONNECTOR-HUB timed out" : "The decision gate of HYDRA-UMC-CONNECTOR-HUB is unavailable" });
+    }
+  }
+
+  app.post("/api/connector-hub/gate/evaluate", authenticate, requireOperator, async (req, res) => {
+    await relayToConnectorHubGate(req, res, "POST", "/gate/evaluate");
+  });
+
+  app.get("/api/connector-hub/gate/audit", authenticate, async (req, res) => {
+    await relayToConnectorHubGate(req, res, "GET", "/gate/audit");
   });
 
   // Real relay to the local spi_bridge HTTP service (HYDRA-UMC/src/

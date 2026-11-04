@@ -57,6 +57,10 @@ export const SPI_BRIDGE_VERSION_TIMEOUT_MS = Math.min(
 // never a real credential (authenticationRef is a reference, never the
 // secret itself - see that project's own docs/ADAPTER_MANIFEST.md).
 export const CONNECTOR_HUB_URL = (process.env.HYDRA_UMC_CONNECTOR_HUB_URL || "").replace(/\/$/, "");
+// The decision gate of the same hub (`serve-gate`, a different port from the catalog): a relay that carries the signed-in person's
+// own token to it, so the hub decides who is asking. Off until the address is set; the hub's own switches (the keys it verifies with,
+// the caller with no identity) stay in the hub's own configuration file.
+export const CONNECTOR_HUB_GATE_URL = (process.env.HYDRA_UMC_CONNECTOR_HUB_GATE_URL || "").replace(/\/$/, "");
 export const CONNECTOR_HUB_TIMEOUT_MS = Math.min(
   Math.max(Number(process.env.HYDRA_UMC_CONNECTOR_HUB_TIMEOUT_MS) || 4000, 250),
   10000,

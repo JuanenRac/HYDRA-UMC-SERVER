@@ -779,6 +779,22 @@ of its own to hold here - the catalog is read-only manifest metadata, and
 `authenticationRef` in a manifest is always a reference, never the
 credential itself.
 
+### The decision gate of the hub: `POST /api/connector-hub/gate/evaluate`, `GET /api/connector-hub/gate/audit`
+
+A relay to the `serve-gate` of the same hub (another port than the catalog) that carries the identity of the person who is signed in.
+The hub only believes a token this server issued (EdDSA with the public key set of `GET /.well-known/jwks.json`, or HS256 while the
+hub still accepts it), so the relay forwards the `Authorization` header as it came and adds nothing of its own; the hub decides and
+records who asked (`caller`). A denial of the gate is a `200` with `allowed: false`; a refusal of the hub (`401`, `403`, `503`) is
+passed on with its own body.
+
+- `POST /api/connector-hub/gate/evaluate` (operator or administrator): the body is the JSON object the hub documents for
+  `/gate/evaluate` (`adapterId`, `capability`, `jobId`, `source` and the optional fields). A body that is not an object is a `400` here.
+- `GET /api/connector-hub/gate/audit` (any signed-in account; the hub refuses a role that may not read it): the head of the chain and
+  the newest decisions.
+
+Both answer `503` with `available: false` while `HYDRA_UMC_CONNECTOR_HUB_GATE_URL` is not set (off by default). The switches of the
+hub itself (the keys it verifies with, whether a caller with no identity is accepted) stay in the configuration file of the hub.
+
 ## 2k. Settings of the installation that harden this API
 
 Environment variables, read once at start (see `docs/PRODUCTION_BOOTSTRAP.md`):

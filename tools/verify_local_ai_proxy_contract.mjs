@@ -183,11 +183,18 @@ async function main() {
     assert.equal(datalakeStub.seenRequests[0].pathname, "/query");
     assert.equal(datalakeStub.seenRequests[0].search, "?sourceId=s&limit=10");
     assert.equal(datalakeStub.seenRequests[0].authorization, `Bearer ${DATALAKE_READ_TOKEN}`);
+    // The edge of a window: `before` is the exclusive end of [start, before) and `end` the inclusive one. The relay forwards the
+    // query string as it came, so neither is renamed, merged or turned into the other on the way.
+    for (const search of ["?sourceId=s&start=1000&before=3000", "?sourceId=s&start=1000&end=3000"]) {
+      const edge = await fetch(`http://127.0.0.1:${serverPort}/api/ai/datalake/query${search}`, { headers: auth });
+      assert.equal(edge.status, 200);
+      assert.equal(datalakeStub.seenRequests.at(-1).search, search, "the window edge is forwarded unchanged");
+    }
     for (const [method, route] of [["POST", "/ingest"], ["POST", "/retention/apply"], ["DELETE", "/query"], ["GET", "/retention"], ["GET", "/query/../retention"]]) {
       const refused = await fetch(`http://127.0.0.1:${serverPort}/api/ai/datalake${route}`, { method, headers: { "content-type": "application/json", ...auth }, body: method === "GET" ? undefined : "{}" });
       assert.equal(refused.status, 403, `${method} ${route}`);
     }
-    assert.equal(datalakeStub.seenRequests.length, 1, "nothing but the read reached the data lake");
+    assert.equal(datalakeStub.seenRequests.length, 3, "nothing but the reads reached the data lake");
 
     // What the dashboard reads to know whether to show its remaining-useful-life card: any signed-in account, never anonymous, three
     // fields and nothing else. Closed by default; open once an administrator switches rul.enabled on; closed again when the stored

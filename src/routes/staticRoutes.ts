@@ -81,6 +81,16 @@ export function registerStaticRoutes(app: express.Express, deps: { dataPath: str
   });
   app.use(express.static(dataPath));
 
+  // The AI dashboard (served at /dashboard-ai, below) may be shown inside a panel of STUDIO (an iframe of /dashboard-ai/?embed=1) and by nobody
+  // else: only a page of this same origin may frame it (it shares the login of that origin, so a frame from another origin would have nothing
+  // to show and a page of another site must not be able to put it behind a transparent layer). The headers are set before the mount of the
+  // STUDIO frontend because that mount, at "/", is the one that finds the files under public/dashboard-ai.
+  app.use("/dashboard-ai", (_req, res, next) => {
+    res.setHeader("Content-Security-Policy", "frame-ancestors 'self'");
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    next();
+  });
+
   // HYDRA-UMC STUDIO's own built frontend (see this file's own header
   // comment) - populated by build-frontend.sh/.bat, gitignored, absent by
   // default on a fresh checkout. express.static() on a missing directory

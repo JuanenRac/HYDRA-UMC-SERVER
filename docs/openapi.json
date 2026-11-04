@@ -3363,6 +3363,60 @@
         "x-rate-limited": true
       }
     },
+    "/api/connector-hub/gate/audit": {
+      "get": {
+        "tags": [
+          "connector-hub"
+        ],
+        "summary": "GET /api/connector-hub/gate/audit",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Passthrough"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/connector-hub/gate/evaluate": {
+      "post": {
+        "tags": [
+          "connector-hub"
+        ],
+        "summary": "POST /api/connector-hub/gate/evaluate",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Passthrough"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/ecosystem/health": {
       "get": {
         "tags": [

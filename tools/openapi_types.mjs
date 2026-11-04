@@ -57,6 +57,8 @@ export const RESPONSES = {
   "PUT /api/telemetry/downsample-plan": ref("Passthrough"),
   "GET /api/adapters": ref("Passthrough"),
   "GET /api/adapters/{adapterId}": ref("Passthrough"),
+  "POST /api/connector-hub/gate/evaluate": ref("Passthrough"),
+  "GET /api/connector-hub/gate/audit": ref("Passthrough"),
   "GET /api/hardware/canota/version": ref("Passthrough"),
   "POST /api/stop-all": ref("StopAllResult"),
   "POST /api/stop-all/release": ref("GlobalStopReleased"),
