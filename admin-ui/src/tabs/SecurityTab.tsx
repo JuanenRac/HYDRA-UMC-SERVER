@@ -11,6 +11,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Lock, Save, ShieldCheck } from 'lucide-react';
 import { ApiError, apiFetch } from '../api';
+import { PairingCard } from './PairingCard';
+import { readTlsFingerprint } from '../pairingModel';
 import { detectLanguage, translate, type Language } from '../i18n';
 import {
   JWT_ALGORITHMS, PRESENCE_ACTIONS, isLocked, jwtAlgorithmPatch, readJwtAlgorithm, readJwtKeys, type JwtAlgorithm, type JwtAlgorithmState, type JwtKeyRow, jobDispatcherNeedsConfirmation, jobDispatcherPatch, needsConfirmation, parseRobotMapText, presenceActionPatch, readJobDispatcher,
@@ -37,6 +39,7 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
   const [jwtKeys, setJwtKeys] = useState<JwtKeyRow[]>([]);
   const [limits, setLimits] = useState<RateLimitsState | null>(null);
   const [limitTexts, setLimitTexts] = useState<Record<RateLimitKey, string> | null>(null);
+  const [fingerprint, setFingerprint] = useState<string | null>(null);
   const [relay, setRelay] = useState(false);
   const [mapText, setMapText] = useState('');
   const [allow, setAllow] = useState(false);
@@ -47,6 +50,7 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
 
   const apply = (snapshot: unknown) => {
     setSwitches(readSwitches(snapshot));
+    setFingerprint(readTlsFingerprint(snapshot));
     const jd = readJobDispatcher(snapshot);
     setDispatcher(jd);
     setPresence(readPresenceAction(snapshot));
@@ -252,6 +256,8 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
           <button onClick={saveDispatcher} disabled={busy} className={button}><Save size={14} /> {t('jd_save')}</button>
         </div>
       )}
+
+      <PairingCard fingerprint={fingerprint} t={t} button={button} input={input} />
 
       {message && <p className="text-xs text-emerald-400">{message}</p>}
       {error && <p role="alert" className="text-xs text-rose-400">{error}</p>}

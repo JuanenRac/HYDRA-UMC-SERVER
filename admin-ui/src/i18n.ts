@@ -100,7 +100,19 @@ export const MESSAGES: Record<Language, Record<string, string>> = {
     "rl_stopall_max": "Global stop requests allowed",
     "rl_stopall_window": "Global stop window (seconds)",
     "rl_save": "Save the limits",
-    "rl_invalid": "Every number must be a whole number inside its range."
+    "rl_invalid": "Every number must be a whole number inside its range.",
+    "pair_title": "Pair a control app",
+    "pair_help": "A phone camera or the pairing link opens the HYDRA-UMC control app with this server's address and the fingerprint of its certificate, so the first connection is pinned. The app shows what it read and asks before it keeps anything.",
+    "pair_no_tls": "This server does not serve TLS: the code carries no fingerprint and the first connection cannot be pinned.",
+    "pair_name_label": "Name shown in the app",
+    "pair_show": "Show the pairing code",
+    "pair_hide": "Hide the pairing code",
+    "pair_scan_hint": "Point the phone camera at the code, or paste the link in the app.",
+    "pair_problem_host": "The address of this page is not a valid host.",
+    "pair_problem_port": "The port of this page is not valid.",
+    "pair_problem_fingerprint": "The fingerprint of the certificate is not valid.",
+    "pair_problem_name": "The name is too long (64 characters at most) or has control characters.",
+    "pair_problem_too_long": "The link is too long."
   },
   "es": {
     "title": "Opciones de acceso",
@@ -191,7 +203,19 @@ export const MESSAGES: Record<Language, Record<string, string>> = {
     "rl_stopall_max": "Peticiones de parada global permitidas",
     "rl_stopall_window": "Ventana de la parada global (segundos)",
     "rl_save": "Guardar los límites",
-    "rl_invalid": "Cada número debe ser un entero dentro de su rango."
+    "rl_invalid": "Cada número debe ser un entero dentro de su rango.",
+    "pair_title": "Emparejar una app de control",
+    "pair_help": "La cámara del teléfono o el enlace de emparejamiento abre la app de control de HYDRA-UMC con la dirección de este servidor y la huella de su certificado, de modo que la primera conexión queda fijada. La app muestra lo que ha leído y pregunta antes de guardar nada.",
+    "pair_no_tls": "Este servidor no sirve TLS: el código no lleva huella y la primera conexión no se puede fijar.",
+    "pair_name_label": "Nombre que muestra la app",
+    "pair_show": "Mostrar el código de emparejamiento",
+    "pair_hide": "Ocultar el código de emparejamiento",
+    "pair_scan_hint": "Apunta la cámara del teléfono al código o pega el enlace en la app.",
+    "pair_problem_host": "La dirección de esta página no es un host válido.",
+    "pair_problem_port": "El puerto de esta página no es válido.",
+    "pair_problem_fingerprint": "La huella del certificado no es válida.",
+    "pair_problem_name": "El nombre es demasiado largo (64 caracteres como máximo) o tiene caracteres de control.",
+    "pair_problem_too_long": "El enlace es demasiado largo."
   },
   "de": {
     "title": "Zugriffsoptionen",
@@ -282,7 +306,19 @@ export const MESSAGES: Record<Language, Record<string, string>> = {
     "rl_stopall_max": "Erlaubte Anfragen für den globalen Stopp",
     "rl_stopall_window": "Fenster des globalen Stopps (Sekunden)",
     "rl_save": "Limits speichern",
-    "rl_invalid": "Jede Zahl muss eine ganze Zahl in ihrem Bereich sein."
+    "rl_invalid": "Jede Zahl muss eine ganze Zahl in ihrem Bereich sein.",
+    "pair_title": "Eine Steuer-App koppeln",
+    "pair_help": "Die Kamera des Telefons oder der Kopplungslink öffnet die HYDRA-UMC-Steuer-App mit der Adresse dieses Servers und dem Fingerabdruck seines Zertifikats, sodass die erste Verbindung festgelegt wird. Die App zeigt, was sie gelesen hat, und fragt, bevor sie etwas speichert.",
+    "pair_no_tls": "Dieser Server bietet kein TLS an: Der Code enthält keinen Fingerabdruck, und die erste Verbindung kann nicht festgelegt werden.",
+    "pair_name_label": "In der App angezeigter Name",
+    "pair_show": "Kopplungscode anzeigen",
+    "pair_hide": "Kopplungscode ausblenden",
+    "pair_scan_hint": "Richten Sie die Telefonkamera auf den Code oder fügen Sie den Link in die App ein.",
+    "pair_problem_host": "Die Adresse dieser Seite ist kein gültiger Host.",
+    "pair_problem_port": "Der Port dieser Seite ist ungültig.",
+    "pair_problem_fingerprint": "Der Fingerabdruck des Zertifikats ist ungültig.",
+    "pair_problem_name": "Der Name ist zu lang (höchstens 64 Zeichen) oder enthält Steuerzeichen.",
+    "pair_problem_too_long": "Der Link ist zu lang."
   },
   "fr": {
     "title": "Options d'accès",
@@ -373,7 +409,19 @@ export const MESSAGES: Record<Language, Record<string, string>> = {
     "rl_stopall_max": "Requêtes d'arrêt global autorisées",
     "rl_stopall_window": "Fenêtre de l'arrêt global (secondes)",
     "rl_save": "Enregistrer les limites",
-    "rl_invalid": "Chaque nombre doit être un entier dans sa plage."
+    "rl_invalid": "Chaque nombre doit être un entier dans sa plage.",
+    "pair_title": "Associer une application de contrôle",
+    "pair_help": "L'appareil photo du téléphone ou le lien d'association ouvre l'application de contrôle HYDRA-UMC avec l'adresse de ce serveur et l'empreinte de son certificat, de sorte que la première connexion est épinglée. L'application montre ce qu'elle a lu et demande avant d'enregistrer quoi que ce soit.",
+    "pair_no_tls": "Ce serveur ne sert pas TLS : le code ne contient pas d'empreinte et la première connexion ne peut pas être épinglée.",
+    "pair_name_label": "Nom affiché dans l'application",
+    "pair_show": "Afficher le code d'association",
+    "pair_hide": "Masquer le code d'association",
+    "pair_scan_hint": "Pointez l'appareil photo du téléphone vers le code ou collez le lien dans l'application.",
+    "pair_problem_host": "L'adresse de cette page n'est pas un hôte valide.",
+    "pair_problem_port": "Le port de cette page n'est pas valide.",
+    "pair_problem_fingerprint": "L'empreinte du certificat n'est pas valide.",
+    "pair_problem_name": "Le nom est trop long (64 caractères au plus) ou contient des caractères de contrôle.",
+    "pair_problem_too_long": "Le lien est trop long."
   },
   "it": {
     "title": "Opzioni di accesso",
@@ -464,7 +512,19 @@ export const MESSAGES: Record<Language, Record<string, string>> = {
     "rl_stopall_max": "Richieste di arresto globale consentite",
     "rl_stopall_window": "Finestra dell'arresto globale (secondi)",
     "rl_save": "Salva i limiti",
-    "rl_invalid": "Ogni numero deve essere un intero nel suo intervallo."
+    "rl_invalid": "Ogni numero deve essere un intero nel suo intervallo.",
+    "pair_title": "Associare un'app di controllo",
+    "pair_help": "La fotocamera del telefono o il link di associazione apre l'app di controllo HYDRA-UMC con l'indirizzo di questo server e l'impronta del suo certificato, così la prima connessione viene fissata. L'app mostra ciò che ha letto e chiede conferma prima di salvare qualsiasi cosa.",
+    "pair_no_tls": "Questo server non offre TLS: il codice non contiene l'impronta e la prima connessione non può essere fissata.",
+    "pair_name_label": "Nome mostrato nell'app",
+    "pair_show": "Mostra il codice di associazione",
+    "pair_hide": "Nascondi il codice di associazione",
+    "pair_scan_hint": "Inquadra il codice con la fotocamera del telefono oppure incolla il link nell'app.",
+    "pair_problem_host": "L'indirizzo di questa pagina non è un host valido.",
+    "pair_problem_port": "La porta di questa pagina non è valida.",
+    "pair_problem_fingerprint": "L'impronta del certificato non è valida.",
+    "pair_problem_name": "Il nome è troppo lungo (massimo 64 caratteri) o contiene caratteri di controllo.",
+    "pair_problem_too_long": "Il link è troppo lungo."
   },
   "ja": {
     "title": "アクセスオプション",
@@ -555,7 +615,19 @@ export const MESSAGES: Record<Language, Record<string, string>> = {
     "rl_stopall_max": "許可する全体停止リクエスト数",
     "rl_stopall_window": "全体停止のウィンドウ（秒）",
     "rl_save": "制限を保存",
-    "rl_invalid": "各数値は範囲内の整数でなければなりません。"
+    "rl_invalid": "各数値は範囲内の整数でなければなりません。",
+    "pair_title": "操作アプリをペアリングする",
+    "pair_help": "スマートフォンのカメラまたはペアリングリンクで、このサーバーのアドレスと証明書のフィンガープリントを指定して HYDRA-UMC 操作アプリが開き、最初の接続が固定されます。アプリは読み取った内容を表示し、何かを保存する前に確認します。",
+    "pair_no_tls": "このサーバーは TLS を提供していません。コードにフィンガープリントは含まれず、最初の接続を固定できません。",
+    "pair_name_label": "アプリに表示する名前",
+    "pair_show": "ペアリングコードを表示",
+    "pair_hide": "ペアリングコードを隠す",
+    "pair_scan_hint": "スマートフォンのカメラでコードを読み取るか、リンクをアプリに貼り付けてください。",
+    "pair_problem_host": "このページのアドレスは有効なホストではありません。",
+    "pair_problem_port": "このページのポートは有効ではありません。",
+    "pair_problem_fingerprint": "証明書のフィンガープリントが有効ではありません。",
+    "pair_problem_name": "名前が長すぎる(最大64文字)か、制御文字が含まれています。",
+    "pair_problem_too_long": "リンクが長すぎます。"
   },
   "zh": {
     "title": "访问选项",
@@ -646,7 +718,19 @@ export const MESSAGES: Record<Language, Record<string, string>> = {
     "rl_stopall_max": "允许的全局停止请求数",
     "rl_stopall_window": "全局停止窗口（秒）",
     "rl_save": "保存限制",
-    "rl_invalid": "每个数字必须是其范围内的整数。"
+    "rl_invalid": "每个数字必须是其范围内的整数。",
+    "pair_title": "配对控制应用",
+    "pair_help": "手机相机或配对链接会打开 HYDRA-UMC 控制应用,并带上此服务器的地址和其证书指纹,使首次连接被固定。应用会显示它读取的内容,并在保存任何内容之前先询问。",
+    "pair_no_tls": "此服务器未提供 TLS:二维码不含指纹,无法固定首次连接。",
+    "pair_name_label": "应用中显示的名称",
+    "pair_show": "显示配对码",
+    "pair_hide": "隐藏配对码",
+    "pair_scan_hint": "请用手机相机对准二维码,或将链接粘贴到应用中。",
+    "pair_problem_host": "此页面的地址不是有效的主机。",
+    "pair_problem_port": "此页面的端口无效。",
+    "pair_problem_fingerprint": "证书指纹无效。",
+    "pair_problem_name": "名称过长(最多 64 个字符)或包含控制字符。",
+    "pair_problem_too_long": "链接过长。"
   },
   "pt": {
     "title": "Opções de acesso",
@@ -737,7 +821,19 @@ export const MESSAGES: Record<Language, Record<string, string>> = {
     "rl_stopall_max": "Pedidos de paragem global permitidos",
     "rl_stopall_window": "Janela da paragem global (segundos)",
     "rl_save": "Guardar os limites",
-    "rl_invalid": "Cada número tem de ser um inteiro dentro do seu intervalo."
+    "rl_invalid": "Cada número tem de ser um inteiro dentro do seu intervalo.",
+    "pair_title": "Emparelhar uma app de controlo",
+    "pair_help": "A câmara do telemóvel ou a ligação de emparelhamento abre a app de controlo HYDRA-UMC com o endereço deste servidor e a impressão digital do seu certificado, para que a primeira ligação fique fixada. A app mostra o que leu e pergunta antes de guardar seja o que for.",
+    "pair_no_tls": "Este servidor não serve TLS: o código não leva impressão digital e a primeira ligação não pode ser fixada.",
+    "pair_name_label": "Nome mostrado na app",
+    "pair_show": "Mostrar o código de emparelhamento",
+    "pair_hide": "Ocultar o código de emparelhamento",
+    "pair_scan_hint": "Aponte a câmara do telemóvel ao código ou cole a ligação na app.",
+    "pair_problem_host": "O endereço desta página não é um anfitrião válido.",
+    "pair_problem_port": "A porta desta página não é válida.",
+    "pair_problem_fingerprint": "A impressão digital do certificado não é válida.",
+    "pair_problem_name": "O nome é demasiado longo (64 carateres no máximo) ou tem carateres de controlo.",
+    "pair_problem_too_long": "A ligação é demasiado longa."
   }
 };
 
