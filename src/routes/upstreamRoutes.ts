@@ -12,6 +12,7 @@ import { WebSocket } from "ws";
 import { probeTcp } from "../ecosystemStatus";
 import { upstreamHeaders } from "../upstreamAuth";
 import { flashSigningQuery } from "../serverPolicy";
+import type { AuditLog } from "../auditLog";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
@@ -27,6 +28,8 @@ export interface UpstreamDeps {
   /** The address of the decision gate of the connector hub (empty: the gate relay answers 503). */
   CONNECTOR_HUB_GATE_URL?: string;
   requireOperator?: Middleware;
+  /** The audit record: a change of the settings of the decision gate of the hub is written to it. */
+  audit?: Pick<AuditLog, "record">;
   SPI_BRIDGE_URL: string;
   SPI_BRIDGE_VERSION_TIMEOUT_MS: number;
   SPI_BRIDGE_FLASH_TIMEOUT_MS: number;
@@ -192,6 +195,35 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
 
   app.get("/api/connector-hub/gate/audit", authenticate, async (req, res) => {
     await relayToConnectorHubGate(req, res, "GET", "/gate/audit");
+  });
+
+  // The channel by which STUDIO reads and edits the one switch of the hub that opens the gate to a caller with no identity
+  // (`allowLoopbackNoIdentity`, off by default). The hub keeps the switch and the last word: this server only carries the signed-in
+  // administrator's own token to it, checks the shape of the request and the confirmation before anything leaves, and writes the
+  // attempt and its outcome to its own audit record (the hub records the change in its own chain as well).
+  app.get("/api/connector-hub/gate/settings", authenticate, async (req, res) => {
+    await relayToConnectorHubGate(req, res, "GET", "/gate/settings");
+  });
+
+  app.post("/api/connector-hub/gate/settings", authenticate, requireAdmin, async (req, res) => {
+    const user = (req as any).user;
+    const record = (outcome: "ok" | "refused" | "failed", detail: Record<string, unknown>) =>
+      deps.audit?.record({ type: "connector-hub-gate-settings", outcome, userId: user?.id, username: user?.username, ip: req.ip, detail });
+    const body = req.body;
+    const keys = body && typeof body === "object" && !Array.isArray(body) ? Object.keys(body) : [];
+    if (keys.length === 0 || keys.some((key) => key !== "allowLoopbackNoIdentity" && key !== "confirm") || typeof body.allowLoopbackNoIdentity !== "boolean") {
+      record("refused", { reason: "the body must be an object with allowLoopbackNoIdentity (true or false) and, to turn it on, confirm: true" });
+      return res.status(400).json({ error: "The body must be an object with allowLoopbackNoIdentity (true or false) and, to turn it on, confirm: true" });
+    }
+    if (body.allowLoopbackNoIdentity === true && body.confirm !== true) {
+      record("refused", { reason: "turning on needs a confirmation", allowLoopbackNoIdentity: true });
+      return res.status(400).json({ error: "Turning on the answer to a caller with no identity needs confirm: true", code: "CONFIRMATION_REQUIRED" });
+    }
+    res.once("finish", () => {
+      const status = res.statusCode;
+      record(status === 200 ? "ok" : status >= 500 ? "failed" : "refused", { allowLoopbackNoIdentity: body.allowLoopbackNoIdentity, hubStatus: status });
+    });
+    await relayToConnectorHubGate(req, res, "POST", "/gate/settings");
   });
 
   // Real relay to the local spi_bridge HTTP service (HYDRA-UMC/src/

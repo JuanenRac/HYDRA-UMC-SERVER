@@ -795,8 +795,25 @@ passed on with its own body.
 - `GET /api/connector-hub/gate/audit` (any signed-in account; the hub refuses a role that may not read it): the head of the chain and
   the newest decisions.
 
-Both answer `503` with `available: false` while `HYDRA_UMC_CONNECTOR_HUB_GATE_URL` is not set (off by default). The switches of the
-hub itself (the keys it verifies with, whether a caller with no identity is accepted) stay in the configuration file of the hub.
+Both answer `503` with `available: false` while `HYDRA_UMC_CONNECTOR_HUB_GATE_URL` is not set (off by default). The keys the hub verifies
+with stay in the configuration file of the hub; the one switch that can be edited from here is described next.
+
+### The switch for a caller with no identity: `GET /api/connector-hub/gate/settings`, `POST /api/connector-hub/gate/settings`
+
+The hub can answer a caller on its own machine that has no token, but only when its switch `allowLoopbackNoIdentity` is on, and it is
+**off by default**. STUDIO shows and edits that switch through these two routes, which carry the administrator's own `Authorization`
+header to the hub, so the hub still decides and records who asked.
+
+- `GET /api/connector-hub/gate/settings` (any signed-in account): `allowLoopbackNoIdentity`, `loopbackSwitchAllowed` (the hub listens on a
+  loopback address, the only place the switch may be on), `verifiesTokens` and `persisted` (the hub has a settings file to write to).
+- `POST /api/connector-hub/gate/settings` (administrator only): the body is `{"allowLoopbackNoIdentity": true|false, "confirm": true}`
+  and nothing else. Turning the switch **on** needs `confirm: true` (`400` with `code: CONFIRMATION_REQUIRED` otherwise, and nothing
+  leaves this server); turning it off needs no confirmation. The hub answers `200` with the new state and `changed`, or refuses (`401`,
+  `403`, `409` when the state is not allowed, `503` when the change could not be recorded and was undone), and that answer is passed on.
+  The hub writes the change to its settings file and to its own audit chain; this server also writes the attempt and its outcome to its
+  audit record (`connector-hub-gate-settings`, with who asked, from which address, the value and the status of the hub).
+
+Both answer `503` with `available: false` while `HYDRA_UMC_CONNECTOR_HUB_GATE_URL` is not set.
 
 ## 2k. Settings of the installation that harden this API
 

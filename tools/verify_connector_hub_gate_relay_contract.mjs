@@ -109,6 +109,8 @@ async function main() {
   const workNoGate = await mkdtemp(path.join(tmpdir(), "hydra-umc-server-gate-relay-off-"));
   const keyFile = path.join(work, "identity.key");
   const auditFile = path.join(work, "gate-audit.jsonl");
+  const settingsFile = path.join(work, "gate-settings.json");
+  await writeFile(settingsFile, JSON.stringify({ allowLoopbackNoIdentity: false }), { mode: 0o600 });
   await writeFile(keyFile, `${JWT_SECRET}\n`, { mode: 0o600 });
   const logs = { text: "" };
   let hub;
@@ -119,7 +121,7 @@ async function main() {
     hub = spawn(
       python,
       ["-m", "hydra_umc_connector_hub.cli", "serve-gate", "--registry-dir", HUB_FIXTURES, "--identity-key-file", keyFile,
-        "--audit-file", auditFile, "--host", "127.0.0.1", "--port", String(hubPort)],
+        "--audit-file", auditFile, "--config-file", settingsFile, "--host", "127.0.0.1", "--port", String(hubPort)],
       {
         cwd: HUB_ROOT,
         env: { ...process.env, PYTHONPATH: `${path.join(HUB_ROOT, "src")}${separator}${process.env.PYTHONPATH || ""}` },
@@ -176,7 +178,39 @@ async function main() {
     const foreign = await fetch(`http://127.0.0.1:${hubPort}/gate/audit`, { headers: { authorization: `${auth.authorization}x` } });
     assert.equal(foreign.status, 401);
 
-    console.log("SERVER_CONNECTOR_HUB_GATE_RELAY_CONTRACT=PASS unconfigured=1 anonymous=1 body=1 decision=1 caller_recorded=1 foreign_token=1");
+    // The settings channel: STUDIO reads and edits the no-identity switch of the hub through this server, with the administrator's own token.
+    const settingsUrl = `${base}/api/connector-hub/gate/settings`;
+    assert.equal((await fetch(settingsUrl)).status, 401);
+    const before = await (await fetch(settingsUrl, { headers: auth })).json();
+    assert.equal(before.allowLoopbackNoIdentity, false, "the switch is off by default");
+    assert.equal(before.persisted, true);
+    const post = (body) => fetch(settingsUrl, { method: "POST", headers: { ...auth, "content-type": "application/json" }, body: JSON.stringify(body) });
+    assert.equal((await post({ allowLoopbackNoIdentity: "yes" })).status, 400);
+    const unconfirmed = await post({ allowLoopbackNoIdentity: true });
+    assert.equal(unconfirmed.status, 400);
+    assert.equal((await unconfirmed.json()).code, "CONFIRMATION_REQUIRED");
+    assert.equal(JSON.parse(await readFile(settingsFile, "utf-8")).allowLoopbackNoIdentity, false, "nothing changed without the confirmation");
+    const turnedOn = await post({ allowLoopbackNoIdentity: true, confirm: true });
+    const turnedOnBody = await turnedOn.json();
+    assert.equal(turnedOn.status, 200, JSON.stringify(turnedOnBody));
+    assert.equal(turnedOnBody.allowLoopbackNoIdentity, true);
+    assert.equal(turnedOnBody.changed, true);
+    assert.equal(JSON.parse(await readFile(settingsFile, "utf-8")).allowLoopbackNoIdentity, true, "the hub wrote the change to its settings file");
+    // The hub itself, asked with no token from this machine, now answers (that is what the switch does) ...
+    assert.equal((await fetch(`http://127.0.0.1:${hubPort}/gate/audit`)).status, 200);
+    // ... and the caller with no identity can not change the switch back by itself.
+    const selfOff = await fetch(`http://127.0.0.1:${hubPort}/gate/settings`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ allowLoopbackNoIdentity: false }) });
+    assert.equal(selfOff.status, 403);
+    const turnedOff = await post({ allowLoopbackNoIdentity: false });
+    assert.equal(turnedOff.status, 200);
+    assert.equal((await fetch(`http://127.0.0.1:${hubPort}/gate/audit`)).status, 401, "off again: the same caller is refused");
+    const hubAudit = await readFile(auditFile, "utf-8");
+    assert(hubAudit.includes("settings_change") && hubAudit.includes(ADMIN.username), "the hub recorded both changes with the person who made them");
+    // This server recorded the attempts too (data/audit.jsonl of its own working folder).
+    const ownAudit = await readFile(path.join(work, "data", "audit.jsonl"), "utf-8");
+    assert((ownAudit.match(/connector-hub-gate-settings/g) ?? []).length >= 4, "this server's audit record has the refused and the accepted attempts");
+
+    console.log("SERVER_CONNECTOR_HUB_GATE_RELAY_CONTRACT=PASS unconfigured=1 anonymous=1 body=1 decision=1 caller_recorded=1 foreign_token=1 settings=1");
   } catch (error) {
     throw new Error(`${error instanceof Error ? error.message : error}\nProcess output:\n${logs.text || "<no output>"}`);
   } finally {

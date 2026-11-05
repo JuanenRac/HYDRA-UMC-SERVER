@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **STUDIO can read and change the switch of the connector hub that answers a caller with no identity:** `GET` and `POST /api/connector-hub/gate/settings` relay to the new settings route of the hub with the administrator's own token. Changing it is for administrators only, turning it on needs `confirm: true`, the attempt and its outcome are written to the audit record (`connector-hub-gate-settings`), and the switch stays off by default.
+
 - **The Security tab of the admin page draws a pairing code for the control apps:** hidden until an administrator asks for it, it carries this server's address and port, the SHA-256 fingerprint of its TLS certificate (read from the same `GET /api/admin/server-config` answer) and a name, as `hydra-umc://pair?host=..&port=..&fp=..&name=..`, with the limits of the apps' command contract (at most 600 characters, name of at most 64). A server without TLS gives a code without fingerprint and says the first connection cannot be pinned. The sentences are in the eight languages and `tests/adminUiPairing.test.ts` covers the link, what the apps would refuse and the texts.
 
 - **A model submission carries its own licence and credit:** `POST /api/models/submit` accepts an optional `attribution` text (at most 8000 characters), keeps it in the index, in `ATTRIBUTION.txt` next to the model and in the download answer; the audit record only counts its characters. The new setting `modelSubmissions.requireAttribution` (off by default, in Config > Models) refuses a submission without it.

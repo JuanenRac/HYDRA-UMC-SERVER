@@ -543,7 +543,7 @@ async function startServer() {
   registerUpstreamRoutes(app, {
     authenticate, requireAdmin, industrialLog, wsClients, DATALAKE_URL, DATALAKE_TIMEOUT_MS, CONNECTOR_HUB_URL,
     CONNECTOR_HUB_TIMEOUT_MS, SPI_BRIDGE_URL, SPI_BRIDGE_VERSION_TIMEOUT_MS, SPI_BRIDGE_FLASH_TIMEOUT_MS,
-    CONNECTOR_HUB_GATE_URL, requireOperator,
+    CONNECTOR_HUB_GATE_URL, requireOperator, audit,
   });
 
   registerInfoRoutes(app, { infoAccess, getSettings, REMOTE_API_VERSION, healthOpen: () => security.healthOpen() });
