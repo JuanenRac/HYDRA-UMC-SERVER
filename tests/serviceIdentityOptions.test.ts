@@ -54,13 +54,13 @@ test("the shape is checked and the other sign-in options are left as they were",
   assert.equal(config.snapshot().auth.serviceIdentity.enabled.value, true);
 });
 
-test("the status lists who takes the identity, who keeps a verifier of their own and who does not yet", () => {
+test("the status lists who takes the identity, who does not yet", () => {
   const s = buildServiceIdentityStatus({ enabled: true, source: "config", keyUsable: true, registryNames: ["HYDRA-UMC-SERVER", "HYDRA-UMC-DATALAKE", "HYDRA-UMC-VOICE-UI", "HYDRA-UMC-GATEWAY-INDUSTRIAL"] });
   assert.equal(s.state, "presenting");
   assert.equal(s.locked, false);
   const by = Object.fromEntries(s.services.map((x) => [x.name, x.support]));
   assert.equal(by["datalake"], "accepts");
-  assert.equal(by["connector-hub"], "own_verifier");
+  assert.equal(by["connector-hub"], "accepts");
   assert.equal(by["voice-ui"], "not_yet");
   assert.equal(by["gateway-industrial"], "not_yet");
   assert.equal(by["server"], undefined);

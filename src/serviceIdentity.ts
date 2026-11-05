@@ -99,10 +99,10 @@ export type IdentitySupport = "accepts" | "own_verifier" | "not_yet";
 /** The services that carry the shared verifier (the list of HYDRA-UMC-OS, config/service_identity.json), by the short name of the repository without its prefix. */
 export const SERVICES_THAT_ACCEPT_IDENTITY: readonly string[] = [
   "cognitive-node", "vision-node", "vla-engine", "anomaly-detector", "datalake", "detection-hef", "docs-qa", "production-reports",
-  "safety-zones", "semantic-planner", "visual-servoing-api", "job-dispatcher", "telemetry-collector", "orchestrator", "hil-bridge", "twin",
+  "safety-zones", "semantic-planner", "visual-servoing-api", "job-dispatcher", "telemetry-collector", "orchestrator", "hil-bridge", "twin", "connector-hub",
 ];
-/** The services that keep a verifier of their own next to the shared identity. */
-export const SERVICES_WITH_OWN_VERIFIER: readonly string[] = ["connector-hub"];
+/** The services that keep only a verifier of their own and do not take the shared token (none today: the connector hub keeps its own next to the shared one and is listed above). */
+export const SERVICES_WITH_OWN_VERIFIER: readonly string[] = [];
 
 export interface ServiceIdentityStatus {
   enabled: boolean;

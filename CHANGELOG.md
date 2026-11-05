@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **The list of services that take the identity includes the connector hub:** it now reads the same key file and variable as the others and keeps its own verifier next to the shared one, so `GET /api/admin/service-identity` lists it among the services that accept the identity.
+
 - **An administrator can switch on the identity of the server in its calls to the services:** `auth.serviceIdentity.enabled` of `PUT /api/admin/server-config` (off by default; a confirmation to turn it on, a warning when turned off, locked by `HYDRA_UMC_SERVICE_IDENTITY`, written to the audit record) makes the server present its signed token to the services, and `GET /api/admin/service-identity` (administrators) answers the switch, whether `JWT_SECRET` can sign, which services take the identity, which keep a verifier of their own and which do not yet, and the codes of the safe order (the server first, then the key of each service one by one). The key is still given to each service on the machine by its operator.
 
 - **A relay for the switch that relaxes the identity of the approval of a plan (`GET` and `POST /api/semantic-planner/settings`):** STUDIO reads and edits `plan_approval.require_identity` of the semantic planner through the server, with the administrator's own token. Reading is open to any signed-in account; changing is for an administrator, needs `confirm: true` to relax it (nothing leaves this server without it), and is written to the audit record (`semantic-planner-settings`). Off until `HYDRA_UMC_SEMANTIC_PLANNER_URL` is set (`503`). The relay of the hub gate and this one share one function. 7 tests.
