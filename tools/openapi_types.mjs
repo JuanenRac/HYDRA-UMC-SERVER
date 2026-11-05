@@ -71,6 +71,7 @@ export const RESPONSES = {
   "POST /api/admin/jwt-keys/rotate": ref("JwtKeyRotated"),
   "GET /api/robots/liveness": ref("RobotLiveness"),
   "GET /api/ecosystem/health": ref("EcosystemHealth"),
+  "GET /api/admin/service-identity": ref("ServiceIdentityStatus"),
   "POST /api/push/devices": ref("PushDeviceRegistered"),
   "DELETE /api/push/devices/{token}": ref("PushDeviceRemoved"),
   "GET /api/admin/push": ref("PushStatus"),

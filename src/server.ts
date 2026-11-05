@@ -58,6 +58,7 @@ import { issueMediaTicket, mediaTicketKey, verifyMediaTicket } from "./mediaTick
 import { infoTicketKey, verifyInfoTicket, type InfoTicketLimits } from "./infoTickets";
 import { registerAuthRoutes } from "./routes/auth";
 import { jwtKeyStore, setJwtPolicyProvider, setKeyOverlapProvider } from "./jwtKeys";
+import { setServiceIdentitySwitch } from "./serviceIdentity";
 import { classify as classifyAddress, makeTrustedNetworksGate } from "./trustedNetworks";
 import { registerConnectionRoutes } from "./routes/connectionRoutes";
 import { registerLivenessRoutes } from "./routes/livenessRoutes";
@@ -371,6 +372,8 @@ async function startServer() {
 
   // Which algorithm signs the login tokens and which ones the verifier accepts is read from the security options on every token.
   setJwtPolicyProvider(() => security.jwtPolicy());
+  // Whether the calls of this server to the services carry its signed token (auth.serviceIdentity.enabled, HYDRA_UMC_SERVICE_IDENTITY).
+  setServiceIdentitySwitch(() => security.serviceIdentityEnabled());
   setKeyOverlapProvider(() => security.keyOverlapSeconds());
   if (security.jwtPolicy().algorithm === "EdDSA") {
     try { jwtKeyStore().ensureActive(); } catch (error) { throw new Error(`auth.jwtAlgorithm is EdDSA but the key file (${jwtKeyStore().file}) cannot be used: ${(error as Error).message}`); }

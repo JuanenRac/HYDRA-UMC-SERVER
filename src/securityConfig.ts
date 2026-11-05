@@ -140,6 +140,8 @@ export interface AuthFile {
   acceptHs256?: boolean;
   /** Seconds a retired signing key stays published and accepted after a rotation (60 to 31622400; 2592000 by default). Read from the file only. */
   keyOverlapSeconds?: number;
+  /** The identity the server presents to the services it calls (src/serviceIdentity.ts). Off by default. */
+  serviceIdentity?: { enabled?: boolean };
 }
 
 /** The signed tickets that let a client without a bearer token read the information routes (POST /api/info/ticket, src/infoTickets.ts). */
@@ -323,6 +325,8 @@ export interface SecurityEnv {
   infoTickets?: string;
   jwtAlgorithm?: string;
   jwtAcceptHs256?: string;
+  /** HYDRA_UMC_SERVICE_IDENTITY: "1" on, "0" off, as written. */
+  serviceIdentity?: string;
   presence?: string;
   presenceAction?: string;
   bridgeGateway?: string;
@@ -363,6 +367,7 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     infoTickets: env.HYDRA_UMC_INFO_TICKETS,
     jwtAlgorithm: env.HYDRA_UMC_JWT_ALGORITHM,
     jwtAcceptHs256: env.HYDRA_UMC_JWT_ACCEPT_HS256,
+    serviceIdentity: env.HYDRA_UMC_SERVICE_IDENTITY,
     presence: env.HYDRA_UMC_PRESENCE,
     presenceAction: env.HYDRA_UMC_PRESENCE_ACTION,
     bridgeGateway: env.HYDRA_UMC_BRIDGE_GATEWAY,
@@ -482,6 +487,14 @@ export function presenceTimes(file: PresenceFile | undefined): { timeoutSeconds:
 export function resolveInfoTickets(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
   if (isSet(env)) return { value: env.trim() === "1", source: "env" };
   if (typeof file.infoTickets?.enabled === "boolean") return { value: file.infoTickets.enabled, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** Does the server present its identity to the services? Only the exact words "1" (on) and "0" (off) in the environment decide and lock it; otherwise the file; the default is off. */
+export function resolveServiceIdentity(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  const word = (env ?? "").trim();
+  if (word === "1" || word === "0") return { value: word === "1", source: "env" };
+  if (typeof file.auth?.serviceIdentity?.enabled === "boolean") return { value: file.auth.serviceIdentity.enabled, source: "config" };
   return { value: false, source: "default" };
 }
 
@@ -762,7 +775,7 @@ export interface SecuritySnapshot {
   ecosystemHealth: { enabled: { value: boolean; source: Source } };
   infoTickets: { enabled: { value: boolean; source: Source } };
   /** How the sign-in tokens are signed; the overlap of a rotation is edited in the configuration file. */
-  auth: { jwtAlgorithm: { value: JwtAlgorithm; source: Source }; acceptHs256: { value: boolean; source: Source }; keyOverlapSeconds: number };
+  auth: { jwtAlgorithm: { value: JwtAlgorithm; source: Source }; acceptHs256: { value: boolean; source: Source }; keyOverlapSeconds: number; serviceIdentity: { enabled: { value: boolean; source: Source } } };
   /** The switch and the action of the dead-man of the presence of the operator; the times are edited in the configuration file. */
   presence: { enabled: { value: boolean; source: Source }; action: { value: PresenceActionValue; source: Source }; timeoutSeconds: number; slowFactor: number; recoverBeats: number; rampSeconds: number; leftImmediate: boolean };
   bridgeGateway: { enabled: { value: boolean; source: Source } };
@@ -883,6 +896,11 @@ export class SecurityConfig {
   /** Whether the server sends push notifications (off unless an administrator turned it on). */
   pushEnabled(): boolean {
     return resolvePush(this.options.env.push, this.file).value;
+  }
+
+  /** Does this server present its identity to the services it calls (auth.serviceIdentity.enabled)? */
+  serviceIdentityEnabled(): boolean {
+    return resolveServiceIdentity(this.options.env.serviceIdentity, this.file).value;
   }
 
   /** What new sign-in tokens are signed with, and whether HS256 tokens are still accepted (HS256 unless an administrator chose EdDSA). */
@@ -1025,7 +1043,7 @@ export class SecurityConfig {
       health: { open: resolveHealthOpen(this.options.env.healthOpen, this.file) },
       ecosystemHealth: { enabled: resolveEcosystemHealth(this.options.env.ecosystemHealth, this.file) },
       infoTickets: { enabled: resolveInfoTickets(this.options.env.infoTickets, this.file) },
-      auth: { jwtAlgorithm: resolveJwtAlgorithm(this.options.env.jwtAlgorithm, this.file), acceptHs256: resolveJwtAcceptHs256(this.options.env.jwtAcceptHs256, this.file), keyOverlapSeconds: resolveKeyOverlapSeconds(this.file) },
+      auth: { jwtAlgorithm: resolveJwtAlgorithm(this.options.env.jwtAlgorithm, this.file), acceptHs256: resolveJwtAcceptHs256(this.options.env.jwtAcceptHs256, this.file), keyOverlapSeconds: resolveKeyOverlapSeconds(this.file), serviceIdentity: { enabled: resolveServiceIdentity(this.options.env.serviceIdentity, this.file) } },
       presence: (() => {
         const p = presenceTimes(this.file.presence);
         return { enabled: resolvePresence(this.options.env.presence, this.file), action: resolvePresenceAction(this.options.env.presenceAction, this.file), ...p };
@@ -1309,6 +1327,18 @@ export class SecurityConfig {
         if (resolveJwtAcceptHs256(this.options.env.jwtAcceptHs256, this.file).source === "env") throw lockedBy("HYDRA_UMC_JWT_ACCEPT_HS256");
         merged.acceptHs256 = authPatch.acceptHs256;
         if (authPatch.acceptHs256 === false) warnings.push("jwt_hs256_refused");
+      }
+      if (authPatch.serviceIdentity !== undefined) {
+        const si = authPatch.serviceIdentity;
+        if (typeof si !== "object" || si === null || Array.isArray(si)) throw new SecurityConfigError(400, "auth.serviceIdentity must be an object");
+        for (const key of Object.keys(si)) if (key !== "enabled" && key !== "confirm") throw new SecurityConfigError(400, `auth.serviceIdentity.${key} cannot be changed here`);
+        if (si.enabled === undefined) throw new SecurityConfigError(400, "auth.serviceIdentity.enabled must be true or false");
+        if (typeof si.enabled !== "boolean") throw new SecurityConfigError(400, "auth.serviceIdentity.enabled must be true or false");
+        if (si.confirm !== undefined && typeof si.confirm !== "boolean") throw new SecurityConfigError(400, "auth.serviceIdentity.confirm must be true or false");
+        if (resolveServiceIdentity(this.options.env.serviceIdentity, this.file).source === "env") throw lockedBy("HYDRA_UMC_SERVICE_IDENTITY");
+        if (si.enabled === true && si.confirm !== true) throw new SecurityConfigError(400, "Turning on the identity of the server in its calls to the services needs confirm: true (turn the key on in a service only after this)");
+        merged.serviceIdentity = { enabled: si.enabled };
+        warnings.push(si.enabled ? "service_identity_on" : "service_identity_off");
       }
       next.auth = merged;
     }
@@ -1644,7 +1674,10 @@ export class SecurityConfig {
     if (patch.infoTickets !== undefined) {
       log(`[SECURITY] ${actor} turned the signed tickets of the information routes (POST /api/info/ticket) ${snapshot.infoTickets.enabled.value ? "on" : "off"}.`);
     }
-    if (patch.auth !== undefined) {
+    if (patch.auth?.serviceIdentity !== undefined) {
+      log(`[SECURITY] ${actor} turned the identity of this server in its calls to the services ${snapshot.auth.serviceIdentity.enabled.value ? "ON (a service with its identity key on now receives a signed token)" : "off (a service with its identity key on will refuse this server)"}.`);
+    }
+    if (patch.auth?.jwtAlgorithm !== undefined || patch.auth?.acceptHs256 !== undefined) {
       log(`[SECURITY] ${actor} set the sign-in tokens: signed with ${snapshot.auth.jwtAlgorithm.value}${snapshot.auth.jwtAlgorithm.value === "EdDSA" ? ` (public keys at /.well-known/jwks.json), HS256 tokens ${snapshot.auth.acceptHs256.value ? "still accepted" : "REFUSED"}` : ""}.`);
     }
     if (patch.presence !== undefined) {

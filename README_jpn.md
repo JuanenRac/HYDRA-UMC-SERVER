@@ -236,11 +236,11 @@ CORS は、設定可能な許可リスト（`CORS_ALLOWED_ORIGINS`、下記「�
 
 ### アクセススイッチ、接続履歴、生存信号
 
-サーバーが応答または記録する範囲を広げる 10 個のオプションがあります。すべて保守的な値で始まり、それぞれ環境変数と管理者用スイッチ（`PUT /api/admin/server-config`、STUDIO の Server Admin に表示。環境変数はスイッチをロックします）を持ちます。完全な表は [`docs/REMOTE_API.md`](docs/REMOTE_API.md) の 2k 節にあります。
+サーバーが応答または記録する範囲を広げる 12 個のオプションがあります。すべて保守的な値で始まり、それぞれ環境変数と管理者用スイッチ（`PUT /api/admin/server-config`、STUDIO の Server Admin に表示。環境変数はスイッチをロックします）を持ちます。完全な表は [`docs/REMOTE_API.md`](docs/REMOTE_API.md) の 2k 節にあります。
 
 - `HYDRA_UMC_HEALTH_OPEN=1`（`health.open`）- `GET /health` がサインインなしで最小限のヘルスレポート（バージョン、ホスト、件数なし）を返します。オフのときは `404` を返します。
 - `HYDRA_UMC_ECOSYSTEM_HEALTH=1`（`ecosystemHealth.enabled`）- `GET /api/ecosystem/health` がエコシステムのサービスの健全性を返します。オフのときは `404` を返します。
-- `HYDRA_UMC_SERVICE_IDENTITY=1` - このサーバーがサービスへ行う呼び出し（ヘルスプローブ、中継、停止の中継、引き継ぎ）に、自身の短い署名付きトークン（`JWT_SECRET` による HS256、有効期間 60 秒）を付けます。識別キーをオンにしたサービスがこれを要求します。独自のトークンを持つサービスには引き続きそれを渡し、`JWT_SECRET` が未設定・例の値・短すぎる場合は何も署名しません。オフのときは呼び出しに何も追加しません。
+- `HYDRA_UMC_SERVICE_IDENTITY=1`（`auth.serviceIdentity.enabled`） - このサーバーがサービスへ行う呼び出し（ヘルスプローブ、中継、停止の中継、引き継ぎ）に、自身の短い署名付きトークン（`JWT_SECRET` による HS256、有効期間 60 秒）を付けます。識別キーをオンにしたサービスがこれを要求します。独自のトークンを持つサービスには引き続きそれを渡し、`JWT_SECRET` が未設定・例の値・短すぎる場合は何も署名しません。オフのときは呼び出しに何も追加しません。オンにするには確認が必要で、どのサービスにも識別キーを渡す前にオンにします。
 - `HYDRA_UMC_INFO_TICKETS=1` （`infoTickets.enabled`） - `POST /api/info/ticket` は署名付きチケット（アドレスの `?ticket=`）を発行し、`HYDRA_UMC_INFO_AUTH=required` で閉じられた読み取り専用の情報ルート（`/metrics`、システムメトリクス、スーパーバイザー、エコシステムの状態）を、トークンを送れないスクレイパーやダッシュボードに開きます。オフのときはルートが `404` を返し、チケットは無視されます。
 - `HYDRA_UMC_PRESENCE=1`(`presence.enabled`)と `HYDRA_UMC_PRESENCE_ACTION`(`presence.action`) - オペレーターの在席デッドマン:`POST /api/operator/presence` がウォッチの番号付き信号を受け取り、途絶えるとその人が保持するロボットに対してサーバーが動作します(既定は減速して警告。一時停止、警告のみ、停止も選べます)。オフの間、このルートは `404` を返します。
 - `HYDRA_UMC_MQTT_HOME_ASSISTANT=1` （`mqtt.homeAssistant.enabled`） - MQTT ブリッジが各ロボットの Home Assistant 用ディスカバリ設定も（保持付きで `homeassistant/` 以下に）公開します。既定ではオフで、次の起動で有効になります。

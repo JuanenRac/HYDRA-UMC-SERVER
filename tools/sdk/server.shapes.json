@@ -1652,6 +1652,90 @@
         }
       }
     },
+    "ServiceIdentityStatus": {
+      "type": "object",
+      "required": [
+        "enabled",
+        "source",
+        "locked",
+        "key",
+        "state",
+        "services",
+        "order"
+      ],
+      "description": "The identity this server presents to the services it calls: the switch (auth.serviceIdentity.enabled), whether JWT_SECRET can sign, and which services take the identity. Read-only; the switch is changed with PUT /api/admin/server-config.",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "env",
+            "config",
+            "default"
+          ]
+        },
+        "locked": {
+          "type": "boolean",
+          "description": "True when the switch comes from the environment (HYDRA_UMC_SERVICE_IDENTITY) and cannot be changed here."
+        },
+        "key": {
+          "type": "string",
+          "enum": [
+            "usable",
+            "unusable"
+          ],
+          "description": "Whether JWT_SECRET can sign: unset, an example value or too short is unusable."
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "presenting",
+            "idle_no_key",
+            "off"
+          ]
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "support"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "The short name of the service (the repository name without its prefix)."
+              },
+              "support": {
+                "type": "string",
+                "enum": [
+                  "accepts",
+                  "own_verifier",
+                  "not_yet"
+                ]
+              }
+            }
+          }
+        },
+        "order": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "server_first",
+              "then_one_by_one",
+              "enable_in_root",
+              "restart_unit",
+              "check_status"
+            ]
+          },
+          "description": "The safe order of the steps, as codes the screens translate."
+        }
+      }
+    },
     "JwtKeyRotated": {
       "type": "object",
       "required": [

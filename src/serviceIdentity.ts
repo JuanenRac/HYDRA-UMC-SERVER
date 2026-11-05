@@ -88,3 +88,55 @@ export function withIdentity<T extends Record<string, string>>(headers: T, role:
   if (has) return headers;
   return { ...headers, ...identityHeader(role, env) };
 }
+
+// -----------------------------------------------------------------------------
+// What an administrator is shown: the switch, whether the key can sign, and which services take the identity
+// -----------------------------------------------------------------------------
+
+/** How a service takes the identity of the server: `accepts` (the shared verifier, switched on with its key file), `own_verifier` (it keeps a verifier of its own), `not_yet` (it does not take it). */
+export type IdentitySupport = "accepts" | "own_verifier" | "not_yet";
+
+/** The services that carry the shared verifier (the list of HYDRA-UMC-OS, config/service_identity.json), by the short name of the repository without its prefix. */
+export const SERVICES_THAT_ACCEPT_IDENTITY: readonly string[] = [
+  "cognitive-node", "vision-node", "vla-engine", "anomaly-detector", "datalake", "detection-hef", "docs-qa", "production-reports",
+  "safety-zones", "semantic-planner", "visual-servoing-api", "job-dispatcher", "telemetry-collector", "orchestrator", "hil-bridge", "twin",
+];
+/** The services that keep a verifier of their own next to the shared identity. */
+export const SERVICES_WITH_OWN_VERIFIER: readonly string[] = ["connector-hub"];
+
+export interface ServiceIdentityStatus {
+  enabled: boolean;
+  source: "env" | "config" | "default";
+  /** True when the switch comes from the environment: it cannot be changed here. */
+  locked: boolean;
+  /** "usable" when JWT_SECRET can sign, "unusable" when it is unset, an example value or too short. */
+  key: "usable" | "unusable";
+  /** "presenting" (on and the key signs), "idle_no_key" (on but nothing can be signed), "off". */
+  state: "presenting" | "idle_no_key" | "off";
+  services: { name: string; support: IdentitySupport }[];
+  /** The safe order, as codes the screens translate. */
+  order: ("server_first" | "then_one_by_one" | "enable_in_root" | "restart_unit" | "check_status")[];
+}
+
+/** The short name of a service as the registry spells it ("HYDRA-UMC-DATALAKE" -> "datalake"). */
+export function shortServiceName(name: string): string {
+  return name.replace(/^HYDRA-UMC-/i, "").toLowerCase();
+}
+
+export function buildServiceIdentityStatus(input: { enabled: boolean; source: "env" | "config" | "default"; keyUsable: boolean; registryNames?: readonly string[] }): ServiceIdentityStatus {
+  const names = new Set<string>([...SERVICES_THAT_ACCEPT_IDENTITY, ...SERVICES_WITH_OWN_VERIFIER]);
+  for (const raw of input.registryNames ?? []) {
+    const short = shortServiceName(raw);
+    if (short && short !== "server") names.add(short);
+  }
+  const support = (name: string): IdentitySupport => (SERVICES_THAT_ACCEPT_IDENTITY.includes(name) ? "accepts" : SERVICES_WITH_OWN_VERIFIER.includes(name) ? "own_verifier" : "not_yet");
+  return {
+    enabled: input.enabled,
+    source: input.source,
+    locked: input.source === "env",
+    key: input.keyUsable ? "usable" : "unusable",
+    state: !input.enabled ? "off" : input.keyUsable ? "presenting" : "idle_no_key",
+    services: [...names].sort().map((name) => ({ name, support: support(name) })),
+    order: ["server_first", "then_one_by_one", "enable_in_root", "restart_unit", "check_status"],
+  };
+}

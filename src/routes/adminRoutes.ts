@@ -34,6 +34,10 @@ export interface AdminRouteDeps {
   audit?: Pick<AuditLog, "record">;
 }
 
+import { buildServiceIdentityStatus, identityKey } from "../serviceIdentity";
+import { ecosystemRoot } from "../ecosystemStatus";
+import { loadPortsRegistry } from "../portsRegistry";
+
 export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps): void {
   const { authenticate, requireAdmin, asyncHandler, industrialLog, wsClients, logFile, getCurrentPort, loadServerConfig, saveServerConfig, security, audit } = deps;
 
@@ -149,12 +153,19 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
       } catch (error) {
         if (error instanceof SecurityConfigError) {
           if (req.body.bridges !== undefined) audit?.record({ type: "bridge-options", outcome: "refused", userId: (req as any).user?.id, username: (req as any).user?.username, ip: req.ip, detail: { reason: error.message } });
+          if (req.body.auth?.serviceIdentity !== undefined) audit?.record({ type: "service-identity-options", outcome: "refused", userId: (req as any).user?.id, username: (req as any).user?.username, ip: req.ip, detail: { reason: error.message } });
           if (req.body.rateLimits !== undefined) audit?.record({ type: "rate-limits-options", outcome: "refused", userId: (req as any).user?.id, username: (req as any).user?.username, ip: req.ip, detail: { reason: error.message } });
           if (req.body.jobDispatcher !== undefined) audit?.record({ type: "job-dispatcher-options", outcome: "refused", userId: (req as any).user?.id, username: (req as any).user?.username, ip: req.ip, detail: { status: error.status, reason: error.message } });
           return res.status(error.status).json({ error: error.message });
         }
         throw error;
       }
+    }
+    if (security_result && req.body.auth?.serviceIdentity !== undefined) {
+      audit?.record({
+        type: "service-identity-options", outcome: "ok", userId: (req as any).user?.id, username: (req as any).user?.username, ip: req.ip,
+        detail: { enabled: security_result.snapshot.auth.serviceIdentity.enabled.value },
+      });
     }
     if (security_result && req.body.rateLimits !== undefined) {
       const r = security_result.snapshot.rateLimits;
@@ -189,6 +200,15 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
       warnings: security_result?.warnings ?? [],
       ...(security_result ? security_result.snapshot : {}),
     });
+  });
+
+  // The identity this server presents to the services it calls: the switch, whether the key can sign and which services take it. Read-only;
+  // the switch is changed with PUT /api/admin/server-config (auth.serviceIdentity), and the key is handed to each service by the operator of the machine.
+  app.get("/api/admin/service-identity", authenticate, requireAdmin, (req, res) => {
+    const resolved = security.snapshot().auth.serviceIdentity.enabled;
+    let registryNames: string[] = [];
+    try { registryNames = [...loadPortsRegistry(ecosystemRoot()).keys()]; } catch { /* no registry: the built-in list is shown */ }
+    res.json(buildServiceIdentityStatus({ enabled: resolved.value, source: resolved.source, keyUsable: identityKey() !== "", registryNames }));
   });
 
   // The signing keys of the EdDSA sign-in tokens: their state (never the private part) and the rotation. Rotation is refused

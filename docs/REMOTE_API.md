@@ -831,6 +831,29 @@ administrator's own `Authorization` header to the planner (`HYDRA_UMC_SEMANTIC_P
 
 Both answer `503` with `available: false` while `HYDRA_UMC_SEMANTIC_PLANNER_URL` is not set (off by default).
 
+### The identity of this server in its calls to the services: `GET /api/admin/service-identity`
+
+A service whose identity key is on (see `docs/SERVER_IDENTITY.md` of HYDRA-UMC-OS) refuses any request with no credential, even from this
+machine. This server is the caller of most of them (the status scan and health probes of the family, the relays to the AI, data and speech
+services, the stop relay, the takeover, the reload of the job dispatcher), so it can present one short token of its own on every one of
+those calls: HS256, signed with `JWT_SECRET`, valid sixty seconds, with the claims `username` (`hydra-umc-server`), `role` (a read is a
+`viewer`, a change an `operator`, the administration calls an `admin`) and `exp`. A service that has a token of its own keeps receiving
+that one. It is **off by default** and then no call changes.
+
+- The switch is `auth.serviceIdentity.enabled` of `PUT /api/admin/server-config` (administrator only), or the environment word
+  `HYDRA_UMC_SERVICE_IDENTITY` (`1` on, `0` off; the environment locks the switch and the change answers `409`). The body is
+  `{"auth": {"serviceIdentity": {"enabled": true, "confirm": true}}}`: turning it **on** needs `confirm: true` (`400` otherwise, nothing is
+  saved); turning it off needs no confirmation. The answer carries the warning `service_identity_on` or `service_identity_off`, and the
+  attempt and its outcome are written to the audit record (`service-identity-options`).
+- `GET /api/admin/service-identity` (administrator only) answers the state: `enabled`, `source` (`env`, `config`, `default`), `locked`,
+  `key` (`usable`, or `unusable` when `JWT_SECRET` is unset, an example value or too short, and then nothing is signed), `state`
+  (`presenting`, `idle_no_key`, `off`), `services` (each with `support`: `accepts` the shared verifier, `own_verifier`, or `not_yet`) and
+  `order`, the codes of the safe order of the steps. The key is never in the answer.
+- **The safe order.** Turn this switch on first, so that the server presents its token; then give the key to the services one by one
+  with `provisioning/service_identity.py --enable NAME --apply` of HYDRA-UMC-OS (as root on the machine, which this API never does),
+  restart that unit, and check it with `--status`. Turning the key on in a service before the server presents its token makes the service
+  refuse the server.
+
 ## 2k. Settings of the installation that harden this API
 
 Environment variables, read once at start (see `docs/PRODUCTION_BOOTSTRAP.md`):
@@ -1005,7 +1028,7 @@ A relay of the two routes `GET` / `PUT /downsample/plan` of HYDRA-UMC-DATALAKE, 
 - Rotation: `POST /api/admin/jwt-keys/rotate` (administrator; `409 JWT_ASYMMETRIC_OFF` while the algorithm is HS256) makes a new key the active one. The previous key stays published and accepted for `auth.keyOverlapSeconds` (60 to 31622400, 2592000 by default; edited in `data/server-config.json`, block `auth`), so two keys are valid during the transition and tokens already issued keep working; after that it is dropped from the key set and from the file. `GET /api/admin/jwt-keys` answers `{ "algorithm", "keys": [ { "kid", "createdAt", "retiredAt", "active", "acceptedUntil" } ], "jwksPath" }`, never any private part.
 - The check of a token is strict, for HTTP and for the WebSocket: the algorithm comes from the configuration, never from the token. An `EdDSA` token needs a `kid` of a published key, a valid signature, an `exp` in the future, and no `nbf` or `iat` in the future (5 seconds of clock difference are tolerated). `alg: none`, `RS*`, `ES*`, `HS384` and the rest are refused, and so is an `HS256` token signed with the public key as if it were a secret. A refused token answers `403` with `code: "TOKEN_INVALID"` (`TOKEN_EXPIRED` for an `exp` that passed), as before.
 - `auth.acceptHs256` (`PUT /api/admin/server-config`, or `HYDRA_UMC_JWT_ACCEPT_HS256=0`/`1`, which locks it; default `true`): while the server signs EdDSA, whether HS256 tokens still around are accepted, so nobody is signed out at the switch. Turn it off when the transition is over; the answer then carries the warning `jwt_hs256_refused`, and choosing EdDSA carries `jwt_eddsa_on`. Going back to `HS256` stops accepting EdDSA tokens.
-- The answer of `GET` / `PUT /api/admin/server-config` carries `auth.jwtAlgorithm` and `auth.acceptHs256` as `{ value, source }` and `auth.keyOverlapSeconds`.
+- The answer of `GET` / `PUT /api/admin/server-config` carries `auth.jwtAlgorithm`, `auth.acceptHs256` and `auth.serviceIdentity.enabled` (the identity of this server in its calls to the services, off by default) as `{ value, source }` and `auth.keyOverlapSeconds`.
 
 ## 3. Live sync: `WebSocket /ws`
 
