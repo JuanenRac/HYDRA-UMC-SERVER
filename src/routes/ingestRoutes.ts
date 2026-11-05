@@ -8,6 +8,7 @@
 // and audited. Reads need a signed-in account. The developer node signs in with the token of that node (never a user account).
 import express from "express";
 import type { AuditLog } from "../auditLog";
+import { apiRateLimiter } from "../auth";
 import {
   ALLOW_PLAIN_HTTP, MAX_BODY_BYTES, SWITCH_DEVELOPER_NODE, SWITCH_FAULT_FEED, SWITCH_SCENARIO,
   developerNodeStatusProblem, nodeIdForToken, scenarioOutcomeProblem, switchOn, transportAcceptable, type Ingest,
@@ -51,7 +52,7 @@ export function registerIngestRoutes(app: express.Express, deps: IngestDeps): vo
     return next();
   };
 
-  app.post("/api/ingest/scenario-outcome", authenticate, requireOperator, scenarioOn, (req: any, res) => {
+  app.post("/api/ingest/scenario-outcome", apiRateLimiter, authenticate, requireOperator, scenarioOn, (req: any, res) => {
     const problem = tooBig(req.body) ? "the body is too large" : scenarioOutcomeProblem(req.body);
     if (problem) {
       audit?.record({ type: "ingest-scenario", outcome: "refused", username: req.user?.username, detail: { problem } });
@@ -67,7 +68,7 @@ export function registerIngestRoutes(app: express.Express, deps: IngestDeps): vo
     }
   });
 
-  app.get("/api/ingest/scenario-outcomes", authenticate, scenarioOn, (req: any, res) => {
+  app.get("/api/ingest/scenario-outcomes", apiRateLimiter, authenticate, scenarioOn, (req: any, res) => {
     const store = ingest().scenario;
     const scenario = typeof req.query.scenario_id === "string" ? req.query.scenario_id : "";
     let items = store.list(limitOf(req.query.limit), "scenario-outcome");
@@ -75,7 +76,7 @@ export function registerIngestRoutes(app: express.Express, deps: IngestDeps): vo
     res.json({ items, chain: req.query.verify === "1" ? store.verify() : undefined });
   });
 
-  app.post("/api/ingest/developer-node/status", nodeToken, developerOn, (req: any, res) => {
+  app.post("/api/ingest/developer-node/status", apiRateLimiter, nodeToken, developerOn, (req: any, res) => {
     const problem = tooBig(req.body) ? "the body is too large" : developerNodeStatusProblem(req.body);
     if (problem) return res.status(400).json({ error: problem });
     try {
@@ -86,7 +87,7 @@ export function registerIngestRoutes(app: express.Express, deps: IngestDeps): vo
     }
   });
 
-  app.get("/api/developer-node/status", authenticate, developerOn, (req: any, res) => {
+  app.get("/api/developer-node/status", apiRateLimiter, authenticate, developerOn, (req: any, res) => {
     const store = ingest().developerNode;
     const latest = new Map<string, { at: number; seq: number; status: unknown }>();
     for (const r of store.list(Number.MAX_SAFE_INTEGER, "developer-node-status")) {
@@ -96,7 +97,7 @@ export function registerIngestRoutes(app: express.Express, deps: IngestDeps): vo
     res.json({ nodes: Object.fromEntries(latest), chain: req.query.verify === "1" ? store.verify() : undefined });
   });
 
-  app.get("/api/faults", authenticate, faultsOn, (req: any, res) => {
+  app.get("/api/faults", apiRateLimiter, authenticate, faultsOn, (req: any, res) => {
     const feed = ingest().faults;
     res.json({ active: feed.activeFaults(), recent: req.query.active === "1" ? undefined : feed.recent(limitOf(req.query.limit)), chain: req.query.verify === "1" ? feed.log.verify() : undefined });
   });

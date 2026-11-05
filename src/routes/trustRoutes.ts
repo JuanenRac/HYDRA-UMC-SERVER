@@ -7,6 +7,7 @@
 // commands, and the check of a trajectory proposal signed with Ed25519. None of them moves hardware.
 import express from "express";
 import type { AuditLog } from "../auditLog";
+import { apiRateLimiter } from "../auth";
 import { switchOn, type Ingest } from "../ingestFeeds";
 import { SWITCH_ANOMALY_FEED, VERDICTS, type VerdictName } from "../anomalyFeed";
 import { SWITCH_VOICE_CHAIN } from "../voiceChain";
@@ -36,7 +37,7 @@ export function registerTrustRoutes(app: express.Express, deps: TrustDeps): void
   const off = (name: string) => (_req: any, res: any, next: any) => (switchOn(name, env()) ? next() : res.status(404).json({ error: "not available" }));
 
   // The latest verdict of every series of the anomaly detector; `verdict=` narrows to one; `verify=1` checks the record of the changes.
-  app.get("/api/anomaly/verdicts", authenticate, off(SWITCH_ANOMALY_FEED), (req: any, res) => {
+  app.get("/api/anomaly/verdicts", apiRateLimiter, authenticate, off(SWITCH_ANOMALY_FEED), (req: any, res) => {
     const feed = ingest().anomaly;
     const only = typeof req.query.verdict === "string" ? req.query.verdict : "";
     if (only && !(VERDICTS as readonly string[]).includes(only)) return res.status(400).json({ error: `verdict must be one of ${VERDICTS.join(", ")}` });
@@ -44,13 +45,13 @@ export function registerTrustRoutes(app: express.Express, deps: TrustDeps): void
   });
 
   // The voice commands this server vouches for (administrator: the entries carry a hash of the person).
-  app.get("/api/voice/chain", authenticate, requireAdmin, off(SWITCH_VOICE_CHAIN), (req: any, res) => {
+  app.get("/api/voice/chain", apiRateLimiter, authenticate, requireAdmin, off(SWITCH_VOICE_CHAIN), (req: any, res) => {
     const store = ingest().voice;
     res.json({ items: store.list(limitOf(req.query.limit), "voice"), chain: req.query.verify === "1" ? store.verify() : undefined });
   });
 
   // Is this proposal genuine, current and for this robot? The answer is a fact about the proposal, never an order.
-  app.post("/api/trajectory/proposals/verify", authenticate, requireOperator, off(SWITCH_PROPOSAL_VERIFY), (req: any, res) => {
+  app.post("/api/trajectory/proposals/verify", apiRateLimiter, authenticate, requireOperator, off(SWITCH_PROPOSAL_VERIFY), (req: any, res) => {
     const body = req.body;
     if (!body || typeof body !== "object" || Array.isArray(body) || JSON.stringify(body).length > MAX_BODY_BYTES) {
       return res.status(400).json({ error: "the body must be a JSON object of at most 16 KiB" });

@@ -2373,7 +2373,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/audit": {
@@ -3648,7 +3649,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/ecosystem/health": {
@@ -3853,7 +3855,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/hardware/canota/flash": {
@@ -4136,7 +4139,8 @@
               }
             }
           }
-        }
+        },
+        "x-rate-limited": true
       }
     },
     "/api/ingest/scenario-outcome": {
@@ -4191,7 +4195,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/ingest/scenario-outcomes": {
@@ -4237,7 +4242,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/integrations/test-connection": {
@@ -6589,7 +6595,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/upload-work": {
@@ -6961,7 +6968,8 @@
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/voice/confirm": {

@@ -11,6 +11,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { EventEmitter } from "node:events";
+import { apiRateLimiter } from "../src/auth.ts";
 import { ChainedLog } from "../src/ingestLog.ts";
 import { makeIngest } from "../src/ingestFeeds.ts";
 import { AnomalyFeed, parseAnomalyVerdict, voiceAlertBody } from "../src/anomalyFeed.ts";
@@ -176,7 +177,7 @@ test("the keys file lists public keys by id and drops an entry whose id is not t
 type Handler = (req: any, res: any, next?: any) => unknown;
 function setup(env: Record<string, string | undefined>) {
   const routes: Record<string, Handler[]> = {};
-  const reg = (m: string) => (p: string, ...h: Handler[]) => { routes[`${m} ${p}`] = h; };
+  const reg = (m: string) => (p: string, ...h: Handler[]) => { routes[`${m} ${p}`] = h.filter((fn) => fn !== apiRateLimiter); };
   const app: any = { get: reg("GET"), post: reg("POST"), put() {}, delete() {}, patch() {} };
   const full = { JWT_SECRET: SECRET, ...env };
   const store = makeIngest(tmp(), full);

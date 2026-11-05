@@ -11,6 +11,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { EventEmitter } from "node:events";
+import { apiRateLimiter } from "../src/auth.ts";
 import { ChainedLog } from "../src/ingestLog.ts";
 import {
   FaultFeed, hashToken, makeIngest, nodeIdForToken, parseFaultEvent, scenarioOutcomeProblem, developerNodeStatusProblem, transportAcceptable,
@@ -116,7 +117,7 @@ test("faults: only fault-event/1 is read; the active set follows raised and clea
 type Handler = (req: any, res: any, next?: any) => unknown;
 function setup(env: Record<string, string | undefined>) {
   const routes: Record<string, Handler[]> = {};
-  const reg = (m: string) => (p: string, ...h: Handler[]) => { routes[`${m} ${p}`] = h; };
+  const reg = (m: string) => (p: string, ...h: Handler[]) => { routes[`${m} ${p}`] = h.filter((fn) => fn !== apiRateLimiter); };
   const app: any = { get: reg("GET"), post: reg("POST"), put() {}, delete() {}, patch() {} };
   const dir = tmp();
   const full = { JWT_SECRET: "q7Hk2vXz9LmN4pRt8WsY1cBd6FgJ3aEu5oIx0TnV", ...env };
