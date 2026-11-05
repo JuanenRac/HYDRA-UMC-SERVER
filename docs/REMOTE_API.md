@@ -854,6 +854,25 @@ that one. It is **off by default** and then no call changes.
   restart that unit, and check it with `--status`. Turning the key on in a service before the server presents its token makes the service
   refuse the server.
 
+### The proposals of the node watchdog: `GET /api/ops-agent/proposals`, `POST /api/ops-agent/proposals/decide`
+
+The node watchdog (HYDRA-UMC-OPS-AGENT) leaves each incident proposal it receives waiting for a person. These two routes list them and let an
+administrator approve or reject one. They speak to the watchdog over its authenticated channel (`incident-transport/1`: HMAC-SHA256 over the
+canonical JSON of the message with the shared secret of the sending node, a nonce, a time window and the contract version), the same wire
+format its `edge` role verifies; this server only accepts a reply that is signed by the watchdog, addressed to it, fresh and with a new nonce.
+
+- `GET /api/ops-agent/proposals` (administrator only): `{"pending": [...], "decided": [...]}` as the watchdog keeps them.
+- `POST /api/ops-agent/proposals/decide` (administrator only): the body is `{"incidentId": "...", "decision": "approved"|"rejected", "confirm": true}`
+  and nothing else. **Approving** needs `confirm: true` (`400` with `code: CONFIRMATION_REQUIRED` otherwise, and nothing is sent). The person who
+  decides is always the signed-in account, never a name sent by the client. A proposal that is not pending answers `404`; a refusal of the
+  watchdog or of the check of its reply answers `502` with its `code` and `reason`. Every attempt and its outcome is written to the audit record
+  (`ops-agent-proposal-decision`, with who asked, from which address, the incident and the decision).
+
+Both answer `503` with `available: false` while the channel is not set up: `HYDRA_UMC_OPS_AGENT_URL` (the watchdog's `transport` address) and
+`HYDRA_UMC_OPS_AGENT_REGISTRY_FILE` (a file `{"nodes": {"<node>": "<secret of at least 16 characters>"}}`, never part of a repository and
+read once) must be set; `HYDRA_UMC_OPS_AGENT_LOCAL_NODE` (default `hydra-umc-server`), `HYDRA_UMC_OPS_AGENT_EDGE_NODE` (default `edge`) and
+`HYDRA_UMC_OPS_AGENT_TIMEOUT_MS` are optional.
+
 ## 2k. Settings of the installation that harden this API
 
 Environment variables, read once at start (see `docs/PRODUCTION_BOOTSTRAP.md`):

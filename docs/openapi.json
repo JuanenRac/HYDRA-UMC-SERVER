@@ -4457,6 +4457,56 @@
         ]
       }
     },
+    "/api/ops-agent/proposals": {
+      "get": {
+        "tags": [
+          "ops-agent"
+        ],
+        "summary": "GET /api/ops-agent/proposals",
+        "description": "Requires a signed-in account with the admin role.",
+        "x-access": "admin",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/ops-agent/proposals/decide": {
+      "post": {
+        "tags": [
+          "ops-agent"
+        ],
+        "summary": "POST /api/ops-agent/proposals/decide",
+        "description": "Requires a signed-in account with the admin role.",
+        "x-access": "admin",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md."
+          },
+          "400": {
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/push/devices": {
       "post": {
         "tags": [

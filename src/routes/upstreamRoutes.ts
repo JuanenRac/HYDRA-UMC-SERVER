@@ -13,6 +13,7 @@ import { probeTcp } from "../ecosystemStatus";
 import { upstreamHeaders } from "../upstreamAuth";
 import { flashSigningQuery } from "../serverPolicy";
 import type { AuditLog } from "../auditLog";
+import { ChannelError, type OpsAgentChannel } from "../opsAgentChannel";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
@@ -30,6 +31,8 @@ export interface UpstreamDeps {
   /** The address of the semantic planner (empty: the relay of its settings answers 503). */
   SEMANTIC_PLANNER_URL?: string;
   requireOperator?: Middleware;
+  /** The signed channel to the node watchdog (OPS-AGENT); null or absent: the proposals routes answer 503. Read on every call so a fixed file is picked up. */
+  opsAgentChannel?: () => OpsAgentChannel | null;
   /** The audit record: a change of the settings of the decision gate of the hub is written to it. */
   audit?: Pick<AuditLog, "record">;
   SPI_BRIDGE_URL: string;
@@ -266,6 +269,78 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
       record(status === 200 ? "ok" : status >= 500 ? "failed" : "refused", { requireIdentity: body.requireIdentity, plannerStatus: status });
     });
     await relayWithOwnToken(SEMANTIC_PLANNER_URL, "The semantic planner", "HYDRA-UMC-SEMANTIC-PLANNER", req, res, "POST", "/settings");
+  });
+
+  // The proposals of the node watchdog (OPS-AGENT) that wait for a person. The watchdog keeps them and the last word; this server speaks to
+  // it over its signed channel (HMAC-SHA256, nonce, window, contract version), only for an administrator. The person who decides is the
+  // signed-in administrator, never a name sent by the client; approving needs a confirmation; every attempt and its outcome is audited.
+  function channelOrReply(res: express.Response): OpsAgentChannel | null {
+    let channel: OpsAgentChannel | null = null;
+    try {
+      channel = deps.opsAgentChannel ? deps.opsAgentChannel() : null;
+    } catch (error) {
+      const reason = error instanceof ChannelError ? error.reason : "the channel could not be set up";
+      res.status(503).json({ error: `The channel to the node watchdog is not usable: ${reason}`, available: false });
+      return null;
+    }
+    if (!channel) {
+      res.status(503).json({ error: "The node watchdog (HYDRA-UMC-OPS-AGENT) is not configured on this Server", available: false });
+      return null;
+    }
+    return channel;
+  }
+
+  function channelFailure(res: express.Response, error: unknown) {
+    if (error instanceof ChannelError) {
+      const status = error.code === "unreachable" ? 503 : error.code === "not-pending" || error.reason.includes("not-pending") ? 404 : error.code === "malformed" ? 400 : 502;
+      return res.status(status).json({ error: "The node watchdog refused or could not answer the request", code: error.code, reason: error.reason.slice(0, 300) });
+    }
+    return res.status(502).json({ error: "The node watchdog could not be asked" });
+  }
+
+  app.get("/api/ops-agent/proposals", authenticate, requireAdmin, async (req, res) => {
+    const channel = channelOrReply(res);
+    if (!channel) return;
+    try {
+      res.json(await channel.proposals());
+    } catch (error) {
+      channelFailure(res, error);
+    }
+  });
+
+  app.post("/api/ops-agent/proposals/decide", authenticate, requireAdmin, async (req, res) => {
+    const user = (req as any).user;
+    const record = (outcome: "ok" | "refused" | "failed", detail: Record<string, unknown>) =>
+      deps.audit?.record({ type: "ops-agent-proposal-decision", outcome, userId: user?.id, username: user?.username, ip: req.ip, detail });
+    const body = req.body;
+    const keys = body && typeof body === "object" && !Array.isArray(body) ? Object.keys(body) : [];
+    const id = keys.length ? body.incidentId : undefined;
+    if (
+      keys.some((key) => key !== "incidentId" && key !== "decision" && key !== "confirm") || typeof id !== "string" || !id || id.length > 200 ||
+      (body.decision !== "approved" && body.decision !== "rejected")
+    ) {
+      record("refused", { reason: "the body must be an object with incidentId, decision (approved or rejected) and, to approve, confirm: true" });
+      return res.status(400).json({ error: "The body must be an object with incidentId, decision (approved or rejected) and, to approve, confirm: true" });
+    }
+    if (body.decision === "approved" && body.confirm !== true) {
+      record("refused", { reason: "approving needs a confirmation", incidentId: id, decision: "approved" });
+      return res.status(400).json({ error: "Approving a proposal needs confirm: true", code: "CONFIRMATION_REQUIRED" });
+    }
+    const channel = channelOrReply(res);
+    if (!channel) {
+      record("failed", { reason: "the channel to the node watchdog is not available", incidentId: id, decision: body.decision });
+      return;
+    }
+    try {
+      const result = await channel.decide(id, body.decision, String(user?.username ?? "").replace(/[^A-Za-z0-9._:-]/g, "_").slice(0, 64) || "administrator");
+      record("ok", { incidentId: id, decision: body.decision });
+      res.json(result);
+    } catch (error) {
+      record(error instanceof ChannelError && error.code !== "unreachable" && error.code !== "malformed" && !error.code.startsWith("reply-") ? "refused" : "failed", {
+        incidentId: id, decision: body.decision, code: error instanceof ChannelError ? error.code : "error",
+      });
+      channelFailure(res, error);
+    }
   });
 
   // Real relay to the local spi_bridge HTTP service (HYDRA-UMC/src/

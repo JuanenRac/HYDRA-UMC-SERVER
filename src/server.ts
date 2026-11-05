@@ -37,6 +37,7 @@ import { JobStopRelay, resolveStopRelay, type StopRelayFile } from "./jobStopRel
 import { OrchestratorTakeover, resolveTakeover, type TakeoverFile } from "./orchestratorTakeover";
 import { reloadDispatcher, resolveReload, type ReloadFile } from "./dispatcherReload";
 import { registerUpstreamRoutes } from "./routes/upstreamRoutes";
+import { channelFromEnv, type OpsAgentChannel } from "./opsAgentChannel";
 import { realSettings, redactSettingsSecrets, setCameraCredentialsViaEnv } from "./serverPolicy";
 import { ensureSeedUser, findUser, verifyPassword } from "./users";
 import { pruneExpiredRefreshTokens } from "./refresh_tokens";
@@ -547,10 +548,15 @@ async function startServer() {
 
   registerBluetoothRoutes(app, { authenticate, requireAdmin, industrialLog });
 
+  // the signed channel to the node watchdog: built on the first use (a registry file fixed later is picked up) and then kept, so the
+  // nonces of the replies it has seen are kept too
+  let opsAgentChannelCache: OpsAgentChannel | null | undefined;
+  const opsAgentChannel = (): OpsAgentChannel | null => (opsAgentChannelCache === undefined ? (opsAgentChannelCache = channelFromEnv()) : opsAgentChannelCache);
+
   registerUpstreamRoutes(app, {
     authenticate, requireAdmin, industrialLog, wsClients, DATALAKE_URL, DATALAKE_TIMEOUT_MS, CONNECTOR_HUB_URL,
     CONNECTOR_HUB_TIMEOUT_MS, SPI_BRIDGE_URL, SPI_BRIDGE_VERSION_TIMEOUT_MS, SPI_BRIDGE_FLASH_TIMEOUT_MS,
-    CONNECTOR_HUB_GATE_URL, SEMANTIC_PLANNER_URL, requireOperator, audit,
+    CONNECTOR_HUB_GATE_URL, SEMANTIC_PLANNER_URL, requireOperator, audit, opsAgentChannel,
   });
 
   registerInfoRoutes(app, { infoAccess, getSettings, REMOTE_API_VERSION, healthOpen: () => security.healthOpen() });
