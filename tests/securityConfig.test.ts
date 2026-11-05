@@ -371,3 +371,28 @@ test("the option for the address of the clients refuses a value that is not true
   const fixed = makeConfig({ connectionRecordAddress: "1" }).config;
   assert.throws(() => fixed.update({ connections: { recordAddress: false } }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 409 && /CONNECTION_RECORD_ADDRESS/.test(e.message));
 });
+
+test("the read-out protection level of a production flash is off by default and only the words 0 and 1 count in the environment", () => {
+  const { config } = makeConfig();
+  assert.equal(config.productionRdpLevel(), 0);
+  assert.deepEqual(config.snapshot().production.rdpLevel, { value: 0, source: "default" });
+  assert.equal(makeConfig({ productionRdpLevel: "1" }).config.productionRdpLevel(), 1);
+  assert.deepEqual(makeConfig({ productionRdpLevel: "1" }).config.snapshot().production.rdpLevel, { value: 1, source: "env" });
+  for (const word of ["2", "true", "yes", "on", ""]) assert.equal(makeConfig({ productionRdpLevel: word }).config.productionRdpLevel(), 0, word);
+});
+
+test("an administrator can choose the read-out protection level; it is logged and saved, and level 2 is refused", () => {
+  const { config, logs, stored } = makeConfig();
+  config.update({ production: { rdpLevel: 1 } }, "root");
+  assert.equal(config.productionRdpLevel(), 1);
+  assert.deepEqual(stored().production, { rdpLevel: 1 });
+  assert.match(logs.at(-1)!, /read-out protection level of a production flash to 1/);
+  config.update({ production: { rdpLevel: 0 } }, "root");
+  assert.equal(config.productionRdpLevel(), 0);
+  for (const bad of [{ rdpLevel: 2 }, { rdpLevel: "1" }, { rdpLevel: true }, { rdpLevel: -1 }, { rdpLevel: 0.5 }]) {
+    assert.throws(() => config.update({ production: bad }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 400);
+  }
+  assert.throws(() => config.update({ production: [] }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 400);
+  const fixed = makeConfig({ productionRdpLevel: "1" }).config;
+  assert.throws(() => fixed.update({ production: { rdpLevel: 0 } }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 409 && /PRODUCTION_RDP_LEVEL/.test(e.message));
+});

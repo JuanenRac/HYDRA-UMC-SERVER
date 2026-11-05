@@ -68,6 +68,12 @@ export interface RobotsFile {
   allowEnable?: boolean;
 }
 
+/** The settings of a production flash (the controller boards of HYDRA-UMC). */
+export interface ProductionFile {
+  /** The read-out protection level a production flash sets: 0 = off (the default; nothing is protected), 1 = on. Level 2 is permanent and never offered. */
+  rdpLevel?: number;
+}
+
 /** What the history of connections keeps about a client (src/connections.ts). */
 export interface ConnectionsFile {
   /** Whether the address and user agent of a client are written in the history (default: no; they are personal data, and only an administrator is ever shown them). */
@@ -285,6 +291,7 @@ export interface SecurityFile {
   mavlink?: MavlinkFile;
   robots?: RobotsFile;
   connections?: ConnectionsFile;
+  production?: ProductionFile;
   health?: HealthFile;
   ecosystemHealth?: EcosystemHealthFile;
   infoTickets?: InfoTicketsFile;
@@ -321,6 +328,7 @@ export interface SecurityEnv {
   robotAllowEnable?: string;
   connectionRecordAddress?: string;
   healthOpen?: string;
+  productionRdpLevel?: string;
   ecosystemHealth?: string;
   infoTickets?: string;
   jwtAlgorithm?: string;
@@ -363,6 +371,7 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     robotAllowEnable: env.HYDRA_UMC_ROBOT_ALLOW_ENABLE,
     connectionRecordAddress: env.HYDRA_UMC_CONNECTION_RECORD_ADDRESS,
     healthOpen: env.HYDRA_UMC_HEALTH_OPEN,
+    productionRdpLevel: env.HYDRA_UMC_PRODUCTION_RDP_LEVEL,
     ecosystemHealth: env.HYDRA_UMC_ECOSYSTEM_HEALTH,
     infoTickets: env.HYDRA_UMC_INFO_TICKETS,
     jwtAlgorithm: env.HYDRA_UMC_JWT_ALGORITHM,
@@ -454,6 +463,13 @@ export function resolveConnectionRecordAddress(env: string | undefined, file: Se
   if (isSet(env)) return { value: env.trim() === "1", source: "env" };
   if (typeof file.connections?.recordAddress === "boolean") return { value: file.connections.recordAddress, source: "config" };
   return { value: false, source: "default" };
+}
+
+/** The read-out protection level of a production flash: only the exact words "0" and "1" in the environment count; anything else is ignored and the file or the default (0, off) applies. */
+export function resolveProductionRdpLevel(env: string | undefined, file: SecurityFile): { value: 0 | 1; source: Source } {
+  if (isSet(env) && (env.trim() === "0" || env.trim() === "1")) return { value: env.trim() === "1" ? 1 : 0, source: "env" };
+  if (file.production?.rdpLevel === 0 || file.production?.rdpLevel === 1) return { value: file.production.rdpLevel, source: "config" };
+  return { value: 0, source: "default" };
 }
 
 /** The unauthenticated GET /health: only the exact word "1" in the environment switches it on; the default is off. */
@@ -771,6 +787,7 @@ export interface SecuritySnapshot {
   voice: { includeHeardText: { value: boolean; source: Source }; minConfidence: { value: number; source: Source }; requireSignature: { value: boolean; source: Source } };
   robots: { allowEnable: { value: boolean; source: Source } };
   connections: { recordAddress: { value: boolean; source: Source } };
+  production: { rdpLevel: { value: 0 | 1; source: Source } };
   health: { open: { value: boolean; source: Source } };
   ecosystemHealth: { enabled: { value: boolean; source: Source } };
   infoTickets: { enabled: { value: boolean; source: Source } };
@@ -875,6 +892,11 @@ export class SecurityConfig {
 
   mqtt(): MqttSettings {
     return resolveMqttSettings(this.options.env.mqtt ?? {}, this.file);
+  }
+
+  /** The read-out protection level a production flash sets (0 = off unless an administrator chose 1). */
+  productionRdpLevel(): 0 | 1 {
+    return resolveProductionRdpLevel(this.options.env.productionRdpLevel, this.file).value;
   }
 
   /** Whether the history of connections may keep the address and user agent of a client (off unless an administrator turned it on). */
@@ -1044,6 +1066,7 @@ export class SecurityConfig {
       },
       robots: { allowEnable: resolveRobotAllowEnable(this.options.env.robotAllowEnable, this.file) },
       connections: { recordAddress: resolveConnectionRecordAddress(this.options.env.connectionRecordAddress, this.file) },
+      production: { rdpLevel: resolveProductionRdpLevel(this.options.env.productionRdpLevel, this.file) },
       health: { open: resolveHealthOpen(this.options.env.healthOpen, this.file) },
       ecosystemHealth: { enabled: resolveEcosystemHealth(this.options.env.ecosystemHealth, this.file) },
       infoTickets: { enabled: resolveInfoTickets(this.options.env.infoTickets, this.file) },
@@ -1264,6 +1287,18 @@ export class SecurityConfig {
       }
       next.robots = merged;
       if (robotsPatch.allowEnable === true) warnings.push("robot_enable_allowed");
+    }
+
+    if (patch.production !== undefined) {
+      const productionPatch = patch.production;
+      if (typeof productionPatch !== "object" || productionPatch === null || Array.isArray(productionPatch)) throw new SecurityConfigError(400, "production must be an object");
+      const merged: ProductionFile = { ...(next.production ?? {}) };
+      if (productionPatch.rdpLevel !== undefined) {
+        if (productionPatch.rdpLevel !== 0 && productionPatch.rdpLevel !== 1) throw new SecurityConfigError(400, "production.rdpLevel must be 0 (off) or 1; level 2 is permanent and is not offered");
+        if (this.options.env.productionRdpLevel !== undefined && resolveProductionRdpLevel(this.options.env.productionRdpLevel, this.file).source === "env") throw lockedBy("HYDRA_UMC_PRODUCTION_RDP_LEVEL");
+        merged.rdpLevel = productionPatch.rdpLevel;
+      }
+      next.production = merged;
     }
 
     if (patch.connections !== undefined) {
@@ -1644,6 +1679,10 @@ export class SecurityConfig {
     if (patch.robots !== undefined) {
       log(`[SECURITY] ${actor} ${snapshot.robots.allowEnable.value ? "allowed" : "forbade"} bringing a disabled robot back with the enable command (an administrator only).`);
     }
+    if (patch.production !== undefined) {
+      log(`[SECURITY] ${actor} set the read-out protection level of a production flash to ${snapshot.production.rdpLevel.value} (${snapshot.production.rdpLevel.value === 1 ? "on" : "off"}).`);
+    }
+
     if (patch.connections !== undefined) {
       log(`[SECURITY] ${actor} ${snapshot.connections.recordAddress.value ? "allowed" : "forbade"} keeping the address and user agent of the clients in the history of connections.`);
     }
