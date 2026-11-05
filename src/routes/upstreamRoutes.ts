@@ -88,7 +88,7 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
     try {
       const upstream = await fetch(`${DATALAKE_URL}/downsample/plan${preview ? "?preview=1" : ""}`, {
         method,
-        headers: { ...upstreamHeaders("datalake-admin"), ...(method === "PUT" ? { "content-type": "application/json" } : {}) },
+        headers: { ...upstreamHeaders("datalake-admin", process.env, undefined, method === "PUT" ? "admin" : "viewer"), ...(method === "PUT" ? { "content-type": "application/json" } : {}) },
         body: method === "PUT" ? JSON.stringify(body ?? {}) : undefined,
         signal: AbortSignal.timeout(DATALAKE_TIMEOUT_MS),
       });
@@ -128,6 +128,8 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
     }
     try {
       const upstream = await fetch(`${CONNECTOR_HUB_URL}${path}`, {
+        // the hub asks for an identity: this server presents its own, the catalog is a read
+        headers: upstreamHeaders("connector-hub"),
         signal: AbortSignal.timeout(CONNECTOR_HUB_TIMEOUT_MS),
       });
       const body = await upstream.json().catch(() => null);
@@ -247,7 +249,7 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
     try {
       const upstream = await fetch(
         `${SPI_BRIDGE_URL}/version?tier=${encodeURIComponent(tier)}&slot=${encodeURIComponent(slot)}&relay=${encodeURIComponent(relay)}`,
-        { signal: AbortSignal.timeout(SPI_BRIDGE_VERSION_TIMEOUT_MS) },
+        { headers: upstreamHeaders("spi-bridge"), signal: AbortSignal.timeout(SPI_BRIDGE_VERSION_TIMEOUT_MS) },
       );
       const body = await upstream.json().catch(() => null);
       if (!upstream.ok) {
@@ -288,7 +290,7 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
       try {
         upstream = await fetch(`${SPI_BRIDGE_URL}/flash?${qs.toString()}`, {
           method: "POST",
-          headers: { "content-type": "application/octet-stream" },
+          headers: { "content-type": "application/octet-stream", ...upstreamHeaders("spi-bridge", process.env, undefined, "admin") },
           body: firmware,
           signal: AbortSignal.timeout(SPI_BRIDGE_FLASH_TIMEOUT_MS),
         });

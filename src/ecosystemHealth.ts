@@ -20,6 +20,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { X509Certificate } from "node:crypto";
+import { identityHeader } from "./serviceIdentity";
 import { getEcosystemStatus, healthFallbackFor, probeTcp, SERVICE_PROBE_HOST, type EcosystemProjectStatus } from "./ecosystemStatus";
 
 export type ServiceState = "ok" | "degraded" | "down" | "unknown";
@@ -329,7 +330,7 @@ function fetchHealthDetailOnce(port: number, healthPath: string, timeoutMs: numb
       done = true;
       resolve(detail);
     };
-    const req = http.get({ host, port, path: healthPath, timeout: timeoutMs, headers: { accept: "application/json" } }, (res) => {
+    const req = http.get({ host, port, path: healthPath, timeout: timeoutMs, headers: { accept: "application/json", ...identityHeader("viewer") } }, (res) => {
       const chunks: Buffer[] = [];
       let size = 0;
       res.on("data", (chunk: Buffer) => {

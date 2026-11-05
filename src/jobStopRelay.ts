@@ -18,6 +18,8 @@
 // and its token come from the environment (HYDRA_UMC_JOB_DISPATCHER_URL, HYDRA_UMC_JOB_DISPATCHER_TOKEN): a token is never kept in the
 // settings file. The clock, the HTTP client and the timers are injected, so the whole behaviour is tested with simulated time.
 
+import { identityHeader } from "./serviceIdentity";
+
 export const STOP_RELAY_DEFAULTS = {
   pollSeconds: 2,
   requestTimeoutMs: 3000,
@@ -153,6 +155,7 @@ export class JobStopRelay {
     try {
       const headers: Record<string, string> = { Accept: "application/json" };
       if (settings.token) headers.Authorization = `Bearer ${settings.token}`;
+      else Object.assign(headers, identityHeader("operator"));
       if (body !== undefined) headers["Content-Type"] = "application/json";
       const answer = await this.deps.fetch(settings.url + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal });
       let json: unknown = null;

@@ -10,6 +10,7 @@ import { getSystemMetrics } from "../systemMetrics";
 import { industrialLog } from "../runtime";
 import { VOICE_UI_URL, VOICE_UI_TOKEN, VOICE_UI_TIMEOUT_MS, validateVoiceTurnPayload, isAssistantReplyForRequest } from "../upstreamConfig";
 import type { SecurityConfig } from "../securityConfig";
+import { identityHeader } from "../serviceIdentity";
 import { voiceLanguageOf, voiceStatusText } from "../voiceText";
 import { judgeConfirmationResult, subjectOf, validateConfirmRequest } from "../voiceConfirm";
 
@@ -90,7 +91,7 @@ export function registerAssistantRoutes(app: express.Express, deps: { authentica
         method: "POST",
         headers: {
           "content-type": "application/json",
-          ...(VOICE_UI_TOKEN ? { authorization: `Bearer ${VOICE_UI_TOKEN}` } : {}),
+          ...(VOICE_UI_TOKEN ? { authorization: `Bearer ${VOICE_UI_TOKEN}` } : identityHeader("operator")),
         },
         body: JSON.stringify(forwarded),
         signal: AbortSignal.timeout(VOICE_UI_TIMEOUT_MS),
@@ -156,7 +157,7 @@ export function registerAssistantRoutes(app: express.Express, deps: { authentica
         method: "POST",
         headers: {
           "content-type": "application/json",
-          ...(VOICE_UI_TOKEN ? { authorization: `Bearer ${VOICE_UI_TOKEN}` } : {}),
+          ...(VOICE_UI_TOKEN ? { authorization: `Bearer ${VOICE_UI_TOKEN}` } : identityHeader("operator")),
         },
         body: JSON.stringify({ confirmationToken: req.body.confirmationToken, subject }),
         signal: AbortSignal.timeout(VOICE_UI_TIMEOUT_MS),

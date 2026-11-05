@@ -13,6 +13,7 @@ import net from "net";
 import path from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
+import { identityHeader } from "./serviceIdentity";
 import { completeFromRegistry, loadPortsRegistry } from "./portsRegistry";
 
 const execFileAsync = promisify(execFile);
@@ -94,7 +95,7 @@ export function healthFallbackFor(healthPath: string, status: number | undefined
 function probeHttpOnce(port: number, healthPath: string): Promise<{ ok: boolean; status?: number }> {
   return new Promise((resolve) => {
     const req = http.get(
-      { host: SERVICE_PROBE_HOST, port, path: healthPath, timeout: SERVICE_PROBE_TIMEOUT_MS },
+      { host: SERVICE_PROBE_HOST, port, path: healthPath, timeout: SERVICE_PROBE_TIMEOUT_MS, headers: identityHeader("viewer") },
       (res) => {
         const ok = typeof res.statusCode === "number" && res.statusCode >= 200 && res.statusCode < 300;
         res.resume(); // drain so the socket can close cleanly, we don't need the body

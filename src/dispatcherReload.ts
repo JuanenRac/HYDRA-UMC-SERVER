@@ -13,6 +13,8 @@
 // and its token HYDRA_UMC_JOB_DISPATCHER_TOKEN (or JOB_DISPATCHER_TOKEN, the variable the dispatcher itself reads). Without an address
 // nothing is called and the change waits for the next start of the dispatcher. The time to wait is `jobDispatcher.reload.timeoutMs`.
 
+import { identityHeader } from "./serviceIdentity";
+
 export const RELOAD_DEFAULT_TIMEOUT_MS = 3000;
 
 export interface ReloadFile {
@@ -60,6 +62,7 @@ export async function reloadDispatcher(deps: ReloadDeps): Promise<ReloadOutcome>
   try {
     const headers: Record<string, string> = { Accept: "application/json" };
     if (settings.token) headers.Authorization = `Bearer ${settings.token}`;
+    else Object.assign(headers, identityHeader("admin"));
     const answer = await deps.fetch(`${settings.url}/admin/reload-config`, { method: "POST", headers, signal: controller.signal });
     if (answer.status === 200) return { ok: true };
     let detail = "";

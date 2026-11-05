@@ -6,6 +6,7 @@
 // The passthrough to the local AI services, moved out of server.ts unchanged.
 import express from "express";
 import { upstreamHeaders } from "../upstreamAuth";
+import { roleForMethod } from "../serviceIdentity";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
@@ -190,7 +191,7 @@ export function registerLocalAiRoutes(app: express.Express, deps: { authenticate
     const connectTimeout = setTimeout(() => controller.abort(), isRul && rul ? rul.timeoutMs : 10000);
     let upstream: Response;
     // the Bearer token of this service, when it has one: only this server holds it, a client never sees it
-    const headers: Record<string, string> = { ...upstreamHeaders(req.params.service, deps.env ?? process.env), ...(hasBody ? { "Content-Type": "application/json" } : {}) };
+    const headers: Record<string, string> = { ...upstreamHeaders(req.params.service, deps.env ?? process.env, undefined, roleForMethod(req.method)), ...(hasBody ? { "Content-Type": "application/json" } : {}) };
     try {
       upstream = await fetch(url, {
         method: req.method,

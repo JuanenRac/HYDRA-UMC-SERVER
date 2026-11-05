@@ -15,6 +15,7 @@
 // collector costs a few skipped samples and nothing else. The token (`HYDRA_UMC_TELEMETRY_COLLECTOR_TOKEN` or its `_FILE`) is the one
 // the collector asks for.
 import { bearerHeader, resolveToken, type Env } from "./upstreamAuth";
+import { identityHeader } from "./serviceIdentity";
 
 export const COLLECTOR_URL_VARIABLE = "HYDRA_UMC_TELEMETRY_COLLECTOR_URL";
 export const COLLECTOR_TOKEN_VARIABLES = ["HYDRA_UMC_TELEMETRY_COLLECTOR_TOKEN"] as const;
@@ -138,7 +139,7 @@ export class TelemetryProducer {
     if (this.sending || this.pending.size === 0 || this.now() < this.pausedUntil) return;
     this.sending = true;
     try {
-      const headers: Record<string, string> = { "content-type": "application/json", ...bearerHeader(this.options.token ?? "") };
+      const headers: Record<string, string> = { "content-type": "application/json", ...(this.options.token ? bearerHeader(this.options.token) : identityHeader("operator")) };
       const post = this.options.post ?? (async (url, init) => {
         const response = await fetch(url, { method: "POST", ...init });
         return { ok: response.ok, status: response.status };

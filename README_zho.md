@@ -240,6 +240,7 @@ CORS 通过一个可配置的白名单（`CORS_ALLOWED_ORIGINS`，见下文“�
 
 - `HYDRA_UMC_HEALTH_OPEN=1`（`health.open`）- `GET /health` 无需登录即可返回精简的健康报告（不含版本、主机或计数）；关闭时返回 `404`。
 - `HYDRA_UMC_ECOSYSTEM_HEALTH=1`（`ecosystemHealth.enabled`）- `GET /api/ecosystem/health` 返回生态系统各服务的健康状况；关闭时返回 `404`。
+- `HYDRA_UMC_SERVICE_IDENTITY=1` - 此服务器对各服务的调用（健康探测、中继、停止中继、接管）会带上它自己签发的短期令牌（使用 `JWT_SECRET` 的 HS256，有效期六十秒），已开启身份密钥的服务会要求它；有自己令牌的服务仍收到原令牌，`JWT_SECRET` 未设置、为示例值或过短时不会签发任何令牌；关闭时不会向任何调用添加内容。
 - `HYDRA_UMC_INFO_TICKETS=1` （`infoTickets.enabled`） - `POST /api/info/ticket` 签发带签名的票据（地址中的 `?ticket=`），在 `HYDRA_UMC_INFO_AUTH=required` 关闭这些只读信息路由（`/metrics`、系统指标、监控器、生态系统状态）后，仍让无法发送令牌的采集器或仪表板读取；关闭时该路由返回 `404`，票据会被忽略。
 - `HYDRA_UMC_PRESENCE=1`(`presence.enabled`)和 `HYDRA_UMC_PRESENCE_ACTION`(`presence.action`) - 操作员在场的死人开关:`POST /api/operator/presence` 接收手表带编号的心跳;心跳丢失时,服务器会对该人持有的机器人采取动作,默认是减速并提醒(也可暂停、仅提醒或停止);关闭时该路由返回 `404`。
 - `HYDRA_UMC_MQTT_HOME_ASSISTANT=1` （`mqtt.homeAssistant.enabled`） - MQTT 桥还会为 Home Assistant 发布每台机器人的发现配置（保留消息，位于 `homeassistant/` 下）；默认关闭，下次启动时生效。

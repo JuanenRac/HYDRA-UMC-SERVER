@@ -21,6 +21,8 @@
 // (takeover off, a wrong token) is not tried again with something else. Every time and limit is a setting, the addresses and tokens come
 // from the environment (a token is never kept in the settings file). The clock, the HTTP client and the timers are injected.
 
+import { identityHeader } from "./serviceIdentity";
+
 export const TAKEOVER_DEFAULTS = {
   pollSeconds: 5,
   requestTimeoutMs: 3000,
@@ -200,6 +202,7 @@ export class OrchestratorTakeover {
     try {
       const headers: Record<string, string> = { Accept: "application/json" };
       if (token) headers.Authorization = `Bearer ${token}`;
+      else Object.assign(headers, identityHeader(method === "GET" ? "viewer" : "operator"));
       if (body !== undefined) headers["Content-Type"] = "application/json";
       const answer = await this.deps.fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal });
       let json: unknown = null;

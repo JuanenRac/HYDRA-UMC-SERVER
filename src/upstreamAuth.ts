@@ -15,6 +15,7 @@
 // not have to sit in the environment). The variable wins over the file. No token is no header: a service that asks for none is
 // reached exactly as before.
 import fs from "node:fs";
+import { identityHeader, type IdentityRole } from "./serviceIdentity";
 
 export type Env = Record<string, string | undefined>;
 
@@ -71,9 +72,15 @@ export function bearerHeader(token: string): Record<string, string> {
   return { authorization: `Bearer ${token}` };
 }
 
-/** The headers to present to `service`: its Bearer token when it has one. Reads the configuration on every call, so a token written to its file after the start is used. */
-export function upstreamHeaders(service: string, env: Env = process.env, read?: (path: string) => string): Record<string, string> {
-  return bearerHeader(tokenForService(service, env, read));
+/**
+ * The headers to present to `service`: its Bearer token when it has one. A service with no token of its own gets the signed token of this
+ * server instead when the identity of the services is on (src/serviceIdentity.ts): that is what a service whose identity key is on asks for.
+ * `role` is what the request needs (a viewer reads, an operator or an administrator changes things). Reads the configuration on every call,
+ * so a token written to its file after the start is used.
+ */
+export function upstreamHeaders(service: string, env: Env = process.env, read?: (path: string) => string, role: IdentityRole = "viewer"): Record<string, string> {
+  const own = bearerHeader(tokenForService(service, env, read));
+  return Object.keys(own).length > 0 ? own : identityHeader(role, env);
 }
 
 /** Which of the relayed services have a token configured (never the tokens themselves): for the status of the installation. */
