@@ -13,11 +13,12 @@ import type { SecurityConfig } from "../securityConfig";
 import { identityHeader } from "../serviceIdentity";
 import { voiceLanguageOf, voiceStatusText } from "../voiceText";
 import { judgeConfirmationResult, subjectOf, validateConfirmRequest } from "../voiceConfirm";
+import type { VoiceEvent } from "../voiceChain";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
-export function registerAssistantRoutes(app: express.Express, deps: { authenticate: Middleware; getSettings: () => any; security: SecurityConfig }): void {
-  const { authenticate, getSettings, security } = deps;
+export function registerAssistantRoutes(app: express.Express, deps: { authenticate: Middleware; getSettings: () => any; security: SecurityConfig; onVoiceEvent?: (event: VoiceEvent) => void }): void {
+  const { authenticate, getSettings, security, onVoiceEvent } = deps;
   // Real spoken "status" text for the voice assistant's own status intent -
   // see this function's one real call site (POST /api/voice/turn) for why
   // this exists at all. Reuses the exact same real sources
@@ -127,6 +128,8 @@ export function registerAssistantRoutes(app: express.Express, deps: { authentica
       // information. The correlation ID and safety fields are sufficient for
       // operational diagnosis.
       industrialLog(`[VOICE] requestId=${requestId} level=${reply.level} confirmation=${reply.requiresConfirmation}`);
+      // the signed record of the voice commands (off unless HYDRA_UMC_VOICE_CHAIN is "1"): ids and codes only, never the text
+      onVoiceEvent?.({ event: "turn", requestId, intent: (reply.intent as any)?.name, level: String(reply.level ?? ""), requiresConfirmation: reply.requiresConfirmation === true, subject: subject ?? undefined });
       res.set("Cache-Control", "no-store").json(reply);
     } catch (error) {
       const timedOut = error instanceof DOMException && error.name === "TimeoutError";
@@ -174,6 +177,7 @@ export function registerAssistantRoutes(app: express.Express, deps: { authentica
       }
       // who confirmed what, by request id: neither the token nor the transcript is logged
       industrialLog(`[VOICE] confirmation user=${subject} requestId=${String(verdict.result.requestId ?? "-")} status=${String(verdict.result.status)} verified=${verdict.verified}`);
+      onVoiceEvent?.({ event: "confirm", requestId: String(verdict.result.requestId ?? ""), status: String(verdict.result.status ?? ""), subject });
       res.set("Cache-Control", "no-store").json({ ...verdict.result, verified: verdict.verified });
     } catch (error) {
       const timedOut = error instanceof DOMException && error.name === "TimeoutError";

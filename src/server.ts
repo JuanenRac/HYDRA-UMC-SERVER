@@ -59,7 +59,7 @@ import { issueMediaTicket, mediaTicketKey, verifyMediaTicket } from "./mediaTick
 import { infoTicketKey, verifyInfoTicket, type InfoTicketLimits } from "./infoTickets";
 import { registerAuthRoutes } from "./routes/auth";
 import { jwtKeyStore, setJwtPolicyProvider, setKeyOverlapProvider } from "./jwtKeys";
-import { setServiceIdentitySwitch } from "./serviceIdentity";
+import { setServiceIdentitySwitch, identityHeader } from "./serviceIdentity";
 import { classify as classifyAddress, makeTrustedNetworksGate } from "./trustedNetworks";
 import { registerConnectionRoutes } from "./routes/connectionRoutes";
 import { registerLivenessRoutes } from "./routes/livenessRoutes";
@@ -82,6 +82,10 @@ import { registerLocalAiRoutes, registerRulConfigRoute, rulSettings } from "./ro
 import { registerInfoRoutes } from "./routes/infoRoutes";
 import { registerPowerRoutes } from "./routes/powerRoutes";
 import { registerIngestRoutes } from "./routes/ingestRoutes";
+import { registerTrustRoutes } from "./routes/trustRoutes";
+import { recordVoiceEvent } from "./voiceChain";
+import { SWITCH_ANOMALY_FEED, SWITCH_ANOMALY_VOICE_RELAY, anomalyTopicFromEnv } from "./anomalyFeed";
+import { startAnomalyFeed, type AnomalyFeedClient, type VoiceRelay } from "./anomalyFeedBroker";
 import { makeIngest, switchOn, SWITCH_FAULT_FEED, faultTopicFromEnv, type Ingest } from "./ingestFeeds";
 import { startFaultFeed, type FaultFeedClient } from "./faultFeedBroker";
 import { registerWorksRoutes } from "./routes/worksRoutes";
@@ -91,7 +95,7 @@ import { createPlayback } from "./playback";
 import { createWsHub, attachWebSocketServer } from "./ws";
 import { createTelemetryProducer } from "./telemetryProducer";
 import { NODE_ENV, JWT_SECRET, authenticate, asyncHandler, requireAdmin, requireOperator, stopAllRateLimiter, setRateLimitSettingsProvider } from "./auth";
-import { DATALAKE_URL, DATALAKE_TIMEOUT_MS, CONNECTOR_HUB_URL, CONNECTOR_HUB_GATE_URL, SEMANTIC_PLANNER_URL, HIL_BRIDGE_URL, CONNECTOR_HUB_TIMEOUT_MS, SPI_BRIDGE_URL, SPI_BRIDGE_VERSION_TIMEOUT_MS, SPI_BRIDGE_FLASH_TIMEOUT_MS } from "./upstreamConfig";
+import { VOICE_UI_URL, VOICE_UI_TOKEN, VOICE_UI_TIMEOUT_MS, DATALAKE_URL, DATALAKE_TIMEOUT_MS, CONNECTOR_HUB_URL, CONNECTOR_HUB_GATE_URL, SEMANTIC_PLANNER_URL, HIL_BRIDGE_URL, CONNECTOR_HUB_TIMEOUT_MS, SPI_BRIDGE_URL, SPI_BRIDGE_VERSION_TIMEOUT_MS, SPI_BRIDGE_FLASH_TIMEOUT_MS } from "./upstreamConfig";
 import { LOG_FILE, bonjour, setupDiscovery, loadServerConfig, saveServerConfig, resolvePort, industrialLog, setCurrentPort, getCurrentPort, closeLog, setLogRedaction } from "./runtime";
 import { setSignatureRequirement } from "./voiceConfirm";
 
@@ -393,7 +397,7 @@ async function startServer() {
 
   registerSettingsRoutes(app, { authenticate, requireAdmin, loadFullSettingsFromDisk, applySettingsUpdate, getSettings });
 
-  registerAssistantRoutes(app, { authenticate, getSettings, security });
+  registerAssistantRoutes(app, { authenticate, getSettings, security, onVoiceEvent: (event) => { recordVoiceEvent(ingest().voice, event, process.env, industrialLog); } });
 
   registerCommandRoutes(app, {
     authenticate,
@@ -571,6 +575,7 @@ async function startServer() {
   let ingestCache: Ingest | undefined;
   const ingest = (): Ingest => (ingestCache ??= makeIngest(path.join(dataPath, "ingest")));
   registerIngestRoutes(app, { authenticate, requireOperator, ingest, audit });
+  registerTrustRoutes(app, { authenticate, requireAdmin, requireOperator, ingest, audit });
 
   // Wrapping express in a plain http.Server (instead of app.listen's own
   // implicit one) is what lets the WebSocketServer below share the same
@@ -705,6 +710,33 @@ async function startServer() {
     }
   }
 
+  // The verdicts of the anomaly detector, read from the broker (off until HYDRA_UMC_ANOMALY_FEED is "1"); with HYDRA_UMC_ANOMALY_VOICE_RELAY
+  // also "1" and the voice interface configured, a verdict that changes to suspect or anomalous is told to it.
+  let anomalyFeedClient: AnomalyFeedClient | null = null;
+  if (switchOn(SWITCH_ANOMALY_FEED)) {
+    const mqttSettings = security.mqtt();
+    const mqttEnv = securityEnvFrom(process.env).mqtt ?? {};
+    if (mqttSettings.url) {
+      const relay: VoiceRelay | null = switchOn(SWITCH_ANOMALY_VOICE_RELAY) && VOICE_UI_URL
+        ? {
+            locale: (process.env.HYDRA_UMC_ANOMALY_VOICE_LOCALE ?? "en").trim() || "en",
+            send: async (body) => {
+              const upstream = await fetch(`${VOICE_UI_URL}/v1/voice/alert`, {
+                method: "POST",
+                headers: { "content-type": "application/json", ...(VOICE_UI_TOKEN ? { authorization: `Bearer ${VOICE_UI_TOKEN}` } : identityHeader("operator")) },
+                body: JSON.stringify(body),
+                signal: AbortSignal.timeout(VOICE_UI_TIMEOUT_MS),
+              });
+              return upstream.ok ? ((await upstream.json().catch(() => null)) as Record<string, unknown> | null) : null;
+            },
+          }
+        : null;
+      anomalyFeedClient = startAnomalyFeed(ingest().anomaly, { url: mqttSettings.url, username: mqttSettings.username, password: readSecret(mqttEnv.password, mqttEnv.passwordFile), topic: anomalyTopicFromEnv(), log: industrialLog, relay });
+    } else {
+      industrialLog("[anomaly] the feed is on but there is no broker URL in the MQTT settings: it stays idle");
+    }
+  }
+
   // Graceful shutdown: a
   // normal `systemctl stop`/`pm2 stop`/Ctrl-C sends SIGTERM/SIGINT, and
   // before this handler existed nothing here ever ran on that path - the
@@ -729,6 +761,7 @@ async function startServer() {
     void bleGateway?.stop().catch(() => undefined);
     void mqttBridge?.stop().catch(() => undefined);
     void faultFeedClient?.stop().catch(() => undefined);
+    void anomalyFeedClient?.stop().catch(() => undefined);
     void bridgeGateway.stop().catch(() => undefined);
     jobStopRelay?.stop();
     orchestratorTakeover?.stop();

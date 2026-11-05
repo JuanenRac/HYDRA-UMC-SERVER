@@ -14,6 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ChainedLog, DEFAULT_RETENTION, type Retention } from "./ingestLog";
 import { identityKey } from "./serviceIdentity";
+import { AnomalyFeed } from "./anomalyFeed";
 
 export type Env = Record<string, string | undefined>;
 
@@ -180,9 +181,16 @@ export interface Ingest {
   scenario: ChainedLog;
   developerNode: ChainedLog;
   faults: FaultFeed;
+  /** The latest verdict of each series of the anomaly detector, and the record of its changes. */
+  anomaly: AnomalyFeed;
+  /** The voice commands that passed through this server (see voiceChain.ts). */
+  voice: ChainedLog;
 }
 
-/** The three stores, under `dir` (the data folder of the server). */
+/** The five stores, under `dir` (the data folder of the server). */
 export function makeIngest(dir: string, env: Env = process.env): Ingest {
-  return { scenario: makeLog(dir, "scenario-outcomes", env), developerNode: makeLog(dir, "developer-node", env), faults: new FaultFeed(makeLog(dir, "faults", env)) };
+  return {
+    scenario: makeLog(dir, "scenario-outcomes", env), developerNode: makeLog(dir, "developer-node", env), faults: new FaultFeed(makeLog(dir, "faults", env)),
+    anomaly: new AnomalyFeed(makeLog(dir, "anomaly", env)), voice: makeLog(dir, "voice", env),
+  };
 }

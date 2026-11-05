@@ -2328,6 +2328,54 @@
         ]
       }
     },
+    "/api/anomaly/verdicts": {
+      "get": {
+        "tags": [
+          "anomaly"
+        ],
+        "summary": "GET /api/anomaly/verdicts",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md."
+          },
+          "400": {
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "verdict",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "verify",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/audit": {
       "get": {
         "tags": [
@@ -6504,6 +6552,46 @@
         "x-rate-limited": true
       }
     },
+    "/api/trajectory/proposals/verify": {
+      "post": {
+        "tags": [
+          "trajectory"
+        ],
+        "summary": "POST /api/trajectory/proposals/verify",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md."
+          },
+          "400": {
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/upload-work": {
       "post": {
         "tags": [
@@ -6836,6 +6924,44 @@
           }
         ],
         "x-rate-limited": true
+      }
+    },
+    "/api/voice/chain": {
+      "get": {
+        "tags": [
+          "voice"
+        ],
+        "summary": "GET /api/voice/chain",
+        "description": "Requires a signed-in account with the admin role.",
+        "x-access": "admin",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md."
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "verify",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/api/voice/confirm": {
