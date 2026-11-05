@@ -81,6 +81,9 @@ import { registerAssistantRoutes } from "./routes/assistantRoutes";
 import { registerLocalAiRoutes, registerRulConfigRoute, rulSettings } from "./routes/localAiRoutes";
 import { registerInfoRoutes } from "./routes/infoRoutes";
 import { registerPowerRoutes } from "./routes/powerRoutes";
+import { registerIngestRoutes } from "./routes/ingestRoutes";
+import { makeIngest, switchOn, SWITCH_FAULT_FEED, faultTopicFromEnv, type Ingest } from "./ingestFeeds";
+import { startFaultFeed, type FaultFeedClient } from "./faultFeedBroker";
 import { registerWorksRoutes } from "./routes/worksRoutes";
 import { createSettingsStore, settingsStoreOptionsFromEnv, sweepOrphanedTmpFiles } from "./settingsStore";
 import { createCameraSupervisor } from "./cameraSupervisor";
@@ -563,6 +566,12 @@ async function startServer() {
 
   registerPowerRoutes(app, { audit });
 
+  // What the sibling services hand to this server (scenario outcomes, the status of the developer node, the faults of the machines):
+  // each one is off until its switch is "1", and the stores are built on the first use
+  let ingestCache: Ingest | undefined;
+  const ingest = (): Ingest => (ingestCache ??= makeIngest(path.join(dataPath, "ingest")));
+  registerIngestRoutes(app, { authenticate, requireOperator, ingest, audit });
+
   // Wrapping express in a plain http.Server (instead of app.listen's own
   // implicit one) is what lets the WebSocketServer below share the same
   // port - a remote client only has to know one endpoint (host:3000) for
@@ -685,6 +694,17 @@ async function startServer() {
     });
   });
 
+  let faultFeedClient: FaultFeedClient | null = null;
+  if (switchOn(SWITCH_FAULT_FEED)) {
+    const mqttSettings = security.mqtt();
+    const mqttEnv = securityEnvFrom(process.env).mqtt ?? {};
+    if (mqttSettings.url) {
+      faultFeedClient = startFaultFeed(ingest().faults, { url: mqttSettings.url, username: mqttSettings.username, password: readSecret(mqttEnv.password, mqttEnv.passwordFile), topic: faultTopicFromEnv(), log: industrialLog });
+    } else {
+      industrialLog("[faults] the feed is on but there is no broker URL in the MQTT settings: it stays idle");
+    }
+  }
+
   // Graceful shutdown: a
   // normal `systemctl stop`/`pm2 stop`/Ctrl-C sends SIGTERM/SIGINT, and
   // before this handler existed nothing here ever ran on that path - the
@@ -708,6 +728,7 @@ async function startServer() {
     for (const key of cameraProcesses.keys()) stopCameraProcess(key);
     void bleGateway?.stop().catch(() => undefined);
     void mqttBridge?.stop().catch(() => undefined);
+    void faultFeedClient?.stop().catch(() => undefined);
     void bridgeGateway.stop().catch(() => undefined);
     jobStopRelay?.stop();
     orchestratorTakeover?.stop();

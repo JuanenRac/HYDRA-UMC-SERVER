@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **The server keeps the state of three feeds that its sibling services hand to it, each off until its switch is on:** `POST /api/ingest/scenario-outcome` stores a `ScenarioOutcome` of the shared contract (operator or administrator, audited); `POST /api/ingest/developer-node/status` stores `developer-node-status/1`, sent over HTTPS with the token of that node (only the hash of each token is kept, in a registry file read on every call); `GET /api/faults` answers the active faults and the history of the `fault-event/1` messages the server reads from its broker. Everything is written to a signed record chained by hashes with a retention that can be set, and each feed has a read route (`verify=1` checks the chain). 13 tests.
+
 - **A relay for the switch that requires a pass verdict of the twin before the real robot moves (`GET` and `POST /api/hil-bridge/settings`):** STUDIO and SUITE read and edit `require_twin_pass` of the HIL bridge through the server, with the administrator's own token. Reading is open to any signed-in account; changing is for an administrator, needs `confirm: true` in both directions (nothing leaves this server without it), and is written to the audit record (`hil-bridge-twin-pass`). Off until `HYDRA_UMC_HIL_BRIDGE_URL` is set (`503`). 8 tests.
 
 - **The build test of the repository compiles only on CI or when allowed:** for the stacks that compile (`rust`, `go`, `android`, `flutter`, `firmware-c`), `tools/build_test.py` prints `BUILD_TEST=SKIPPED` with exit status 2 on a plain PC, never a pass; `ALLOW_LOCAL_BUILD=1` allows it and a CI runner always may. The `python` and `node` stacks are not locked.

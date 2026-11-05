@@ -42,7 +42,7 @@ const PUBLIC_ROUTES = new Set([
   "POST /api/system/shutdown",
 ]);
 const NEVER_PROBE = new Set(["POST /api/system/reboot", "POST /api/system/shutdown"]);
-const GUARDS = ["authenticate", "mediaAccess", "infoAccess"];
+const GUARDS = ["authenticate", "mediaAccess", "infoAccess", "nodeToken"];
 
 /** Every `app.<method>("<path>", <guards...>, (req, ...` registration with the guard names it lists. */
 export function scanRoutes(source) {
