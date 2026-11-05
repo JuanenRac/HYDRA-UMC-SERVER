@@ -809,6 +809,8 @@ export interface SecuritySnapshot {
   rateLimits: { enabled: { value: boolean; source: Source } } & Record<RateLimitKey, { value: number; source: Source; min: number; max: number }>;
   /** The switches of the machine bridges, each with its value, where it comes from, its default and whether turning it on asks for a confirmation. Off by default for everything that moves hardware. */
   bridges: BridgesSnapshot & { delivery: "gateway_on" | "gateway_off" };
+  /** Whether the settings message of each bridge can be signed: where its key file is (never the key), its state, when a message was last signed and its counter. */
+  bridgeSigning: Record<string, { keyFile: string; key: "present" | "missing" | "unusable"; lastSignedAt: string | null; seq: number }>;
   /** The signing key itself is never part of this; only where its file is. */
   mavlink: { signingKeyFile: { value: string; source: Source }; signingAllowUnsigned: { value: boolean; source: Source }; signing: boolean; appliesOnRestart: boolean };
 }
@@ -817,6 +819,8 @@ export interface SecurityConfigOptions {
   env: SecurityEnv;
   /** Called once the switches of the bridges are saved, so the gateway can announce them (src/bridgeGateway.ts). */
   afterBridgesWritten?: () => void;
+  /** The state of the keys that sign the settings of the bridges (src/bridgeSettingsSigning.ts). */
+  bridgeSigningStatus?: () => Record<string, { keyFile: string; key: "present" | "missing" | "unusable"; lastSignedAt: string | null; seq: number }>;
   load: () => SecurityFile;
   /** Writes the whole saved file (this class passes the stored object with its own fields merged in). */
   save: (file: SecurityFile) => void;
@@ -1069,6 +1073,7 @@ export class SecurityConfig {
       websocket: { allowQueryToken: resolveWsQueryToken(this.options.env.wsQueryToken, this.file) },
       logging: { redactSecrets: resolveLogRedaction(this.options.env.logRedaction, this.file) },
       bridges: { ...resolveBridgeSettings(this.file.bridges), delivery: resolveBridgeGateway(this.options.env.bridgeGateway, this.file).value ? "gateway_on" : "gateway_off" },
+      bridgeSigning: this.options.bridgeSigningStatus?.() ?? {},
       rateLimits: {
         enabled: resolveRateLimitsEnabled(this.options.env.rateLimits, this.file),
         ...(Object.fromEntries(RATE_LIMIT_KEYS.map((key) => [key, { ...resolveRateLimitNumber(key, this.options.env, this.file), min: RATE_LIMIT_BOUNDS[key].min, max: RATE_LIMIT_BOUNDS[key].max }])) as Record<RateLimitKey, { value: number; source: Source; min: number; max: number }>),

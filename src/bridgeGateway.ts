@@ -13,6 +13,7 @@
 //  - a command carries at most a small JSON object, one command per bridge and verb waits for its answer at a time, and the pace is limited.
 // The routes (src/routes/bridgeRoutes.ts) decide who may ask and write the audit entry; nothing here knows about users.
 import { defaultMqttConnect, redactUrl, type MqttClientLike, type MqttConnect } from "./mqttBridge";
+import { SETTINGS_REFRESH_MS } from "./bridgeSettingsSigning";
 
 export const DEFAULT_BRIDGE_PREFIX = "hydra/bridges";
 export const DEFAULT_ALLOWED_VERBS: readonly string[] = ["status", "stop", "pause", "resume"];
@@ -86,13 +87,16 @@ export interface BridgeGatewayOptions {
   connect?: MqttConnect;
   log: (message: string) => void;
   now?: () => number;
-  /** The switches of the bridges as retained messages, read each time they are announced (src/bridgeSettings.ts). */
-  getBridgeSettings?: () => Array<{ name: string; payload: string }>;
+  /** The signed switches of the bridges as retained messages, made each time they are announced (src/bridgeSettings.ts); the argument is the topic prefix. */
+  getBridgeSettings?: (prefix: string) => Array<{ name: string; payload: string }>;
+  /** How often the signed messages are made and published again (default 60000 ms): a message expires, a bridge that restarts must find a current one. 0 turns the repeat off. */
+  settingsRefreshMs?: number;
 }
 
 export class BridgeGateway {
   private client: MqttClientLike | null = null;
   private connected = false;
+  private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private readonly seen = new Map<string, Seen>();
   private readonly pending = new Map<string, (answer: unknown) => void>();
   private windowStart = 0;
@@ -124,6 +128,7 @@ export class BridgeGateway {
         this.connected = true;
         this.options.log(`[GATEWAY] connected to ${redactUrl(this.options.url)}, bridges under ${prefix}`);
         this.announceSettings();
+        this.startRefresh();
         for (const topic of [`${prefix}/+/state`, `${prefix}/+/availability`, `${prefix}/+/health`, `${prefix}/+/cmd/+/result`]) {
           client.subscribe(topic, { qos: 1 }, (error) => {
             if (error) this.options.log(`[GATEWAY] could not subscribe to ${topic}: ${error.message}`);
@@ -132,6 +137,7 @@ export class BridgeGateway {
       });
       client.on("close", () => {
         this.connected = false;
+        this.stopRefresh();
       });
       client.on("error", (error: Error) => this.options.log(`[GATEWAY] ${error.message}`));
       client.on("message", (topic: string, payload: Buffer, packet?: { retain?: boolean }) => this.onMessage(topic, payload, packet));
@@ -147,12 +153,25 @@ export class BridgeGateway {
     if (!client || !this.connected || !this.options.getBridgeSettings) return;
     const prefix = this.options.getSettings().prefix;
     try {
-      for (const message of this.options.getBridgeSettings()) client.publish(`${prefix}/${message.name}/settings`, message.payload, { qos: 1, retain: true }, (error) => {
+      for (const message of this.options.getBridgeSettings(prefix)) client.publish(`${prefix}/${message.name}/settings`, message.payload, { qos: 1, retain: true }, (error) => {
         if (error) this.options.log(`[GATEWAY] could not publish the settings of ${message.name}: ${error.message}`);
       });
     } catch (error) {
       this.options.log(`[GATEWAY] could not publish the settings: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  private startRefresh(): void {
+    this.stopRefresh();
+    const every = this.options.settingsRefreshMs ?? SETTINGS_REFRESH_MS;
+    if (!this.options.getBridgeSettings || every <= 0) return;
+    this.refreshTimer = setInterval(() => this.announceSettings(), every);
+    this.refreshTimer.unref?.();
+  }
+
+  private stopRefresh(): void {
+    if (this.refreshTimer) clearInterval(this.refreshTimer);
+    this.refreshTimer = null;
   }
 
   /** One message from the broker. Never throws. */
@@ -261,6 +280,7 @@ export class BridgeGateway {
   }
 
   async stop(): Promise<void> {
+    this.stopRefresh();
     const client = this.client;
     this.client = null;
     this.connected = false;

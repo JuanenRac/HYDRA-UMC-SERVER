@@ -4,6 +4,16 @@ import { test } from "node:test";
 import { BridgeGateway, resolveGatewaySettings } from "../src/bridgeGateway.ts";
 import { BRIDGE_SWITCHES, allSettingsMessages, applyBridgesPatch, resolveBridgeSettings, settingsMessage } from "../src/bridgeSettings.ts";
 import { SecurityConfig, SecurityConfigError, type SecurityFile } from "../src/securityConfig.ts";
+import { BridgeSettingsSigner } from "../src/bridgeSettingsSigning.ts";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+const NOW = 1_800_000_000_000;
+function makeSigner(): BridgeSettingsSigner {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hydra-bridge-keys-"));
+  return new BridgeSettingsSigner({ keyDir: dir, now: () => NOW });
+}
 
 function makeConfig(env: any = {}, initial: SecurityFile = {}, extra: Record<string, unknown> = {}) {
   let stored: SecurityFile = { ...initial };
@@ -56,11 +66,15 @@ test("a bad body is refused with 400 and changes nothing", () => {
   assert.throws(() => applyBridgesPatch(undefined, { uav: { missionUploadEnabled: 1 } }), /must be true or false/);
 });
 
-test("the message of a bridge carries only its own switches, with the values in force", () => {
+test("the message of a bridge is signed and carries only its own switches, with the values in force", () => {
   const file = { uav: { missionUploadEnabled: true }, amr: { publishState: true } };
-  assert.deepEqual(JSON.parse(settingsMessage("uav", file)), { schema: 1, settings: { missionUploadEnabled: true } });
-  assert.deepEqual(JSON.parse(settingsMessage("amr", file)), { schema: 1, settings: { publishState: true, publishOpcua: false, zoneInterlock: false, zoneUnknown: "pause" } });
-  assert.deepEqual(allSettingsMessages(undefined).map((m) => m.name), ["droids", "uav", "amr", "openpnp"]);
+  const signer = makeSigner();
+  const uav = JSON.parse(settingsMessage("uav", file, signer)!);
+  assert.equal(uav.schema, 2);
+  assert.deepEqual(uav.settings, { missionUploadEnabled: true });
+  assert.match(uav.signature, /^[0-9a-f]{64}$/);
+  assert.deepEqual(JSON.parse(settingsMessage("amr", file, signer)!).settings, { publishState: true, publishOpcua: false, zoneInterlock: false, zoneUnknown: "pause" });
+  assert.deepEqual(allSettingsMessages(undefined, signer).map((m) => m.name), ["droids", "uav", "amr", "openpnp"]);
 });
 
 class FakeClient extends EventEmitter {
@@ -73,12 +87,14 @@ class FakeClient extends EventEmitter {
 test("the gateway announces the settings retained on connect and again on request, and says nothing while it is not connected", () => {
   const client = new FakeClient();
   let file = { uav: { missionUploadEnabled: false } };
+  const signer = makeSigner();
   const gateway = new BridgeGateway({
     getSettings: () => resolveGatewaySettings({}),
     url: "mqtt://127.0.0.1:1883",
     connect: () => client as never,
     log: () => undefined,
-    getBridgeSettings: () => allSettingsMessages(file),
+    settingsRefreshMs: 0,
+    getBridgeSettings: (prefix) => allSettingsMessages(file, signer, prefix),
   });
   gateway.announceSettings();
   assert.equal(client.published.length, 0);

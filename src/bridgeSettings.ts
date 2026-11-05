@@ -3,10 +3,15 @@
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
 // GPL-3.0-or-later - see LICENSE
 // =============================================================================
+import type { BridgeSettingsSigner } from "./bridgeSettingsSigning";
+
+const DEFAULT_PREFIX = "hydra/bridges";
+
 // The switches of the machine bridges that an administrator sets from Server Admin. The server keeps them in its configuration
 // (data/server-config.json, key "bridges") and, while the bridge gateway is on, announces them to each bridge on one retained topic,
-// `<prefix>/<bridge>/settings` ({"schema":1,"settings":{...}}). A bridge applies them only when its own host allows remote settings (a local
-// switch, off by default) and never lets a remote value turn on something its own configuration keeps off.
+// `<prefix>/<bridge>/settings` ({"schema":2,"settings":{...},"seq","issued_at_ms","expires_in_ms","signature"}), SIGNED with the key of that bridge
+// (src/bridgeSettingsSigning.ts). A bridge applies them only when its own host allows remote settings (a local switch, off by default), holds the key, and the
+// signature, the expiry and the counter are right; it never lets a remote value turn on something its own configuration keeps off.
 //
 // Every function that moves hardware is off by default. The numbers and words here are the ones the bridges already read from their
 // environment or configuration file; this module only gives them one place to be set and one way to arrive.
@@ -114,13 +119,25 @@ export function applyBridgesPatch(current: BridgesFile | undefined, patch: unkno
   return { next, warnings };
 }
 
-/** The retained message for one bridge: only the switches of that bridge, with their values in force. */
-export function settingsMessage(name: BridgeName, file: BridgesFile | undefined): string {
+/** The switches of one bridge with their values in force (what the signed message carries under `settings`). */
+export function settingsOf(name: BridgeName, file: BridgesFile | undefined): Record<string, BridgeSettingValue> {
   const view = resolveBridgeSettings(file)[name];
-  return JSON.stringify({ schema: 1, settings: Object.fromEntries(Object.entries(view).map(([k, v]) => [k, v.value])) });
+  return Object.fromEntries(Object.entries(view).map(([k, v]) => [k, v.value]));
 }
 
-/** Every bridge with its retained message. */
-export function allSettingsMessages(file: BridgesFile | undefined): Array<{ name: BridgeName; payload: string }> {
-  return BRIDGE_NAMES.map((name) => ({ name, payload: settingsMessage(name, file) }));
+/** The retained message for one bridge, SIGNED with the key of that bridge (src/bridgeSettingsSigning.ts): only its own switches, with their values in force.
+ *  Null when the key cannot be used: nothing is published for that bridge, so it keeps its own configuration. */
+export function settingsMessage(name: BridgeName, file: BridgesFile | undefined, signer: BridgeSettingsSigner, prefix: string = DEFAULT_PREFIX): string | null {
+  const signed = signer.sign(`${prefix}/${name}/settings`, name, { settings: settingsOf(name, file) });
+  return signed ? JSON.stringify(signed) : null;
+}
+
+/** Every bridge whose key is usable, with its signed retained message. */
+export function allSettingsMessages(file: BridgesFile | undefined, signer: BridgeSettingsSigner, prefix: string = DEFAULT_PREFIX): Array<{ name: BridgeName; payload: string }> {
+  const out: Array<{ name: BridgeName; payload: string }> = [];
+  for (const name of BRIDGE_NAMES) {
+    const payload = settingsMessage(name, file, signer, prefix);
+    if (payload !== null) out.push({ name, payload });
+  }
+  return out;
 }

@@ -64,7 +64,8 @@ import { registerConnectionRoutes } from "./routes/connectionRoutes";
 import { registerLivenessRoutes } from "./routes/livenessRoutes";
 import { makeBridgeGatewayGate, registerBridgeRoutes } from "./routes/bridgeRoutes";
 import { BridgeGateway, resolveGatewaySettings } from "./bridgeGateway";
-import { allSettingsMessages, type BridgesFile } from "./bridgeSettings";
+import { allSettingsMessages, BRIDGE_NAMES, type BridgesFile } from "./bridgeSettings";
+import { BridgeSettingsSigner } from "./bridgeSettingsSigning";
 import { makeEcosystemHealthGate, registerEcosystemHealthRoutes } from "./routes/ecosystemHealthRoutes";
 import { makePushGate, registerPushRoutes } from "./routes/pushRoutes";
 import { PushDevices, PushService, emitPush } from "./pushNotifications";
@@ -337,6 +338,8 @@ async function startServer() {
     const jd = (loadServerConfig() as { jobDispatcher?: { reload?: ReloadFile; stopRelay?: { url?: unknown } } }).jobDispatcher;
     return resolveReload(process.env, jd?.reload, jd?.stopRelay?.url);
   };
+  // The settings of the machine bridges are announced SIGNED; one key per bridge, in a file (src/bridgeSettingsSigning.ts).
+  const bridgeSettingsSigner = new BridgeSettingsSigner({ log: industrialLog });
   const security = new SecurityConfig({
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
@@ -344,6 +347,7 @@ async function startServer() {
       const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging, rateLimits, bridges } = file;
       saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging, rateLimits, bridges });
     },
+    bridgeSigningStatus: () => bridgeSettingsSigner.status(BRIDGE_NAMES),
     afterBridgesWritten: () => { if (security.bridgeGatewayEnabled()) { bridgeGateway.ensureStarted(); bridgeGateway.announceSettings(); } },
     tlsActive: startupTls.enabled,
     bleActiveMode: resolveBleMode(securityEnvFrom(process.env).bleGatt, loadServerConfig()).value,
@@ -422,7 +426,7 @@ async function startServer() {
     url: security.mqtt().url,
     username: security.mqtt().username,
     password: readSecret(bridgeGatewayEnv.password, bridgeGatewayEnv.passwordFile),
-    getBridgeSettings: () => allSettingsMessages((loadServerConfig() as { bridges?: BridgesFile }).bridges),
+    getBridgeSettings: (prefix) => allSettingsMessages((loadServerConfig() as { bridges?: BridgesFile }).bridges, bridgeSettingsSigner, prefix),
     log: industrialLog,
   });
   registerBridgeRoutes(app, {
