@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { compareClosedSchemas, compareContracts, compareQueryParameters, findGeneratedDocuments, findSdkContract } from "../tools/verify_sdk_contract.mjs";
+import { compareClosedSchemas, compareContracts, compareInventoryCoverage, compareQueryParameters, findGeneratedDocuments, findSdkContract } from "../tools/verify_sdk_contract.mjs";
 
 const op = (codes: string[], secured = true) => ({ responses: Object.fromEntries(codes.map((c) => [c, {}])), ...(secured ? { security: [{ bearerAuth: [] }] } : { security: [] }) });
 
@@ -62,4 +62,11 @@ test("a closed schema copy that drifts is reported", () => {
 
 test("no generated SDK document is found in an empty place", () => {
   assert.deepEqual(findGeneratedDocuments({ HYDRA_UMC_SDK_DIR: "Z:/no/such/dir" } as any, "Z:/no/such/root"), []);
+});
+test("a route the server registers and the full inventory of the SDK does not declare is reported", () => {
+  const full = { paths: { "/api/x": { get: op(["200"]) } } };
+  assert.deepEqual(compareInventoryCoverage(full, { paths: { "/api/x": { get: op(["200"]) } } }), []);
+  assert.match(compareInventoryCoverage(full, { paths: { "/api/x": { get: op(["200"]), post: op(["200"]) } } })[0], /POST \/api\/x.*does not declare/);
+  assert.match(compareInventoryCoverage(full, { paths: { "/api/y": { get: op(["200"]) } } })[0], /GET \/api\/y/);
+  assert.deepEqual(compareInventoryCoverage({ paths: {} }, { paths: {} }), []);
 });

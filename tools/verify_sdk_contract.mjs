@@ -8,8 +8,12 @@
 // Every route the SDK promises to its clients must exist in docs/openapi.json (the inventory generated
 // from the routes this server really registers) with the same method, the same kind of access (public
 // or signed in) and every status code the handler itself produces. Codes that a shared middleware adds
-// (401, 403, 429) are not asked of the handler. The reverse is not required: the server may offer more
-// routes than the SDK promises.
+// (401, 403, 429) are not asked of the handler. The reverse is not required for this contract: the server may offer more
+// routes than the SDK promises (but see the full inventory below).
+//
+// The full inventory of the SDK (server.full.openapi.json, next to the contract) is checked the other way too: every
+// route this server registers must be in it, so a new route cannot ship without being declared in the SDK. An SDK
+// checkout without that file leaves nothing to compare.
 //
 // The SDK is looked up in HYDRA_UMC_SDK_DIR, then in a sibling HYDRA-UMC-SDK checkout. When none is
 // there the check is skipped with a notice, unless HYDRA_UMC_REQUIRE_SDK=1 (then it fails).
@@ -58,6 +62,17 @@ export function compareContracts(sdk, server) {
         if (MIDDLEWARE_CODES.has(code)) continue;
         if (!have.has(code)) problems.push(`${label}: the SDK lists status ${code} and the handler never produces it`);
       }
+    }
+  }
+  return problems;
+}
+
+// Every route and method the server registers is declared in the full inventory of the SDK.
+export function compareInventoryCoverage(sdkFull, server) {
+  const problems = [];
+  for (const [route, item] of Object.entries(server.paths ?? {})) {
+    for (const method of METHODS) {
+      if (item[method] && !sdkFull.paths?.[route]?.[method]) problems.push(`${method.toUpperCase()} ${route}: the server registers this route and the full inventory of the SDK does not declare it`);
     }
   }
   return problems;
@@ -145,6 +160,8 @@ function main() {
   const problems = compareContracts(sdk, server);
   for (const file of findGeneratedDocuments()) problems.push(...generatedDocumentProblems(file, server));
   problems.push(...compareShapesFile(sdkFile));
+  const fullFile = path.join(path.dirname(sdkFile), "server.full.openapi.json");
+  if (fs.existsSync(fullFile)) problems.push(...compareInventoryCoverage(JSON.parse(fs.readFileSync(fullFile, "utf8")), server));
   if (problems.length) {
     for (const p of problems) console.error(`  - ${p}`);
     console.error(`SDK_CONTRACT=FAIL ${problems.length} difference(s)`);
