@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **The build test of the repository compiles only on CI or when allowed:** for the stacks that compile (`rust`, `go`, `android`, `flutter`, `firmware-c`), `tools/build_test.py` prints `BUILD_TEST=SKIPPED` with exit status 2 on a plain PC, never a pass; `ALLOW_LOCAL_BUILD=1` allows it and a CI runner always may. The `python` and `node` stacks are not locked.
+
 - **The proposals of the node watchdog can be listed and decided from STUDIO and SUITE:** `GET /api/ops-agent/proposals` and `POST /api/ops-agent/proposals/decide` (administrators only) speak to the watchdog over its signed channel (`incident-transport/1`: HMAC-SHA256 over the canonical JSON, nonce, time window, contract version; the check of the wire format is tested against vectors written by the watchdog's own code). The reply is accepted only if it is signed by the watchdog, addressed to this server, fresh and new. Approving needs `confirm: true`, the person who decides is the signed-in account, and every attempt is written to the audit record (`ops-agent-proposal-decision`). Off (`503`) until `HYDRA_UMC_OPS_AGENT_URL` and `HYDRA_UMC_OPS_AGENT_REGISTRY_FILE` are set. 16 tests.
 
 - **The list of services that take the identity includes the connector hub:** it now reads the same key file and variable as the others and keeps its own verifier next to the shared one, so `GET /api/admin/service-identity` lists it among the services that accept the identity.
