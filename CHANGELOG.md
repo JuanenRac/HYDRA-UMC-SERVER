@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.8.2.4] - A route cannot ship without being declared in the SDK: tools/verifysdkcontract.mjs now also compares the routes this server registers (docs/openapi.json) with the full inventory of the SDK (server.full.openapi.json) and fails,... (and 24 more changes)
+
 - **A route cannot ship without being declared in the SDK:** `tools/verify_sdk_contract.mjs` now also compares the routes this server registers (`docs/openapi.json`) with the full inventory of the SDK (`server.full.openapi.json`) and fails, naming the method and route, when the server registers one the SDK does not declare. It was one-way before (only what the SDK promises had to exist here). The inventories agree today (111 routes each); an SDK checkout without that file leaves nothing to compare. 1 more test.
 
 - **The read-out protection level of a production flash is a setting of the server (`production.rdpLevel`, off by default):** `GET` and `PUT /api/admin/server-config` carry `production.rdpLevel` (`0` or `1`; `400` for anything else, level 2 is permanent and is not offered), the variable `HYDRA_UMC_PRODUCTION_RDP_LEVEL` locks it, and a change is written to the log. STUDIO and SUITE show it as a switch with a confirmation. It only records the choice; no flashing tool reads it yet.
