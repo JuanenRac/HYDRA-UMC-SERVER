@@ -62,7 +62,7 @@ jobs:
           [[ "$REF" =~ ^[A-Za-z0-9._/-]{1,100}$ ]] || { echo "::error::the ref has characters that a branch, tag or commit does not have"; exit 1; }
 
       - name: Check out this repository
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
@@ -101,7 +101,7 @@ jobs:
             runner: ubuntu-24.04-arm
     steps:
       - name: Check out the exact commit that was planned
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.plan.outputs.sha }}
           persist-credentials: false
@@ -125,7 +125,7 @@ jobs:
           tar -tzf "out/HYDRA-UMC-SERVER-$VERSION.tgz" | grep -x "hydra-umc.project.json" >/dev/null
 
       - name: Upload the package
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: parts-${{ matrix.id }}
           path: out/HYDRA-UMC-SERVER-${{ needs.plan.outputs.version }}.tgz
@@ -147,7 +147,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Download both packages
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: parts-*
           path: parts
@@ -193,14 +193,14 @@ jobs:
           { echo "### HYDRA-UMC-SERVER $VERSION (unsigned package)"; sed 's/^/- /' SHA256SUMS; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Attest the provenance of the files
-        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         with:
           subject-path: |
             files/*.tgz
             files/SHA256SUMS
 
       - name: Upload the build
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: package-server-${{ needs.plan.outputs.version }}
           path: files/*
@@ -220,7 +220,7 @@ jobs:
       SIGNER: ${{ github.repository }}/.github/workflows/package-build.yml
     steps:
       - name: Download the build
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: package-server-${{ needs.plan.outputs.version }}
           path: build
@@ -272,7 +272,7 @@ jobs:
           [ "$ACTOR" = "$OWNER" ] || { echo "::error::only the owner of the repository prepares a draft"; exit 1; }
 
       - name: Download the verified build
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: package-server-${{ needs.plan.outputs.version }}
           path: files
