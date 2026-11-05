@@ -61,6 +61,9 @@ export const CONNECTOR_HUB_URL = (process.env.HYDRA_UMC_CONNECTOR_HUB_URL || "")
 // own token to it, so the hub decides who is asking. Off until the address is set; the hub's own switches (the keys it verifies with,
 // the caller with no identity) stay in the hub's own configuration file.
 export const CONNECTOR_HUB_GATE_URL = (process.env.HYDRA_UMC_CONNECTOR_HUB_GATE_URL || "").replace(/\/$/, "");
+// The semantic planner (`serve`): STUDIO reads and edits through this server the one switch that relaxes the identity of the approval of a
+// plan. A relay that carries the signed-in person's own token to it. Off until the address is set.
+export const SEMANTIC_PLANNER_URL = (process.env.HYDRA_UMC_SEMANTIC_PLANNER_URL || "").replace(/\/$/, "");
 export const CONNECTOR_HUB_TIMEOUT_MS = Math.min(
   Math.max(Number(process.env.HYDRA_UMC_CONNECTOR_HUB_TIMEOUT_MS) || 4000, 250),
   10000,

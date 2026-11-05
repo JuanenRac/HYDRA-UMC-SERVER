@@ -815,6 +815,22 @@ header to the hub, so the hub still decides and records who asked.
 
 Both answer `503` with `available: false` while `HYDRA_UMC_CONNECTOR_HUB_GATE_URL` is not set.
 
+### The identity of the approval of a plan: `GET /api/semantic-planner/settings`, `POST /api/semantic-planner/settings`
+
+The semantic planner releases a plan only when the person who approves it is signed in with the token of this server
+(`plan_approval.require_identity`, **true by default**). STUDIO shows and edits that switch through these two routes, which carry the
+administrator's own `Authorization` header to the planner (`HYDRA_UMC_SEMANTIC_PLANNER_URL`), so the planner still decides and prints who asked.
+
+- `GET /api/semantic-planner/settings` (any signed-in account): `requireIdentity`, `verifiesTokens` (the planner has the identity key; without
+  it nothing can be changed) and `persisted` (the planner has a configuration file to write to).
+- `POST /api/semantic-planner/settings` (administrator only): the body is `{"requireIdentity": true|false, "confirm": true}` and nothing else.
+  **Relaxing** it (`false`) needs `confirm: true` (`400` with `code: CONFIRMATION_REQUIRED` otherwise, and nothing leaves this server);
+  tightening it again needs no confirmation. The planner answers `200` with the new state and `changed`, or refuses (`401`, `403`, `409` with
+  `code: SETTING_REFUSED` when the file cannot be written), and that answer is passed on. This server also writes the attempt and its
+  outcome to its audit record (`semantic-planner-settings`, with who asked, from which address, the value and the status of the planner).
+
+Both answer `503` with `available: false` while `HYDRA_UMC_SEMANTIC_PLANNER_URL` is not set (off by default).
+
 ## 2k. Settings of the installation that harden this API
 
 Environment variables, read once at start (see `docs/PRODUCTION_BOOTSTRAP.md`):

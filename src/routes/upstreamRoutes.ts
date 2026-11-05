@@ -27,6 +27,8 @@ export interface UpstreamDeps {
   CONNECTOR_HUB_TIMEOUT_MS: number;
   /** The address of the decision gate of the connector hub (empty: the gate relay answers 503). */
   CONNECTOR_HUB_GATE_URL?: string;
+  /** The address of the semantic planner (empty: the relay of its settings answers 503). */
+  SEMANTIC_PLANNER_URL?: string;
   requireOperator?: Middleware;
   /** The audit record: a change of the settings of the decision gate of the hub is written to it. */
   audit?: Pick<AuditLog, "record">;
@@ -41,6 +43,7 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
     CONNECTOR_HUB_TIMEOUT_MS, SPI_BRIDGE_URL, SPI_BRIDGE_VERSION_TIMEOUT_MS, SPI_BRIDGE_FLASH_TIMEOUT_MS,
   } = deps;
   const CONNECTOR_HUB_GATE_URL = deps.CONNECTOR_HUB_GATE_URL ?? "";
+  const SEMANTIC_PLANNER_URL = deps.SEMANTIC_PLANNER_URL ?? "";
   const requireOperator: Middleware = deps.requireOperator ?? ((_req, _res, next) => (next as () => unknown)());
 
   // Real, authenticated read-only proxy to HYDRA-UMC-DATALAKE's own /query
@@ -164,8 +167,16 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
   // with its own body. The role is checked here too, before anything leaves this server: a decision needs an operator or an
   // administrator, the record of decisions any signed-in account (the hub refuses a role that may not read it).
   async function relayToConnectorHubGate(req: express.Request, res: express.Response, method: "GET" | "POST", path: string) {
-    if (!CONNECTOR_HUB_GATE_URL) {
-      return res.status(503).json({ error: "The decision gate of HYDRA-UMC-CONNECTOR-HUB is not configured on this Server", available: false });
+    return relayWithOwnToken(CONNECTOR_HUB_GATE_URL, "The decision gate of HYDRA-UMC-CONNECTOR-HUB", "HYDRA-UMC-CONNECTOR-HUB", req, res, method, path);
+  }
+
+  // The same relay for any service that verifies the token of this server itself: it carries the Authorization header of the request
+  // as it came and adds nothing of its own, and what the service answers (a refusal included) is passed on with its own body.
+  async function relayWithOwnToken(
+    baseUrl: string, what: string, serviceName: string, req: express.Request, res: express.Response, method: "GET" | "POST", path: string,
+  ) {
+    if (!baseUrl) {
+      return res.status(503).json({ error: `${what} is not configured on this Server`, available: false });
     }
     const authorization = req.headers.authorization;
     if (typeof authorization !== "string" || !/^Bearer\s+\S+$/i.test(authorization)) {
@@ -176,7 +187,7 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
       return res.status(400).json({ error: "The body must be a JSON object" });
     }
     try {
-      const upstream = await fetch(`${CONNECTOR_HUB_GATE_URL}${path}`, {
+      const upstream = await fetch(`${baseUrl}${path}`, {
         method,
         headers: { authorization, ...(method === "POST" ? { "content-type": "application/json" } : {}) },
         body: method === "POST" ? JSON.stringify(body) : undefined,
@@ -184,10 +195,10 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
         signal: AbortSignal.timeout(CONNECTOR_HUB_TIMEOUT_MS),
       });
       const answer = await upstream.json().catch(() => null);
-      res.status(upstream.status).json(answer && typeof answer === "object" ? answer : { error: "HYDRA-UMC-CONNECTOR-HUB answered with something that is not JSON" });
+      res.status(upstream.status).json(answer && typeof answer === "object" ? answer : { error: `${serviceName} answered with something that is not JSON` });
     } catch (error) {
       const timedOut = error instanceof DOMException && error.name === "TimeoutError";
-      res.status(503).json({ error: timedOut ? "The decision gate of HYDRA-UMC-CONNECTOR-HUB timed out" : "The decision gate of HYDRA-UMC-CONNECTOR-HUB is unavailable" });
+      res.status(503).json({ error: timedOut ? `${what} timed out` : `${what} is unavailable` });
     }
   }
 
@@ -226,6 +237,35 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
       record(status === 200 ? "ok" : status >= 500 ? "failed" : "refused", { allowLoopbackNoIdentity: body.allowLoopbackNoIdentity, hubStatus: status });
     });
     await relayToConnectorHubGate(req, res, "POST", "/gate/settings");
+  });
+
+  // The channel by which STUDIO reads and edits the one switch of the semantic planner that relaxes the identity of the approval of a
+  // plan (`plan_approval.require_identity`, true by default). Same shape as the settings of the hub gate above: the planner keeps the
+  // switch and the last word, this server carries the signed-in administrator's own token to it, checks the shape of the request and
+  // the confirmation (needed to RELAX it) before anything leaves, and writes the attempt and its outcome to its audit record.
+  app.get("/api/semantic-planner/settings", authenticate, async (req, res) => {
+    await relayWithOwnToken(SEMANTIC_PLANNER_URL, "The semantic planner", "HYDRA-UMC-SEMANTIC-PLANNER", req, res, "GET", "/settings");
+  });
+
+  app.post("/api/semantic-planner/settings", authenticate, requireAdmin, async (req, res) => {
+    const user = (req as any).user;
+    const record = (outcome: "ok" | "refused" | "failed", detail: Record<string, unknown>) =>
+      deps.audit?.record({ type: "semantic-planner-settings", outcome, userId: user?.id, username: user?.username, ip: req.ip, detail });
+    const body = req.body;
+    const keys = body && typeof body === "object" && !Array.isArray(body) ? Object.keys(body) : [];
+    if (keys.length === 0 || keys.some((key) => key !== "requireIdentity" && key !== "confirm") || typeof body.requireIdentity !== "boolean") {
+      record("refused", { reason: "the body must be an object with requireIdentity (true or false) and, to relax it, confirm: true" });
+      return res.status(400).json({ error: "The body must be an object with requireIdentity (true or false) and, to relax it, confirm: true" });
+    }
+    if (body.requireIdentity === false && body.confirm !== true) {
+      record("refused", { reason: "relaxing needs a confirmation", requireIdentity: false });
+      return res.status(400).json({ error: "Relaxing the identity of the approval needs confirm: true", code: "CONFIRMATION_REQUIRED" });
+    }
+    res.once("finish", () => {
+      const status = res.statusCode;
+      record(status === 200 ? "ok" : status >= 500 ? "failed" : "refused", { requireIdentity: body.requireIdentity, plannerStatus: status });
+    });
+    await relayWithOwnToken(SEMANTIC_PLANNER_URL, "The semantic planner", "HYDRA-UMC-SEMANTIC-PLANNER", req, res, "POST", "/settings");
   });
 
   // Real relay to the local spi_bridge HTTP service (HYDRA-UMC/src/
