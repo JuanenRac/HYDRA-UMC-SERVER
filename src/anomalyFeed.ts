@@ -71,6 +71,16 @@ export class AnomalyFeed {
     this.alerts.set(keyOf(verdict), reply);
   }
 
+  /** How a node is doing: the worst latest verdict among the series of that node (names are compared without spaces, dashes or capitals), or "unknown". */
+  stateOfNode(node: string): VerdictName | "unknown" {
+    const compact = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const wanted = compact(node);
+    if (!wanted) return "unknown";
+    let worst = -1;
+    for (const v of this.latest.values()) if (compact(v.sourceId) === wanted) worst = Math.max(worst, VERDICTS.indexOf(v.verdict));
+    return worst < 0 ? "unknown" : VERDICTS[worst];
+  }
+
   /** The latest verdict of every series (with the answer of the voice interface when it was asked); `only` narrows it to one verdict. */
   verdicts(only?: VerdictName): Array<AnomalyVerdict & { at: number; alert?: Record<string, unknown> }> {
     const all = [...this.latest.entries()].map(([key, v]) => (this.alerts.has(key) && v.verdict !== "normal" ? { ...v, alert: this.alerts.get(key) } : v));

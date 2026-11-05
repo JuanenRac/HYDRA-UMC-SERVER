@@ -18,6 +18,7 @@ import { relayToVoice, startAnomalyFeed } from "../src/anomalyFeedBroker.ts";
 import { recordVoiceEvent, voiceRecordPayload } from "../src/voiceChain.ts";
 import { keyIdOf, loadOperatorKeys, proposalMessage, verifyProposal } from "../src/proposalVerify.ts";
 import { registerTrustRoutes } from "../src/routes/trustRoutes.ts";
+import { nodeStateText } from "../src/voiceText.ts";
 
 const KEY = "k".repeat(40);
 const SECRET = "q7Hk2vXz9LmN4pRt8WsY1cBd6FgJ3aEu5oIx0TnV";
@@ -244,4 +245,27 @@ test("POST /api/trajectory/proposals/verify answers a fact, audits it, and refus
   assert.deepEqual(t.events.map((e) => e.outcome), ["ok", "refused"]);
   const empty = setup({ HYDRA_UMC_PROPOSAL_VERIFY: "1" });
   assert.equal(empty.call("POST /api/trajectory/proposals/verify", { body: { proposal, expected_robot_id: "r1" } }).statusCode, 503);
+});
+
+test("how a node is doing is the worst latest verdict among its series, compared without spaces, dashes or capitals", () => {
+  const feed = new AnomalyFeed(new ChainedLog(path.join(tmp(), "n.jsonl"), () => KEY));
+  assert.equal(feed.stateOfNode("motor3"), "unknown");
+  feed.record(parseAnomalyVerdict(verdict({ source_id: "Motor-3", field: "x" }))!);
+  assert.equal(feed.stateOfNode("motor3"), "normal");
+  feed.record(parseAnomalyVerdict(verdict({ source_id: "motor-3", field: "y", verdict: "suspect" }))!);
+  feed.record(parseAnomalyVerdict(verdict({ source_id: "motor-4", verdict: "anomalous" }))!);
+  assert.equal(feed.stateOfNode("MOTOR 3"), "suspect");
+  assert.equal(feed.stateOfNode("motor4"), "anomalous");
+  assert.equal(feed.stateOfNode("motor"), "unknown", "a name is not a prefix");
+  assert.equal(feed.stateOfNode("---"), "unknown");
+});
+
+test("the sentence about a node exists in the eight languages for every state and names the node", () => {
+  for (const language of ["en", "es", "de", "fr", "it", "ja", "zh", "pt"]) {
+    for (const state of ["normal", "suspect", "anomalous", "unknown"] as const) {
+      assert.ok(nodeStateText("motor3", state, language).includes("motor3"), `${language} ${state}`);
+    }
+    assert.ok(nodeStateText("motor3", "off", language).length > 10, `${language} off`);
+  }
+  assert.equal(nodeStateText("m", "normal", "xx"), "m is behaving normally.", "another language gets English");
 });

@@ -11,14 +11,14 @@ import { industrialLog } from "../runtime";
 import { VOICE_UI_URL, VOICE_UI_TOKEN, VOICE_UI_TIMEOUT_MS, validateVoiceTurnPayload, isAssistantReplyForRequest } from "../upstreamConfig";
 import type { SecurityConfig } from "../securityConfig";
 import { identityHeader } from "../serviceIdentity";
-import { voiceLanguageOf, voiceStatusText } from "../voiceText";
+import { voiceLanguageOf, voiceStatusText, nodeStateText, type NodeState } from "../voiceText";
 import { judgeConfirmationResult, subjectOf, validateConfirmRequest } from "../voiceConfirm";
 import type { VoiceEvent } from "../voiceChain";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
-export function registerAssistantRoutes(app: express.Express, deps: { authenticate: Middleware; getSettings: () => any; security: SecurityConfig; onVoiceEvent?: (event: VoiceEvent) => void }): void {
-  const { authenticate, getSettings, security, onVoiceEvent } = deps;
+export function registerAssistantRoutes(app: express.Express, deps: { authenticate: Middleware; getSettings: () => any; security: SecurityConfig; onVoiceEvent?: (event: VoiceEvent) => void; nodeState?: (node: string) => NodeState }): void {
+  const { authenticate, getSettings, security, onVoiceEvent, nodeState } = deps;
   // Real spoken "status" text for the voice assistant's own status intent -
   // see this function's one real call site (POST /api/voice/turn) for why
   // this exists at all. Reuses the exact same real sources
@@ -122,6 +122,16 @@ export function registerAssistantRoutes(app: express.Express, deps: { authentica
         reply.text = await buildVoiceStatusText((reply.intent as any).entities, req.body.locale);
         // the text is now written here, in the language of the client
         reply.messageCode = "status_report";
+        reply.textLanguage = voiceLanguageOf(req.body.locale);
+      }
+      // A question about how a node or a motor is doing is read-only, and the server holds the verdicts of the anomaly detector: it writes the
+      // sentence, in the language of the client, from the latest verdict of that node (a server that does not read the verdicts says so).
+      if (reply.intent && (reply.intent as any).name === "query_node") {
+        const node = String((reply.intent as any).entities?.node ?? "");
+        const state: NodeState = nodeState ? nodeState(node) : "off";
+        reply.text = nodeStateText(node, state, req.body.locale);
+        reply.messageCode = "node_state";
+        reply.messageParams = { node, state };
         reply.textLanguage = voiceLanguageOf(req.body.locale);
       }
       // Do not log the transcript or reply text: both can contain operator

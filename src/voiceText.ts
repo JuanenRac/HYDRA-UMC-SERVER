@@ -104,3 +104,48 @@ export function voiceStatusText(facts: VoiceStatusFacts, locale: unknown): strin
   const note = facts.robotRegistered ? s.registered(facts.robotId) : s.notRegistered(facts.robotId);
   return note + summary;
 }
+
+// ---------------------------------------------------------------------------
+// How a node or a motor is doing, from the verdicts of the anomaly detector
+// ---------------------------------------------------------------------------
+/** "normal", "suspect" and "anomalous" are the verdicts; "unknown" is a node no verdict names; "off" is a server that does not read the verdicts. */
+export type NodeState = "normal" | "suspect" | "anomalous" | "unknown" | "off";
+
+const NODE_SENTENCES: Record<VoiceLanguage, Record<NodeState, (node: string) => string>> = {
+  en: {
+    normal: (n) => `${n} is behaving normally.`, suspect: (n) => `${n} looks suspect: its vibration is close to the limit.`, anomalous: (n) => `${n} is behaving abnormally.`,
+    unknown: (n) => `There is no verdict for ${n}.`, off: () => "This server does not read the verdicts of the anomaly detector.",
+  },
+  es: {
+    normal: (n) => `${n} funciona con normalidad.`, suspect: (n) => `${n} resulta sospechoso: su vibración está cerca del límite.`, anomalous: (n) => `${n} funciona de forma anómala.`,
+    unknown: (n) => `No hay veredicto para ${n}.`, off: () => "Este servidor no lee los veredictos del detector de anomalías.",
+  },
+  de: {
+    normal: (n) => `${n} verhält sich normal.`, suspect: (n) => `${n} wirkt verdächtig: Die Vibration liegt nahe am Grenzwert.`, anomalous: (n) => `${n} verhält sich auffällig.`,
+    unknown: (n) => `Für ${n} gibt es kein Urteil.`, off: () => "Dieser Server liest die Urteile des Anomaliedetektors nicht.",
+  },
+  fr: {
+    normal: (n) => `${n} se comporte normalement.`, suspect: (n) => `${n} semble suspect : sa vibration est proche de la limite.`, anomalous: (n) => `${n} se comporte de façon anormale.`,
+    unknown: (n) => `Il n'y a pas de verdict pour ${n}.`, off: () => "Ce serveur ne lit pas les verdicts du détecteur d'anomalies.",
+  },
+  it: {
+    normal: (n) => `${n} si comporta normalmente.`, suspect: (n) => `${n} appare sospetto: la vibrazione è vicina al limite.`, anomalous: (n) => `${n} si comporta in modo anomalo.`,
+    unknown: (n) => `Non c'è nessun verdetto per ${n}.`, off: () => "Questo server non legge i verdetti del rilevatore di anomalie.",
+  },
+  ja: {
+    normal: (n) => `${n}は正常に動作しています。`, suspect: (n) => `${n}は疑わしい状態です。振動が限界に近づいています。`, anomalous: (n) => `${n}は異常な動作をしています。`,
+    unknown: (n) => `${n}の判定はありません。`, off: () => "このサーバーは異常検知の判定を読み取っていません。",
+  },
+  zh: {
+    normal: (n) => `${n} 运行正常。`, suspect: (n) => `${n} 有可疑迹象：振动接近限值。`, anomalous: (n) => `${n} 运行异常。`,
+    unknown: (n) => `没有 ${n} 的判定结果。`, off: () => "此服务器不读取异常检测器的判定结果。",
+  },
+  pt: {
+    normal: (n) => `${n} está a funcionar normalmente.`, suspect: (n) => `${n} parece suspeito: a vibração está perto do limite.`, anomalous: (n) => `${n} está a funcionar de forma anómala.`,
+    unknown: (n) => `Não há veredicto para ${n}.`, off: () => "Este servidor não lê os veredictos do detetor de anomalias.",
+  },
+};
+
+export function nodeStateText(node: string, state: NodeState, locale: unknown): string {
+  return NODE_SENTENCES[voiceLanguageOf(locale)][state](node);
+}

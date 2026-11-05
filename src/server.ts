@@ -397,7 +397,7 @@ async function startServer() {
 
   registerSettingsRoutes(app, { authenticate, requireAdmin, loadFullSettingsFromDisk, applySettingsUpdate, getSettings });
 
-  registerAssistantRoutes(app, { authenticate, getSettings, security, onVoiceEvent: (event) => { recordVoiceEvent(ingest().voice, event, process.env, industrialLog); } });
+  registerAssistantRoutes(app, { authenticate, getSettings, security, onVoiceEvent: (event) => { recordVoiceEvent(ingest().voice, event, process.env, industrialLog); }, nodeState: (node) => (switchOn(SWITCH_ANOMALY_FEED) ? ingest().anomaly.stateOfNode(node) : "off") });
 
   registerCommandRoutes(app, {
     authenticate,
