@@ -873,6 +873,23 @@ Both answer `503` with `available: false` while the channel is not set up: `HYDR
 read once) must be set; `HYDRA_UMC_OPS_AGENT_LOCAL_NODE` (default `hydra-umc-server`), `HYDRA_UMC_OPS_AGENT_EDGE_NODE` (default `edge`) and
 `HYDRA_UMC_OPS_AGENT_TIMEOUT_MS` are optional.
 
+### The pass verdict of the twin before the real robot moves: `GET /api/hil-bridge/settings`, `POST /api/hil-bridge/settings`
+
+The HIL bridge can refuse to move the real robot unless the twin passed the trajectory of the command (`require_twin_pass`, **off by default**).
+STUDIO and SUITE show and edit that switch through these two routes, which carry the administrator's own `Authorization` header to the bridge
+(`HYDRA_UMC_HIL_BRIDGE_URL`), so the bridge still decides and checks who asked.
+
+- `GET /api/hil-bridge/settings` (any signed-in account): `requireTwinPass`, `locked` (the bridge was started with `--require-twin-pass`: it cannot be
+  turned off while it runs), `persisted`, `ready` (the twin key and the robot are set: without them the switch cannot be turned on), `robotIdSet`,
+  `keysConfigured` and `canChange` (the bridge has the identity key of this server; without it nobody can change the switch from here).
+- `POST /api/hil-bridge/settings` (administrator only): the body is `{"requireTwinPass": true|false, "confirm": true}` and nothing else. **Both
+  directions** need `confirm: true` (`400` with `code: CONFIRMATION_REQUIRED` otherwise, and nothing leaves this server). The bridge answers `200` with the new
+  state and `changed`, or refuses (`401`, `403`, `409` with `code: SETTING_REFUSED` when it is locked, not ready or cannot keep the value), and that answer is
+  passed on. This server also writes the attempt and its outcome to its audit record (`hil-bridge-twin-pass`, with who asked, from which address, the
+  value and the status of the bridge).
+
+Both answer `503` with `available: false` while `HYDRA_UMC_HIL_BRIDGE_URL` is not set (off by default).
+
 ## 2k. Settings of the installation that harden this API
 
 Environment variables, read once at start (see `docs/PRODUCTION_BOOTSTRAP.md`):

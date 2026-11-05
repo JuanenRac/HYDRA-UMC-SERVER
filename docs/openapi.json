@@ -3852,6 +3852,51 @@
         ]
       }
     },
+    "/api/hil-bridge/settings": {
+      "get": {
+        "tags": [
+          "hil-bridge"
+        ],
+        "summary": "GET /api/hil-bridge/settings",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md."
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "hil-bridge"
+        ],
+        "summary": "POST /api/hil-bridge/settings",
+        "description": "Requires a signed-in account with the admin role.",
+        "x-access": "admin",
+        "responses": {
+          "400": {
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/api/hydra-info": {
       "get": {
         "tags": [

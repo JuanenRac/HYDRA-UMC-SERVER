@@ -30,6 +30,8 @@ export interface UpstreamDeps {
   CONNECTOR_HUB_GATE_URL?: string;
   /** The address of the semantic planner (empty: the relay of its settings answers 503). */
   SEMANTIC_PLANNER_URL?: string;
+  /** The address of the HIL bridge (empty: the relay of the switch that requires a pass verdict of the twin answers 503). */
+  HIL_BRIDGE_URL?: string;
   requireOperator?: Middleware;
   /** The signed channel to the node watchdog (OPS-AGENT); null or absent: the proposals routes answer 503. Read on every call so a fixed file is picked up. */
   opsAgentChannel?: () => OpsAgentChannel | null;
@@ -47,6 +49,7 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
   } = deps;
   const CONNECTOR_HUB_GATE_URL = deps.CONNECTOR_HUB_GATE_URL ?? "";
   const SEMANTIC_PLANNER_URL = deps.SEMANTIC_PLANNER_URL ?? "";
+  const HIL_BRIDGE_URL = deps.HIL_BRIDGE_URL ?? "";
   const requireOperator: Middleware = deps.requireOperator ?? ((_req, _res, next) => (next as () => unknown)());
 
   // Real, authenticated read-only proxy to HYDRA-UMC-DATALAKE's own /query
@@ -341,6 +344,36 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
       });
       channelFailure(res, error);
     }
+  });
+
+  // The channel by which STUDIO and SUITE read and edit the one switch of the HIL bridge that makes a real command need a pass verdict of the twin
+  // for its trajectory (`require_twin_pass`, off by default). The bridge keeps the switch and the last word (it checks the signed token of this
+  // server, wants an administrator, a confirmation and a twin key and robot set, and refuses to turn off a switch it was started with); this server
+  // carries the signed-in administrator's own token to it, checks the shape of the request and the confirmation before anything leaves, and writes
+  // the attempt and its outcome to its audit record.
+  app.get("/api/hil-bridge/settings", authenticate, async (req, res) => {
+    await relayWithOwnToken(HIL_BRIDGE_URL, "The HIL bridge", "HYDRA-UMC-HIL-BRIDGE", req, res, "GET", "/settings/twin-pass");
+  });
+
+  app.post("/api/hil-bridge/settings", authenticate, requireAdmin, async (req, res) => {
+    const user = (req as any).user;
+    const record = (outcome: "ok" | "refused" | "failed", detail: Record<string, unknown>) =>
+      deps.audit?.record({ type: "hil-bridge-twin-pass", outcome, userId: user?.id, username: user?.username, ip: req.ip, detail });
+    const body = req.body;
+    const keys = body && typeof body === "object" && !Array.isArray(body) ? Object.keys(body) : [];
+    if (keys.length === 0 || keys.some((key) => key !== "requireTwinPass" && key !== "confirm") || typeof body.requireTwinPass !== "boolean") {
+      record("refused", { reason: "the body must be an object with requireTwinPass (true or false) and confirm: true" });
+      return res.status(400).json({ error: "The body must be an object with requireTwinPass (true or false) and confirm: true" });
+    }
+    if (body.confirm !== true) {
+      record("refused", { reason: "a change needs a confirmation", requireTwinPass: body.requireTwinPass });
+      return res.status(400).json({ error: "Changing the pass verdict of the twin needs confirm: true", code: "CONFIRMATION_REQUIRED" });
+    }
+    res.once("finish", () => {
+      const status = res.statusCode;
+      record(status === 200 ? "ok" : status >= 500 ? "failed" : "refused", { requireTwinPass: body.requireTwinPass, bridgeStatus: status });
+    });
+    await relayWithOwnToken(HIL_BRIDGE_URL, "The HIL bridge", "HYDRA-UMC-HIL-BRIDGE", req, res, "POST", "/settings/twin-pass");
   });
 
   // Real relay to the local spi_bridge HTTP service (HYDRA-UMC/src/

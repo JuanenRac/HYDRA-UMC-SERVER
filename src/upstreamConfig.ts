@@ -64,6 +64,9 @@ export const CONNECTOR_HUB_GATE_URL = (process.env.HYDRA_UMC_CONNECTOR_HUB_GATE_
 // The semantic planner (`serve`): STUDIO reads and edits through this server the one switch that relaxes the identity of the approval of a
 // plan. A relay that carries the signed-in person's own token to it. Off until the address is set.
 export const SEMANTIC_PLANNER_URL = (process.env.HYDRA_UMC_SEMANTIC_PLANNER_URL || "").replace(/\/$/, "");
+// The HIL bridge (`serve`): STUDIO and SUITE read and edit through this server the switch that makes a real command need a pass verdict of the twin.
+// A relay that carries the signed-in person's own token to it. Off until the address is set.
+export const HIL_BRIDGE_URL = (process.env.HYDRA_UMC_HIL_BRIDGE_URL || "").replace(/\/$/, "");
 export const CONNECTOR_HUB_TIMEOUT_MS = Math.min(
   Math.max(Number(process.env.HYDRA_UMC_CONNECTOR_HUB_TIMEOUT_MS) || 4000, 250),
   10000,
