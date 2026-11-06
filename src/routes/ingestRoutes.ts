@@ -21,7 +21,8 @@ export interface IngestDeps {
   requireOperator: Middleware;
   ingest: () => Ingest;
   audit?: Pick<AuditLog, "record">;
-  env?: Record<string, string | undefined>;
+  /** The environment the switches are read from, or a function that gives it each time (the saved switches of Server Admin are put in it). */
+  env?: Record<string, string | undefined> | (() => Record<string, string | undefined>);
 }
 
 const limitOf = (value: unknown, fallback = 100): number => {
@@ -31,7 +32,7 @@ const limitOf = (value: unknown, fallback = 100): number => {
 
 export function registerIngestRoutes(app: express.Express, deps: IngestDeps): void {
   const { authenticate, requireOperator, ingest, audit } = deps;
-  const env = () => deps.env ?? process.env;
+  const env = () => (typeof deps.env === "function" ? deps.env() : deps.env ?? process.env);
   const off = (name: string) => (_req: any, res: any, next: any) => (switchOn(name, env()) ? next() : res.status(404).json({ error: "not available" }));
   const scenarioOn = off(SWITCH_SCENARIO);
   const developerOn = off(SWITCH_DEVELOPER_NODE);

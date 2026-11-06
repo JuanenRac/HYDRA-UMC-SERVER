@@ -386,6 +386,8 @@ async function startServer() {
   setJwtPolicyProvider(() => security.jwtPolicy());
   // Whether the calls of this server to the services carry its signed token (auth.serviceIdentity.enabled, HYDRA_UMC_SERVICE_IDENTITY).
   setServiceIdentitySwitch(() => security.serviceIdentityEnabled());
+  // What the ingest code reads: the environment of the server with the switches saved in Server Admin put in where it does not say (it wins).
+  const ingestEnv = () => security.ingestEnv(process.env, dataPath);
   setKeyOverlapProvider(() => security.keyOverlapSeconds());
   if (security.jwtPolicy().algorithm === "EdDSA") {
     try { jwtKeyStore().ensureActive(); } catch (error) { throw new Error(`auth.jwtAlgorithm is EdDSA but the key file (${jwtKeyStore().file}) cannot be used: ${(error as Error).message}`); }
@@ -397,7 +399,7 @@ async function startServer() {
 
   registerSettingsRoutes(app, { authenticate, requireAdmin, loadFullSettingsFromDisk, applySettingsUpdate, getSettings });
 
-  registerAssistantRoutes(app, { authenticate, getSettings, security, onVoiceEvent: (event) => { recordVoiceEvent(ingest().voice, event, process.env, industrialLog); }, nodeState: (node) => (switchOn(SWITCH_ANOMALY_FEED) ? ingest().anomaly.stateOfNode(node) : "off") });
+  registerAssistantRoutes(app, { authenticate, getSettings, security, onVoiceEvent: (event) => { recordVoiceEvent(ingest().voice, event, ingestEnv(), industrialLog); }, nodeState: (node) => (switchOn(SWITCH_ANOMALY_FEED, ingestEnv()) ? ingest().anomaly.stateOfNode(node) : "off") });
 
   registerCommandRoutes(app, {
     authenticate,
@@ -574,8 +576,8 @@ async function startServer() {
   // each one is off until its switch is "1", and the stores are built on the first use
   let ingestCache: Ingest | undefined;
   const ingest = (): Ingest => (ingestCache ??= makeIngest(path.join(dataPath, "ingest")));
-  registerIngestRoutes(app, { authenticate, requireOperator, ingest, audit });
-  registerTrustRoutes(app, { authenticate, requireAdmin, requireOperator, ingest, audit });
+  registerIngestRoutes(app, { authenticate, requireOperator, ingest, audit, env: ingestEnv });
+  registerTrustRoutes(app, { authenticate, requireAdmin, requireOperator, ingest, audit, env: ingestEnv });
 
   // Wrapping express in a plain http.Server (instead of app.listen's own
   // implicit one) is what lets the WebSocketServer below share the same
@@ -700,7 +702,8 @@ async function startServer() {
   });
 
   let faultFeedClient: FaultFeedClient | null = null;
-  if (switchOn(SWITCH_FAULT_FEED)) {
+  security.noteIngestStarted();
+  if (switchOn(SWITCH_FAULT_FEED, ingestEnv())) {
     const mqttSettings = security.mqtt();
     const mqttEnv = securityEnvFrom(process.env).mqtt ?? {};
     if (mqttSettings.url) {
@@ -713,11 +716,11 @@ async function startServer() {
   // The verdicts of the anomaly detector, read from the broker (off until HYDRA_UMC_ANOMALY_FEED is "1"); with HYDRA_UMC_ANOMALY_VOICE_RELAY
   // also "1" and the voice interface configured, a verdict that changes to suspect or anomalous is told to it.
   let anomalyFeedClient: AnomalyFeedClient | null = null;
-  if (switchOn(SWITCH_ANOMALY_FEED)) {
+  if (switchOn(SWITCH_ANOMALY_FEED, ingestEnv())) {
     const mqttSettings = security.mqtt();
     const mqttEnv = securityEnvFrom(process.env).mqtt ?? {};
     if (mqttSettings.url) {
-      const relay: VoiceRelay | null = switchOn(SWITCH_ANOMALY_VOICE_RELAY) && VOICE_UI_URL
+      const relay: VoiceRelay | null = switchOn(SWITCH_ANOMALY_VOICE_RELAY, ingestEnv()) && VOICE_UI_URL
         ? {
             locale: (process.env.HYDRA_UMC_ANOMALY_VOICE_LOCALE ?? "en").trim() || "en",
             send: async (body) => {

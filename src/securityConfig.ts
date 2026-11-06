@@ -12,6 +12,7 @@
 // Bluetooth).
 import crypto from "node:crypto";
 import fs from "node:fs";
+import path from "node:path";
 import tls from "node:tls";
 import { DispatcherConfigError, readReplanOptions, validTimeout, writeReplanOptions, DEFAULT_STOP_ACK_TIMEOUT_SECONDS } from "./dispatcherConfigFile";
 import { applyBridgesPatch, resolveBridgeSettings, type BridgesFile, type BridgesSnapshot } from "./bridgeSettings";
@@ -72,6 +73,37 @@ export interface RobotsFile {
 export interface ProductionFile {
   /** The read-out protection level a production flash sets: 0 = off (the default; nothing is protected), 1 = on. Level 2 is permanent and never offered. */
   rdpLevel?: number;
+}
+
+/**
+ * The switches of what the sibling services hand to this server and what it keeps of it. Every one is OFF by default; an environment
+ * variable of the same name as before (INGEST_SWITCH_VARIABLES) still decides and locks it.
+ */
+export const INGEST_SWITCH_KEYS = ["faultFeed", "scenario", "developerNode", "anomalyFeed", "anomalyVoiceRelay", "voiceChain", "proposalVerify"] as const;
+export type IngestSwitchKey = (typeof INGEST_SWITCH_KEYS)[number];
+export const INGEST_SWITCH_VARIABLES: Record<IngestSwitchKey, string> = {
+  faultFeed: "HYDRA_UMC_FAULT_FEED",
+  scenario: "HYDRA_UMC_INGEST_SCENARIO",
+  developerNode: "HYDRA_UMC_INGEST_DEVELOPER_NODE",
+  anomalyFeed: "HYDRA_UMC_ANOMALY_FEED",
+  anomalyVoiceRelay: "HYDRA_UMC_ANOMALY_VOICE_RELAY",
+  voiceChain: "HYDRA_UMC_VOICE_CHAIN",
+  proposalVerify: "HYDRA_UMC_PROPOSAL_VERIFY",
+};
+export const PROPOSAL_KEYS_VARIABLE = "HYDRA_UMC_PROPOSAL_KEYS_FILE";
+/** A file name inside the data folder (no folder, no dots in front); the environment variable takes any path. */
+export const PROPOSAL_KEYS_FILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+export interface IngestFile {
+  faultFeed?: boolean;
+  scenario?: boolean;
+  developerNode?: boolean;
+  anomalyFeed?: boolean;
+  anomalyVoiceRelay?: boolean;
+  voiceChain?: boolean;
+  proposalVerify?: boolean;
+  /** The file, in the data folder, that lists the public keys of the operators that sign trajectory proposals. */
+  proposalKeysFile?: string;
 }
 
 /** What the history of connections keeps about a client (src/connections.ts). */
@@ -292,6 +324,7 @@ export interface SecurityFile {
   robots?: RobotsFile;
   connections?: ConnectionsFile;
   production?: ProductionFile;
+  ingest?: IngestFile;
   health?: HealthFile;
   ecosystemHealth?: EcosystemHealthFile;
   infoTickets?: InfoTicketsFile;
@@ -329,6 +362,8 @@ export interface SecurityEnv {
   connectionRecordAddress?: string;
   healthOpen?: string;
   productionRdpLevel?: string;
+  /** The ingest switches (INGEST_SWITCH_VARIABLES) and the keys file of the proposals, as written. */
+  ingest?: Partial<Record<IngestSwitchKey | "proposalKeysFile", string>>;
   ecosystemHealth?: string;
   infoTickets?: string;
   jwtAlgorithm?: string;
@@ -372,6 +407,7 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     connectionRecordAddress: env.HYDRA_UMC_CONNECTION_RECORD_ADDRESS,
     healthOpen: env.HYDRA_UMC_HEALTH_OPEN,
     productionRdpLevel: env.HYDRA_UMC_PRODUCTION_RDP_LEVEL,
+    ingest: { ...Object.fromEntries(INGEST_SWITCH_KEYS.map((key) => [key, env[INGEST_SWITCH_VARIABLES[key]]])), proposalKeysFile: env[PROPOSAL_KEYS_VARIABLE] },
     ecosystemHealth: env.HYDRA_UMC_ECOSYSTEM_HEALTH,
     infoTickets: env.HYDRA_UMC_INFO_TICKETS,
     jwtAlgorithm: env.HYDRA_UMC_JWT_ALGORITHM,
@@ -470,6 +506,22 @@ export function resolveProductionRdpLevel(env: string | undefined, file: Securit
   if (isSet(env) && (env.trim() === "0" || env.trim() === "1")) return { value: env.trim() === "1" ? 1 : 0, source: "env" };
   if (file.production?.rdpLevel === 0 || file.production?.rdpLevel === 1) return { value: file.production.rdpLevel, source: "config" };
   return { value: 0, source: "default" };
+}
+
+/** One ingest switch: the exact words "1" (on) and "0" (off) in the environment decide and lock it; otherwise the file; the default is off. */
+export function resolveIngestSwitch(key: IngestSwitchKey, env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  const word = (env ?? "").trim();
+  if (word === "1" || word === "0") return { value: word === "1", source: "env" };
+  if (typeof file.ingest?.[key] === "boolean") return { value: file.ingest[key] as boolean, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** The file of the operators' public keys: a path in the environment (which locks it), else a name in the data folder from the file, else none. */
+export function resolveProposalKeysFile(env: string | undefined, file: SecurityFile): { value: string; source: Source } {
+  if (isSet(env)) return { value: env.trim(), source: "env" };
+  const name = file.ingest?.proposalKeysFile;
+  if (typeof name === "string" && PROPOSAL_KEYS_FILE_NAME.test(name) && !name.includes("..")) return { value: name, source: "config" };
+  return { value: "", source: "default" };
 }
 
 /** The unauthenticated GET /health: only the exact word "1" in the environment switches it on; the default is off. */
@@ -788,6 +840,7 @@ export interface SecuritySnapshot {
   robots: { allowEnable: { value: boolean; source: Source } };
   connections: { recordAddress: { value: boolean; source: Source } };
   production: { rdpLevel: { value: 0 | 1; source: Source } };
+  ingest: Record<IngestSwitchKey, { value: boolean; source: Source }> & { proposalKeysFile: { value: string; source: Source }; appliesOnRestart: boolean };
   health: { open: { value: boolean; source: Source } };
   ecosystemHealth: { enabled: { value: boolean; source: Source } };
   infoTickets: { enabled: { value: boolean; source: Source } };
@@ -893,6 +946,40 @@ export class SecurityConfig {
   mqtt(): MqttSettings {
     return resolveMqttSettings(this.options.env.mqtt ?? {}, this.file);
   }
+
+  /** Is the ingest switch on (environment first, then the file; off by default)? */
+  ingestSwitch(key: IngestSwitchKey): boolean {
+    return resolveIngestSwitch(key, this.options.env.ingest?.[key], this.file).value;
+  }
+
+  /**
+   * The environment the ingest code reads: `base` with the switches and the keys file that an administrator saved put in where the
+   * environment of the server does not already say (it always wins). `dataDir` is the data folder, where the keys file lives.
+   */
+  ingestEnv(base: Record<string, string | undefined>, dataDir: string): Record<string, string | undefined> {
+    const out: Record<string, string | undefined> = { ...base };
+    for (const key of INGEST_SWITCH_KEYS) {
+      const resolved = resolveIngestSwitch(key, this.options.env.ingest?.[key], this.file);
+      if (resolved.source === "config") out[INGEST_SWITCH_VARIABLES[key]] = resolved.value ? "1" : "0";
+    }
+    const keys = resolveProposalKeysFile(this.options.env.ingest?.proposalKeysFile, this.file);
+    if (keys.source === "config") out[PROPOSAL_KEYS_VARIABLE] = path.join(dataDir, keys.value);
+    return out;
+  }
+
+  /** The feeds that read the broker (and the relay to the voice interface) start with the server: true when the saved switches differ from the ones it started with. */
+  private ingestRestartPending(): boolean {
+    const started = this.ingestStarted;
+    if (!started) return false;
+    return (["faultFeed", "anomalyFeed", "anomalyVoiceRelay"] as const).some((key) => this.ingestSwitch(key) !== started[key]);
+  }
+
+  /** The server tells which feeds it started with, so that the screen can say when a restart is needed. */
+  noteIngestStarted(): void {
+    this.ingestStarted = { faultFeed: this.ingestSwitch("faultFeed"), anomalyFeed: this.ingestSwitch("anomalyFeed"), anomalyVoiceRelay: this.ingestSwitch("anomalyVoiceRelay") };
+  }
+
+  private ingestStarted?: { faultFeed: boolean; anomalyFeed: boolean; anomalyVoiceRelay: boolean };
 
   /** The read-out protection level a production flash sets (0 = off unless an administrator chose 1). */
   productionRdpLevel(): 0 | 1 {
@@ -1067,6 +1154,12 @@ export class SecurityConfig {
       robots: { allowEnable: resolveRobotAllowEnable(this.options.env.robotAllowEnable, this.file) },
       connections: { recordAddress: resolveConnectionRecordAddress(this.options.env.connectionRecordAddress, this.file) },
       production: { rdpLevel: resolveProductionRdpLevel(this.options.env.productionRdpLevel, this.file) },
+      ingest: {
+        ...(Object.fromEntries(INGEST_SWITCH_KEYS.map((key) => [key, resolveIngestSwitch(key, this.options.env.ingest?.[key], this.file)])) as Record<IngestSwitchKey, { value: boolean; source: Source }>),
+        proposalKeysFile: resolveProposalKeysFile(this.options.env.ingest?.proposalKeysFile, this.file),
+        // the two feeds that read the broker and the relay to the voice interface start with the server
+        appliesOnRestart: this.ingestRestartPending(),
+      },
       health: { open: resolveHealthOpen(this.options.env.healthOpen, this.file) },
       ecosystemHealth: { enabled: resolveEcosystemHealth(this.options.env.ecosystemHealth, this.file) },
       infoTickets: { enabled: resolveInfoTickets(this.options.env.infoTickets, this.file) },
@@ -1135,7 +1228,7 @@ export class SecurityConfig {
   /** Applies a change asked for by an administrator; returns the new state and the warnings to show. */
   update(patch: any, actor: string): { snapshot: SecuritySnapshot; warnings: string[]; appliesOnRestart: boolean } {
     const warnings: string[] = [];
-    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, infoTickets: this.file.infoTickets ? { ...this.file.infoTickets } : undefined, presence: this.file.presence ? { ...this.file.presence } : undefined, bridgeGateway: this.file.bridgeGateway ? { ...this.file.bridgeGateway } : undefined, push: this.file.push ? { ...this.file.push } : undefined, trustedNetworks: this.file.trustedNetworks ? { ...this.file.trustedNetworks } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
+    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, ingest: this.file.ingest ? { ...this.file.ingest } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, infoTickets: this.file.infoTickets ? { ...this.file.infoTickets } : undefined, presence: this.file.presence ? { ...this.file.presence } : undefined, bridgeGateway: this.file.bridgeGateway ? { ...this.file.bridgeGateway } : undefined, push: this.file.push ? { ...this.file.push } : undefined, trustedNetworks: this.file.trustedNetworks ? { ...this.file.trustedNetworks } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
     let appliesOnRestart = false;
     const log = this.options.log ?? (() => undefined);
     const lockedBy = (name: string) => new SecurityConfigError(409, `${name} is set in the environment of this server; remove it there to change it here`);
@@ -1299,6 +1392,38 @@ export class SecurityConfig {
         merged.rdpLevel = productionPatch.rdpLevel;
       }
       next.production = merged;
+    }
+
+    if (patch.ingest !== undefined) {
+      const ingestPatch = patch.ingest;
+      if (typeof ingestPatch !== "object" || ingestPatch === null || Array.isArray(ingestPatch)) throw new SecurityConfigError(400, "ingest must be an object");
+      for (const key of Object.keys(ingestPatch)) {
+        if (key !== "confirm" && key !== "proposalKeysFile" && !(INGEST_SWITCH_KEYS as readonly string[]).includes(key)) throw new SecurityConfigError(400, `ingest.${key} cannot be changed here`);
+      }
+      if (ingestPatch.confirm !== undefined && typeof ingestPatch.confirm !== "boolean") throw new SecurityConfigError(400, "ingest.confirm must be true or false");
+      const merged: IngestFile = { ...(next.ingest ?? {}) };
+      let turnsOn = false;
+      for (const key of INGEST_SWITCH_KEYS) {
+        if (ingestPatch[key] === undefined) continue;
+        if (typeof ingestPatch[key] !== "boolean") throw new SecurityConfigError(400, `ingest.${key} must be true or false`);
+        if (resolveIngestSwitch(key, this.options.env.ingest?.[key], this.file).source === "env") throw lockedBy(INGEST_SWITCH_VARIABLES[key]);
+        if (ingestPatch[key] === true && resolveIngestSwitch(key, this.options.env.ingest?.[key], this.file).value !== true) turnsOn = true;
+        merged[key] = ingestPatch[key];
+      }
+      if (ingestPatch.proposalKeysFile !== undefined) {
+        const name = ingestPatch.proposalKeysFile;
+        if (typeof name !== "string" || (name !== "" && (!PROPOSAL_KEYS_FILE_NAME.test(name) || name.includes("..")))) throw new SecurityConfigError(400, "ingest.proposalKeysFile must be the name of a file in the data folder of the server (letters, digits, dot, dash and underscore), or empty");
+        if (resolveProposalKeysFile(this.options.env.ingest?.proposalKeysFile, this.file).source === "env") throw lockedBy(PROPOSAL_KEYS_VARIABLE);
+        if (name === "") delete merged.proposalKeysFile;
+        else {
+          if (name !== this.file.ingest?.proposalKeysFile) turnsOn = true;
+          merged.proposalKeysFile = name;
+        }
+      }
+      if (turnsOn && ingestPatch.confirm !== true) throw new SecurityConfigError(400, "Turning on what this server accepts and keeps from the services, or changing the keys that vouch for trajectory proposals, needs confirm: true");
+      next.ingest = merged;
+      if (turnsOn) warnings.push("ingest_on");
+      if (INGEST_SWITCH_KEYS.some((key) => ingestPatch[key] !== undefined && ["faultFeed", "anomalyFeed", "anomalyVoiceRelay"].includes(key))) appliesOnRestart = true;
     }
 
     if (patch.connections !== undefined) {
@@ -1683,6 +1808,11 @@ export class SecurityConfig {
       log(`[SECURITY] ${actor} set the read-out protection level of a production flash to ${snapshot.production.rdpLevel.value} (${snapshot.production.rdpLevel.value === 1 ? "on" : "off"}).`);
     }
 
+    if (patch.ingest !== undefined) {
+      const state = snapshot.ingest;
+      const listed = INGEST_SWITCH_KEYS.filter((key) => state[key].value).join(", ") || "none";
+      log(`[SECURITY] ${actor} set what this server accepts and keeps from the services; on now: ${listed}; keys file of the proposals: ${state.proposalKeysFile.value ? "set" : "none"}. The feeds that read the broker apply on the next start.`);
+    }
     if (patch.connections !== undefined) {
       log(`[SECURITY] ${actor} ${snapshot.connections.recordAddress.value ? "allowed" : "forbade"} keeping the address and user agent of the clients in the history of connections.`);
     }

@@ -21,7 +21,8 @@ export interface TrustDeps {
   requireOperator: Middleware;
   ingest: () => Ingest;
   audit?: Pick<AuditLog, "record">;
-  env?: Record<string, string | undefined>;
+  /** The environment the switches are read from, or a function that gives it each time (the saved switches of Server Admin are put in it). */
+  env?: Record<string, string | undefined> | (() => Record<string, string | undefined>);
 }
 
 const limitOf = (value: unknown, fallback = 100): number => {
@@ -33,7 +34,7 @@ const MAX_BODY_BYTES = 16 * 1024;
 
 export function registerTrustRoutes(app: express.Express, deps: TrustDeps): void {
   const { authenticate, requireAdmin, requireOperator, ingest, audit } = deps;
-  const env = () => deps.env ?? process.env;
+  const env = () => (typeof deps.env === "function" ? deps.env() : deps.env ?? process.env);
   const off = (name: string) => (_req: any, res: any, next: any) => (switchOn(name, env()) ? next() : res.status(404).json({ error: "not available" }));
 
   // The latest verdict of every series of the anomaly detector; `verdict=` narrows to one; `verify=1` checks the record of the changes.

@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **What the sibling services hand to the server can be switched on from Server Admin, off by default and with a confirmation:** the `ingest` block of `GET` and `PUT /api/admin/server-config` carries `faultFeed`, `scenario`, `developerNode`, `anomalyFeed`, `anomalyVoiceRelay`, `voiceChain` and `proposalVerify` (booleans, all off) and `proposalKeysFile` (a file name inside the data folder, for the public keys that vouch for trajectory proposals). Turning one on, or changing the keys file, needs `confirm: true` and answers the warning `ingest_on`; every change is logged with the account. The environment variable of each switch (`HYDRA_UMC_FAULT_FEED` and the others) still decides and locks it (`409`), and the feeds that read the broker ask for a restart (`appliesOnRestart`). Tests in `tests/ingestOptions.test.ts`.
+
 ## [0.8.2.4] - A route cannot ship without being declared in the SDK: tools/verifysdkcontract.mjs now also compares the routes this server registers (docs/openapi.json) with the full inventory of the SDK (server.full.openapi.json) and fails,... (and 24 more changes)
 
 - **A route cannot ship without being declared in the SDK:** `tools/verify_sdk_contract.mjs` now also compares the routes this server registers (`docs/openapi.json`) with the full inventory of the SDK (`server.full.openapi.json`) and fails, naming the method and route, when the server registers one the SDK does not declare. It was one-way before (only what the SDK promises had to exist here). The inventories agree today (111 routes each); an SDK checkout without that file leaves nothing to compare. 1 more test.
