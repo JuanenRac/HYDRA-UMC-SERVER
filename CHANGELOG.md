@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **The contract check also compares the route table the SDK generates for its clients:** when the SDK checkout carries `generated/hydra-routes.json`, `tools/verify_sdk_contract.mjs` fails if the server registers a route the table does not list, if the table lists a route the server does not register, or if the kind of access or the query parameters of a route differ. A checkout without the table leaves nothing to compare.
+
 ## [0.8.2.5] - The relay reaches the trajectory check of the semantic planner: POST /api/ai/semantic-planner/plan/trajectory-check is forwarded like the dry run of a plan (same sign-in, role and body limits; the exact request only, anything... (and 2 more changes)
 
 - **The relay reaches the trajectory check of the semantic planner:** `POST /api/ai/semantic-planner/plan/trajectory-check` is forwarded like the dry run of a plan (same sign-in, role and body limits; the exact request only, anything near it is still `403`), so STUDIO and SUITE can check a plan as a trajectory. The planner keeps it off until its own switch is on, and then the relay answers `404`. No new route of this server.

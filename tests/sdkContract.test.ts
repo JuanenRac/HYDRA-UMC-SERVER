@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { compareClosedSchemas, compareContracts, compareInventoryCoverage, compareQueryParameters, findGeneratedDocuments, findSdkContract } from "../tools/verify_sdk_contract.mjs";
+import { compareClosedSchemas, compareContracts, compareInventoryCoverage, compareQueryParameters, compareRouteTable, findGeneratedDocuments, findSdkContract } from "../tools/verify_sdk_contract.mjs";
 
 const op = (codes: string[], secured = true) => ({ responses: Object.fromEntries(codes.map((c) => [c, {}])), ...(secured ? { security: [{ bearerAuth: [] }] } : { security: [] }) });
 
@@ -69,4 +69,14 @@ test("a route the server registers and the full inventory of the SDK does not de
   assert.match(compareInventoryCoverage(full, { paths: { "/api/x": { get: op(["200"]), post: op(["200"]) } } })[0], /POST \/api\/x.*does not declare/);
   assert.match(compareInventoryCoverage(full, { paths: { "/api/y": { get: op(["200"]) } } })[0], /GET \/api\/y/);
   assert.deepEqual(compareInventoryCoverage({ paths: {} }, { paths: {} }), []);
+});
+
+test("the route table of the SDK lists exactly the routes of the server", () => {
+  const table = { routes: [{ method: "GET", path: "/api/x", access: "user", query: ["a"] }, { method: "POST", path: "/api/y", access: "public", query: [] }] };
+  const server = { paths: { "/api/x": withQuery(["a"]), "/api/y": { post: op(["200"], false) } } };
+  assert.deepEqual(compareRouteTable(table, server), []);
+  assert.match(compareRouteTable(table, { paths: { "/api/x": withQuery(["a"]) } }).join(" "), /POST \/api\/y.*does not register/);
+  assert.match(compareRouteTable({ routes: [table.routes[0]] }, server).join(" "), /POST \/api\/y.*does not list it/);
+  assert.match(compareRouteTable({ routes: [{ ...table.routes[0], access: "public" }, table.routes[1]] }, server).join(" "), /table says public/);
+  assert.match(compareRouteTable({ routes: [{ ...table.routes[0], query: [] }, table.routes[1]] }, server).join(" "), /query parameters/);
 });

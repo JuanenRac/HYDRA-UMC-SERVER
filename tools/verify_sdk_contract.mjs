@@ -13,7 +13,8 @@
 //
 // The full inventory of the SDK (server.full.openapi.json, next to the contract) is checked the other way too: every
 // route this server registers must be in it, so a new route cannot ship without being declared in the SDK. An SDK
-// checkout without that file leaves nothing to compare.
+// checkout without that file leaves nothing to compare. The route table the SDK generates for its clients
+// (generated/hydra-routes.json) is compared the same way when the checkout has it.
 //
 // The SDK is looked up in HYDRA_UMC_SDK_DIR, then in a sibling HYDRA-UMC-SDK checkout. When none is
 // there the check is skipped with a notice, unless HYDRA_UMC_REQUIRE_SDK=1 (then it fails).
@@ -134,6 +135,34 @@ export function compareShapesFile(sdkFile, vendoredFile = path.join(ROOT, "tools
   return clean(sdkShapes) === clean(vendoredFile) ? [] : [`${path.basename(vendoredFile)}: differs from contracts/sources/server.shapes.json of the SDK (copy the file from the SDK checkout)`];
 }
 
+// The route table the SDK generates for its clients (generated/hydra-routes.json) lists exactly the routes this server
+// registers, with the same kind of access and the same query parameters. An SDK checkout without the table (an older
+// one) leaves nothing to compare.
+export function compareRouteTable(table, server) {
+  const problems = [];
+  const rows = new Map((table.routes ?? []).map((row) => [`${row.method.toLowerCase()} ${row.path}`, row]));
+  for (const [route, item] of Object.entries(server.paths ?? {})) {
+    for (const method of METHODS) {
+      const offered = item[method];
+      if (!offered) continue;
+      const label = `${method.toUpperCase()} ${route}`;
+      const row = rows.get(`${method} ${route}`);
+      if (!row) {
+        problems.push(`${label}: the server registers this route and the route table of the SDK does not list it`);
+        continue;
+      }
+      if ((row.access === "public") !== isPublic(offered)) problems.push(`${label}: the route table says ${row.access} and the server says ${isPublic(offered) ? "public" : "signed in"}`);
+      const names = (offered.parameters ?? []).filter((p) => p.in === "query").map((p) => p.name).sort();
+      if (JSON.stringify(names) !== JSON.stringify([...row.query].sort())) problems.push(`${label}: the query parameters of the route table differ from the ones the handler reads`);
+    }
+  }
+  for (const key of rows.keys()) {
+    const [method, route] = key.split(" ");
+    if (!server.paths?.[route]?.[method]) problems.push(`${method.toUpperCase()} ${route}: the route table of the SDK lists this route and the server does not register it`);
+  }
+  return problems;
+}
+
 function generatedDocumentProblems(file, server) {
   const sdk = JSON.parse(fs.readFileSync(file, "utf8"));
   const problems = [...compareContracts(sdk, server), ...compareQueryParameters(sdk, server)];
@@ -162,6 +191,8 @@ function main() {
   problems.push(...compareShapesFile(sdkFile));
   const fullFile = path.join(path.dirname(sdkFile), "server.full.openapi.json");
   if (fs.existsSync(fullFile)) problems.push(...compareInventoryCoverage(JSON.parse(fs.readFileSync(fullFile, "utf8")), server));
+  const tableFile = path.join(path.dirname(sdkFile), "..", "..", "..", "generated", "hydra-routes.json");
+  if (fs.existsSync(tableFile)) problems.push(...compareRouteTable(JSON.parse(fs.readFileSync(tableFile, "utf8")), server));
   if (problems.length) {
     for (const p of problems) console.error(`  - ${p}`);
     console.error(`SDK_CONTRACT=FAIL ${problems.length} difference(s)`);
