@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.8.2.5] - The relay reaches the trajectory check of the semantic planner: POST /api/ai/semantic-planner/plan/trajectory-check is forwarded like the dry run of a plan (same sign-in, role and body limits; the exact request only, anything... (and 2 more changes)
+
 - **The relay reaches the trajectory check of the semantic planner:** `POST /api/ai/semantic-planner/plan/trajectory-check` is forwarded like the dry run of a plan (same sign-in, role and body limits; the exact request only, anything near it is still `403`), so STUDIO and SUITE can check a plan as a trajectory. The planner keeps it off until its own switch is on, and then the relay answers `404`. No new route of this server.
 
 - **The server tells a scenario outcome of a live service check from one of a manifest:** a `ScenarioOutcome` may carry `fingerprint_kind` (`manifest`, the default, or `live-service`); another value in a document is refused with a `400`, the kind is written to the audit record, and `GET /api/ingest/scenario-outcomes` takes `fingerprint_kind` to list one kind only (a document without the field counts as `manifest`). The feed is still off until its switch is on. Declared in the SDK source of the feeds, with a test of both kinds.
