@@ -104,7 +104,7 @@ export const READ_ONLY_SERVICE_PATHS: Readonly<Record<string, readonly string[]>
  * for its estimates only. Whatever else is asked of them is refused here before it is forwarded.
  */
 export const EXACT_SERVICE_REQUESTS: Readonly<Record<string, readonly string[]>> = {
-  "semantic-planner": ["GET /health", "POST /plan/simulate"],
+  "semantic-planner": ["GET /health", "POST /plan/simulate", "POST /plan/trajectory-check"],
   "job-dispatcher": ["GET /health", "GET /dispatch/eta"],
 };
 

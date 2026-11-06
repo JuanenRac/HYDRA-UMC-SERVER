@@ -10,8 +10,8 @@ import express from "express";
 import type { AuditLog } from "../auditLog";
 import { apiRateLimiter } from "../auth";
 import {
-  ALLOW_PLAIN_HTTP, MAX_BODY_BYTES, SWITCH_DEVELOPER_NODE, SWITCH_FAULT_FEED, SWITCH_SCENARIO,
-  developerNodeStatusProblem, nodeIdForToken, scenarioOutcomeProblem, switchOn, transportAcceptable, type Ingest,
+  ALLOW_PLAIN_HTTP, FINGERPRINT_KINDS, MAX_BODY_BYTES, SWITCH_DEVELOPER_NODE, SWITCH_FAULT_FEED, SWITCH_SCENARIO,
+  developerNodeStatusProblem, fingerprintKindOf, nodeIdForToken, scenarioOutcomeProblem, switchOn, transportAcceptable, type Ingest,
 } from "../ingestFeeds";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
@@ -61,7 +61,7 @@ export function registerIngestRoutes(app: express.Express, deps: IngestDeps): vo
     }
     try {
       const record = ingest().scenario.append("scenario-outcome", req.body);
-      audit?.record({ type: "ingest-scenario", outcome: "ok", username: req.user?.username, detail: { seq: record.seq, scenario_id: req.body.scenario_id, run_id: req.body.run_id } });
+      audit?.record({ type: "ingest-scenario", outcome: "ok", username: req.user?.username, detail: { seq: record.seq, scenario_id: req.body.scenario_id, run_id: req.body.run_id, fingerprint_kind: fingerprintKindOf(req.body) } });
       return res.status(201).json({ seq: record.seq, hash: record.hash });
     } catch (error) {
       audit?.record({ type: "ingest-scenario", outcome: "failed", username: req.user?.username });
@@ -72,8 +72,12 @@ export function registerIngestRoutes(app: express.Express, deps: IngestDeps): vo
   app.get("/api/ingest/scenario-outcomes", apiRateLimiter, authenticate, scenarioOn, (req: any, res) => {
     const store = ingest().scenario;
     const scenario = typeof req.query.scenario_id === "string" ? req.query.scenario_id : "";
+    const kind = typeof req.query.fingerprint_kind === "string" ? req.query.fingerprint_kind : "";
+    if (kind && !(FINGERPRINT_KINDS as readonly string[]).includes(kind)) return res.status(400).json({ error: `fingerprint_kind is not one of ${FINGERPRINT_KINDS.join(", ")}` });
     let items = store.list(limitOf(req.query.limit), "scenario-outcome");
     if (scenario) items = items.filter((r) => (r.payload as any)?.scenario_id === scenario);
+    // a document that does not say what its fingerprint is of counts as a manifest one
+    if (kind) items = items.filter((r) => fingerprintKindOf(r.payload) === kind);
     res.json({ items, chain: req.query.verify === "1" ? store.verify() : undefined });
   });
 

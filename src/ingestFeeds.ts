@@ -43,6 +43,19 @@ export function retentionFromEnv(prefix: string, env: Env = process.env): Retent
 // ---------------------------------------------------------------------------
 const isText = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= 512;
 
+/**
+ * What the `base_fingerprint` of a ScenarioOutcome is the fingerprint of: a state of the source (`manifest`, what a document without the field
+ * means) or the identity of a check on a running service (`live-service`), which says nothing about the source.
+ */
+export const FINGERPRINT_KINDS = ["manifest", "live-service"] as const;
+export type FingerprintKind = (typeof FINGERPRINT_KINDS)[number];
+
+/** The kind of a stored or incoming outcome; a document that does not say is a `manifest` one. */
+export function fingerprintKindOf(body: unknown): FingerprintKind {
+  const kind = (body as { fingerprint_kind?: unknown } | null | undefined)?.fingerprint_kind;
+  return kind === "live-service" ? "live-service" : "manifest";
+}
+
 /** Why the body is not a ScenarioOutcome of version 1.0 (null when it is). Extra fields are allowed, as the contract allows them. */
 export function scenarioOutcomeProblem(body: unknown): string | null {
   if (!body || typeof body !== "object" || Array.isArray(body)) return "the body must be a JSON object";
@@ -55,6 +68,7 @@ export function scenarioOutcomeProblem(body: unknown): string | null {
   if (o.observed.exit_code !== undefined && !Number.isInteger(o.observed.exit_code)) return "observed.exit_code must be an integer";
   if (o.observed.evidence !== undefined && typeof o.observed.evidence !== "string") return "observed.evidence must be a text";
   if (typeof o.timestamp_utc !== "string" || Number.isNaN(Date.parse(o.timestamp_utc))) return "timestamp_utc must be a date-time";
+  if (o.fingerprint_kind !== undefined && !(FINGERPRINT_KINDS as readonly unknown[]).includes(o.fingerprint_kind)) return `fingerprint_kind is not one of ${FINGERPRINT_KINDS.join(", ")}`;
   return null;
 }
 

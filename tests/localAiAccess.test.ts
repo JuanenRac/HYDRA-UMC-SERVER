@@ -61,9 +61,10 @@ test("the planner and the dispatcher are reached only for the exact requests lis
     const [method, path] = request.split(" ");
     assert.equal(isForwardable("semantic-planner", method, path), true, request);
   }
-  for (const [method, path] of [["GET", "/plan/simulate"], ["POST", "/release"], ["POST", "/propose"], ["POST", "/plan/simulate/"], ["DELETE", "/plan/simulate"], ["POST", "/health"], ["POST", "/Plan/simulate"]]) {
+  for (const [method, path] of [["GET", "/plan/simulate"], ["POST", "/release"], ["POST", "/propose"], ["POST", "/plan/simulate/"], ["DELETE", "/plan/simulate"], ["POST", "/health"], ["POST", "/Plan/simulate"], ["GET", "/plan/trajectory-check"], ["PUT", "/plan/trajectory-check"], ["POST", "/plan/trajectory-check/"], ["POST", "/plan/trajectory-check/../release"], ["POST", "/Plan/trajectory-check"]]) {
     assert.equal(isForwardable("semantic-planner", method, path), false, `${method} ${path}`);
   }
+  assert.equal(isForwardable("semantic-planner", "POST", "/plan/trajectory-check"), true, "the check of a plan as a trajectory executes nothing and is reached like the dry run");
   assert.equal(isForwardable("job-dispatcher", "GET", "/dispatch/eta"), true);
   assert.equal(isForwardable("job-dispatcher", "GET", "/health"), true);
   for (const [method, path] of [["POST", "/dispatch"], ["POST", "/jobs/submit"], ["GET", "/jobs"], ["POST", "/dispatch/eta"], ["POST", "/robots"], ["POST", "/jobs/stop-ack"], ["GET", "/dispatch/eta/../jobs"], ["PUT", "/dispatch/eta"]]) {

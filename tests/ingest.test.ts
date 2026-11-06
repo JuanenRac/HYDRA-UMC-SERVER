@@ -14,7 +14,7 @@ import { EventEmitter } from "node:events";
 import { apiRateLimiter } from "../src/auth.ts";
 import { ChainedLog } from "../src/ingestLog.ts";
 import {
-  FaultFeed, hashToken, makeIngest, nodeIdForToken, parseFaultEvent, scenarioOutcomeProblem, developerNodeStatusProblem, transportAcceptable,
+  FaultFeed, fingerprintKindOf, hashToken, makeIngest, nodeIdForToken, parseFaultEvent, scenarioOutcomeProblem, developerNodeStatusProblem, transportAcceptable,
 } from "../src/ingestFeeds.ts";
 import { registerIngestRoutes } from "../src/routes/ingestRoutes.ts";
 
@@ -162,6 +162,23 @@ test("scenario outcome: stored signed, audited, listed and verified; a bad one i
   assert.equal(list.body.items.length, 1);
   assert.equal(list.body.chain.ok, true);
   assert.deepEqual(t.events.map((e) => e.outcome), ["ok", "refused"]);
+});
+
+test("scenario outcome: a live service check is told apart from a manifest one by its fingerprint kind", () => {
+  const t = setup({ HYDRA_UMC_INGEST_SCENARIO: "1" });
+  assert.equal(scenarioOutcomeProblem(outcome({ fingerprint_kind: "live-service" })), null);
+  assert.equal(scenarioOutcomeProblem(outcome({ fingerprint_kind: "manifest" })), null);
+  assert.match(scenarioOutcomeProblem(outcome({ fingerprint_kind: "guess" }))!, /fingerprint_kind/);
+  assert.equal(fingerprintKindOf(outcome()), "manifest", "a document that does not say is a manifest one");
+  assert.equal(fingerprintKindOf(outcome({ fingerprint_kind: "live-service" })), "live-service");
+  assert.equal(t.call("POST /api/ingest/scenario-outcome", { body: outcome({ run_id: "m" }) }).statusCode, 201);
+  assert.equal(t.call("POST /api/ingest/scenario-outcome", { body: outcome({ run_id: "l", fingerprint_kind: "live-service" }) }).statusCode, 201);
+  assert.equal(t.call("POST /api/ingest/scenario-outcome", { body: outcome({ fingerprint_kind: "guess" }) }).statusCode, 400);
+  const runs = (query: any) => t.call("GET /api/ingest/scenario-outcomes", { query }).body.items.map((r: any) => r.payload.run_id).sort();
+  assert.deepEqual(runs({}), ["l", "m"]);
+  assert.deepEqual(runs({ fingerprint_kind: "live-service" }), ["l"]);
+  assert.deepEqual(runs({ fingerprint_kind: "manifest" }), ["m"]);
+  assert.equal(t.call("GET /api/ingest/scenario-outcomes", { query: { fingerprint_kind: "guess" } }).statusCode, 400);
 });
 
 test("scenario outcome: no usable key of the server means a 503 and nothing unsigned is written", () => {
