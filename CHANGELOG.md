@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.8.2.6] - The contract check also compares the route table the SDK generates for its clients: when the SDK checkout carries generated/hydra-routes.json, tools/verifysdkcontract.mjs fails if the server registers a route the table does... (and 1 more changes)
+
 - **The contract check also compares the route table the SDK generates for its clients:** when the SDK checkout carries `generated/hydra-routes.json`, `tools/verify_sdk_contract.mjs` fails if the server registers a route the table does not list, if the table lists a route the server does not register, or if the kind of access or the query parameters of a route differ. A checkout without the table leaves nothing to compare.
 
 - **Dependencies updated:** the npm dependencies of the server and of the administration interface move to their latest compatible releases (express 5.3, express-rate-limit 8.7, ws 8.22, React 19.3, lucide-react, Vite React plugin and the type definitions); TypeScript stays on its current line.
