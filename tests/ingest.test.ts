@@ -178,7 +178,7 @@ test("scenario outcome: a live service check is told apart from a manifest one b
   assert.deepEqual(runs({}), ["l", "m"]);
   assert.deepEqual(runs({ fingerprint_kind: "live-service" }), ["l"]);
   assert.deepEqual(runs({ fingerprint_kind: "manifest" }), ["m"]);
-  assert.equal(t.call("GET /api/ingest/scenario-outcomes", { query: { fingerprint_kind: "guess" } }).statusCode, 400);
+  assert.deepEqual(runs({ fingerprint_kind: "guess" }), [], "a kind nothing has lists nothing");
 });
 
 test("scenario outcome: no usable key of the server means a 503 and nothing unsigned is written", () => {

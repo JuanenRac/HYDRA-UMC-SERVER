@@ -10,7 +10,7 @@ import express from "express";
 import type { AuditLog } from "../auditLog";
 import { apiRateLimiter } from "../auth";
 import {
-  ALLOW_PLAIN_HTTP, FINGERPRINT_KINDS, MAX_BODY_BYTES, SWITCH_DEVELOPER_NODE, SWITCH_FAULT_FEED, SWITCH_SCENARIO,
+  ALLOW_PLAIN_HTTP, MAX_BODY_BYTES, SWITCH_DEVELOPER_NODE, SWITCH_FAULT_FEED, SWITCH_SCENARIO,
   developerNodeStatusProblem, fingerprintKindOf, nodeIdForToken, scenarioOutcomeProblem, switchOn, transportAcceptable, type Ingest,
 } from "../ingestFeeds";
 
@@ -73,7 +73,6 @@ export function registerIngestRoutes(app: express.Express, deps: IngestDeps): vo
     const store = ingest().scenario;
     const scenario = typeof req.query.scenario_id === "string" ? req.query.scenario_id : "";
     const kind = typeof req.query.fingerprint_kind === "string" ? req.query.fingerprint_kind : "";
-    if (kind && !(FINGERPRINT_KINDS as readonly string[]).includes(kind)) return res.status(400).json({ error: `fingerprint_kind is not one of ${FINGERPRINT_KINDS.join(", ")}` });
     let items = store.list(limitOf(req.query.limit), "scenario-outcome");
     if (scenario) items = items.filter((r) => (r.payload as any)?.scenario_id === scenario);
     // a document that does not say what its fingerprint is of counts as a manifest one
