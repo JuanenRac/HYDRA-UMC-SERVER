@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **Dependencies updated:** the npm dependencies of the server and of the administration interface move to their latest compatible releases (express 5.3, express-rate-limit 8.7, ws 8.22, React 19.3, lucide-react, Vite React plugin and the type definitions); TypeScript stays on its current line.
+
 ## [0.8.2.5] - The relay reaches the trajectory check of the semantic planner: POST /api/ai/semantic-planner/plan/trajectory-check is forwarded like the dry run of a plan (same sign-in, role and body limits; the exact request only, anything... (and 2 more changes)
 
 - **The relay reaches the trajectory check of the semantic planner:** `POST /api/ai/semantic-planner/plan/trajectory-check` is forwarded like the dry run of a plan (same sign-in, role and body limits; the exact request only, anything near it is still `403`), so STUDIO and SUITE can check a plan as a trajectory. The planner keeps it off until its own switch is on, and then the relay answers `404`. No new route of this server.
