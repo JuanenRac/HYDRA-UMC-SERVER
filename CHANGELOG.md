@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.8.2.7] - Signed tokens of one device: an administrator can issue a token for a device (the screen of a Compute Module) with POST /api/admin/device-tokens, list the tokens with GET /api/admin/device-tokens and revoke one with DELETE... (and 2 more changes)
+
 - **Signed tokens of one device:** an administrator can issue a token for a device (the screen of a Compute Module) with `POST /api/admin/device-tokens`, list the tokens with `GET /api/admin/device-tokens` and revoke one with `DELETE /api/admin/device-tokens/{id}`; the device signs in with `POST /api/device/login` and gets a short sign-in (15 minutes by default) that it renews until the token expires or is revoked. A token belongs to one operator or viewer account, never an administrator's, expires, is shown once and is not kept. Off by default (`deviceTokens.enabled`, `HYDRA_UMC_DEVICE_TOKENS`), the routes then answer 404, and turning it on needs a confirmation.
 - **The newest published version of each program:** `GET /api/admin/updates` sets the installed version of every program of the ecosystem against its newest GitHub release, keeps the answer six hours by default and stops at the first refusal for quota. Off by default (`updateCheck.enabled`, `HYDRA_UMC_UPDATE_CHECK`); it reports and never installs.
 - **The addresses of the server in the discovery answer:** `GET /api/hydra-info` can list the local-network addresses of the server in `addresses`. Off by default (`discovery.advertiseAddress`, `HYDRA_UMC_ADVERTISE_ADDRESS`).
