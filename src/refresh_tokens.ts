@@ -48,6 +48,8 @@ interface StoredRefreshToken {
   createdAt: string;
   /** Which client (see connections.ts) opened this session, to count the open sessions of a client. */
   clientId?: string;
+  /** The device token (see deviceTokens.ts) this session was opened with, so that revoking the token ends the session. */
+  deviceId?: string;
 }
 
 const refreshTokensPath = () => path.join(process.cwd(), "data", "refresh_tokens.json");
@@ -116,7 +118,7 @@ function saveRefreshTokens(tokens: StoredRefreshToken[]): void {
  * token value the client stores alongside its access token. */
 export const MAX_REFRESH_TOKENS_PER_USER = 10;
 
-export function issueRefreshToken(user: StoredUser, clientId?: string): string {
+export function issueRefreshToken(user: StoredUser, clientId?: string, deviceId?: string): string {
   const tokens = loadRefreshTokens();
   const token = crypto.randomBytes(32).toString("hex");
   tokens.push({
@@ -127,6 +129,7 @@ export function issueRefreshToken(user: StoredUser, clientId?: string): string {
     expiresAt: Date.now() + REFRESH_TOKEN_TTL_MS,
     createdAt: new Date().toISOString(),
     ...(clientId ? { clientId } : {}),
+    ...(deviceId ? { deviceId } : {}),
   });
   // Abandoned sessions (a reinstalled app, a web login never closed) must not
   // pile up: keep only the newest MAX_REFRESH_TOKENS_PER_USER per account.
@@ -141,7 +144,7 @@ export function issueRefreshToken(user: StoredUser, clientId?: string): string {
 }
 
 export type ConsumeRefreshTokenResult =
-  | { ok: true; user: StoredUser; refreshToken: string; clientId?: string }
+  | { ok: true; user: StoredUser; refreshToken: string; clientId?: string; deviceId?: string }
   | { ok: false; reason: "invalid" | "expired" | "revoked"; clientId?: string };
 
 /** Validates `token`, and on success ROTATES it (deletes the old record,
@@ -184,9 +187,10 @@ export function consumeRefreshToken(token: string): ConsumeRefreshTokenResult {
     expiresAt: Date.now() + REFRESH_TOKEN_TTL_MS,
     createdAt: new Date().toISOString(),
     ...(record.clientId ? { clientId: record.clientId } : {}),
+    ...(record.deviceId ? { deviceId: record.deviceId } : {}),
   });
   saveRefreshTokens(tokens);
-  return { ok: true, user: currentUser, refreshToken: newToken, ...(record.clientId ? { clientId: record.clientId } : {}) };
+  return { ok: true, user: currentUser, refreshToken: newToken, ...(record.clientId ? { clientId: record.clientId } : {}), ...(record.deviceId ? { deviceId: record.deviceId } : {}) };
 }
 
 /** POST /api/logout calls this so a real, explicit logout actually
@@ -201,6 +205,14 @@ export function revokeRefreshToken(token: string): { clientId?: string } | undef
   const next = tokens.filter(t => t.token !== token);
   if (next.length !== tokens.length) saveRefreshTokens(next);
   return found ? { ...(found.clientId ? { clientId: found.clientId } : {}) } : undefined;
+}
+
+/** Ends every session that was opened with the device token `deviceId` (a revoked token). Returns how many were ended. */
+export function revokeRefreshTokensOfDevice(deviceId: string): number {
+  const tokens = loadRefreshTokens();
+  const next = tokens.filter(t => t.deviceId !== deviceId);
+  if (next.length !== tokens.length) saveRefreshTokens(next);
+  return tokens.length - next.length;
 }
 
 /** How many open (not expired) sessions each client has, by the client identifier kept with the refresh token. */

@@ -14,7 +14,7 @@ import { registry as metricsRegistry } from "../metrics";
 
 export function registerInfoRoutes(
   app: express.Express,
-  deps: { infoAccess: express.RequestHandler; getSettings: () => any; REMOTE_API_VERSION: number; healthOpen?: () => boolean },
+  deps: { infoAccess: express.RequestHandler; getSettings: () => any; REMOTE_API_VERSION: number; healthOpen?: () => boolean; addresses?: () => string[] },
 ): void {
   const { infoAccess, getSettings, REMOTE_API_VERSION } = deps;
   let pkgVersion = "0.0.0";
@@ -90,6 +90,8 @@ export function registerInfoRoutes(
       return;
     }
     const s = getSettings();
+    // The addresses of this server on the local network: present only while an administrator allowed it (discovery.advertiseAddress).
+    const addresses = deps.addresses?.() ?? [];
     res.json({
       schema_version: "1.0",
       product: realSettings(getSettings())?.serverName || "HYDRA-UMC STUDIO",
@@ -101,6 +103,7 @@ export function registerInfoRoutes(
         ? s.controllers.reduce((n: number, c: any) => n + (Array.isArray(c.robots) ? c.robots.length : 0), 0)
         : 0,
       uptimeSeconds: Math.round(process.uptime()),
+      ...(addresses.length > 0 ? { addresses } : {}),
     });
   });
 }

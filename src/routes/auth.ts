@@ -11,8 +11,9 @@ import { authFailuresTotal } from "../metrics";
 import { totpStore } from "../totp";
 import { connectionTracker, identify, originOf, type Sighting } from "../connections";
 import { outsideNeedsSecondFactor, type TrustedNetworksSettings } from "../trustedNetworks";
-import { signLoginToken, asyncHandler, loginRateLimiter, refreshRateLimiter, jwksRateLimiter } from "../auth";
+import { signLoginToken, signDeviceLoginToken, asyncHandler, loginRateLimiter, refreshRateLimiter, jwksRateLimiter } from "../auth";
 import { currentJwtPolicy, jwtKeyStore } from "../jwtKeys";
+import { deviceSessionMinutes, type DeviceTokenLimits, type DeviceTokenStore } from "../deviceTokens";
 
 /** Who is asking, as the history of connections describes a client (never a secret: kind, version, address and agent only). */
 function sightingOf(req: express.Request, user?: string): Sighting {
@@ -29,6 +30,8 @@ function tell(note: () => void): void {
 export interface AuthRouteDeps {
   /** The trusted networks in force (src/trustedNetworks.ts); read on every request. */
   trustedNetworks?: () => TrustedNetworksSettings;
+  /** The device tokens (src/deviceTokens.ts): while `enabled()` is false the device sign-in answers 404 and a device session cannot be renewed. */
+  devices?: { enabled: () => boolean; store: DeviceTokenStore; limits: () => DeviceTokenLimits | undefined };
 }
 
 const NEEDS_SECOND_FACTOR = { error: "from outside the house, signing in needs the second factor turned on for this account: turn it on from the house network or the VPN first", code: "second-factor-required", needs: "vpn" };
@@ -115,6 +118,39 @@ export function registerAuthRoutes(app: express.Express, deps: AuthRouteDeps = {
     res.json({ success: true, token, refreshToken, role: user.role });
   }));
 
+  // A device (the screen of a Compute Module) signs in with the token an administrator issued for it instead of a password. The answer is
+  // the same as the one of /api/login, but the access token is short (deviceTokens.accessMinutes) and every renewal asks whether the device
+  // token is still valid, so a revoked token stops working within minutes. Off by default (deviceTokens.enabled): the route answers 404.
+  // Every refusal gives the same answer, whatever the reason, so the route does not tell which part of a token was right.
+  app.post("/api/device/login", loginRateLimiter, asyncHandler(async (req, res) => {
+    const devices = deps.devices;
+    if (!devices?.enabled()) return res.status(404).json({ error: "Not found" });
+    const refuse = (reason: string, username?: string) => {
+      authFailuresTotal.inc({ reason: `device_${reason}` });
+      tell(() => connectionTracker().refused(sightingOf(req, username), "login_failed", username !== undefined));
+      return res.status(401).json({ error: "Invalid device token" });
+    };
+    const checked = devices.store.verify(req.body?.token);
+    if (!checked.ok) return refuse(checked.reason);
+    const user = findUser(checked.record.username);
+    // An administrator account never signs in this way, and an account deleted and created again under the same name is not the one the token was issued for.
+    if (!user || user.role === "admin" || effectiveId(user) !== checked.record.accountId) return refuse("account", checked.record.username);
+    const networks = deps.trustedNetworks?.();
+    if (networks && outsideNeedsSecondFactor(networks, req.ip, totpStore().enabled(effectiveId(user)))) {
+      authFailuresTotal.inc({ reason: "outside_without_second_factor" });
+      tell(() => connectionTracker().refused(sightingOf(req, user.username), "second_factor_failed", true));
+      return res.status(403).json(NEEDS_SECOND_FACTOR);
+    }
+    const token = signDeviceLoginToken(
+      { username: user.username, role: user.role, tokenVersion: effectiveTokenVersion(user), id: effectiveId(user) },
+      deviceSessionMinutes(devices.limits()),
+    );
+    let clientId: string | undefined;
+    tell(() => { clientId = connectionTracker().login(sightingOf(req, user.username), false); });
+    const refreshToken = issueRefreshToken(user, clientId, checked.record.id);
+    res.json({ success: true, token, refreshToken, role: user.role });
+  }));
+
   // Exchanges a still-valid refresh token for a fresh access token,
   // without the caller's password - see refresh_tokens.ts's own
   // consumeRefreshToken() doc comment for exactly which cases this
@@ -145,9 +181,18 @@ export function registerAuthRoutes(app: express.Express, deps: AuthRouteDeps = {
       authFailuresTotal.inc({ reason: "outside_without_second_factor" });
       return res.status(403).json(NEEDS_SECOND_FACTOR);
     }
-    const token = signLoginToken(
-      { username: result.user.username, role: result.user.role, tokenVersion: effectiveTokenVersion(result.user), id: effectiveId(result.user) }
-    );
+    const claims = { username: result.user.username, role: result.user.role, tokenVersion: effectiveTokenVersion(result.user), id: effectiveId(result.user) };
+    if (result.deviceId) {
+      // A session opened with a device token lives only as long as that token: revoked, expired or switched off, it ends here.
+      const devices = deps.devices;
+      if (!devices?.enabled() || !devices.store.isActive(result.deviceId) || result.user.role === "admin") {
+        revokeRefreshToken(result.refreshToken);
+        authFailuresTotal.inc({ reason: "refresh_device_ended" });
+        return res.status(401).json({ error: "Invalid or expired refresh token" });
+      }
+      return res.json({ success: true, token: signDeviceLoginToken(claims, deviceSessionMinutes(devices.limits())), refreshToken: result.refreshToken, role: result.user.role });
+    }
+    const token = signLoginToken(claims);
     res.json({ success: true, token, refreshToken: result.refreshToken, role: result.user.role });
   }));
 

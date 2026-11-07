@@ -63,6 +63,11 @@ export const RESPONSES = {
   "POST /api/stop-all": ref("StopAllResult"),
   "POST /api/stop-all/release": ref("GlobalStopReleased"),
   "POST /api/info/ticket": ref("InfoTicket"),
+  "POST /api/admin/device-tokens": ref("DeviceTokenIssued"),
+  "GET /api/admin/device-tokens": ref("DeviceTokenList"),
+  "DELETE /api/admin/device-tokens/{id}": ref("DeviceTokenRevoked"),
+  "POST /api/device/login": ref("LoginResult"),
+  "GET /api/admin/updates": ref("UpdateReport"),
   "POST /api/operator/presence": ref("OperatorPresenceAck"),
   "GET /api/operator/presence": ref("OperatorPresence"),
   "GET /health": ref("HealthReport"),
@@ -132,6 +137,8 @@ export const REQUESTS = {
   "POST /api/totp/confirm": { required: ["code"], fields: { code: str } },
   "POST /api/totp/disable": { required: ["password", "code"], fields: { password: str, code: str } },
   "POST /api/refresh": { required: ["refreshToken"], fields: { refreshToken: str } },
+  "POST /api/device/login": { required: ["token"], fields: { token: str } },
+  "POST /api/admin/device-tokens": { required: ["name", "username", "confirm"], fields: { name: str, username: str, ttlDays: num, confirm: bool } },
   "POST /api/logout": { required: [], fields: { refreshToken: str } },
   "POST /api/users": { required: ["username", "password", "role"], fields: { username: str, password: str, role: str } },
   "POST /api/upload-work": { required: ["folderPath", "fileName", "content"], fields: { folderPath: str, fileName: str, content: str } },
@@ -172,6 +179,11 @@ export const EXTRA_STATUSES = {
   "POST /api/admin/jwt-keys/rotate": [200, 409, 500],
   // 404 while ecosystemHealth.enabled is off (as if the route did not exist), 403 for a viewer.
   "GET /api/ecosystem/health": [403, 404],
+  // 404 while deviceTokens.enabled is off (as if the routes did not exist); 409 when there are already as many active tokens as allowed.
+  "POST /api/admin/device-tokens": [409],
+  "GET /api/admin/device-tokens": [404],
+  // 404 while updateCheck.enabled is off.
+  "GET /api/admin/updates": [404],
   // 404 while push.enabled is off (as if the route did not exist).
   "POST /api/push/devices": [404],
   "DELETE /api/push/devices/{token}": [404],

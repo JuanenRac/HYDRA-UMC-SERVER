@@ -242,6 +242,9 @@ CORS 通过一个可配置的白名单（`CORS_ALLOWED_ORIGINS`，见下文“�
 - `HYDRA_UMC_ECOSYSTEM_HEALTH=1`（`ecosystemHealth.enabled`）- `GET /api/ecosystem/health` 返回生态系统各服务的健康状况；关闭时返回 `404`。
 - `HYDRA_UMC_SERVICE_IDENTITY=1`（`auth.serviceIdentity.enabled`） - 此服务器对各服务的调用（健康探测、中继、停止中继、接管）会带上它自己签发的短期令牌（使用 `JWT_SECRET` 的 HS256，有效期六十秒），已开启身份密钥的服务会要求它；有自己令牌的服务仍收到原令牌，`JWT_SECRET` 未设置、为示例值或过短时不会签发任何令牌；关闭时不会向任何调用添加内容。开启需要确认，并且必须在向任何服务提供身份密钥之前开启。
 - `HYDRA_UMC_INFO_TICKETS=1` （`infoTickets.enabled`） - `POST /api/info/ticket` 签发带签名的票据（地址中的 `?ticket=`），在 `HYDRA_UMC_INFO_AUTH=required` 关闭这些只读信息路由（`/metrics`、系统指标、监控器、生态系统状态）后，仍让无法发送令牌的采集器或仪表板读取；关闭时该路由返回 `404`，票据会被忽略。
+- `HYDRA_UMC_DEVICE_TOKENS=1` （`deviceTokens.enabled`） - `POST /api/admin/device-tokens` 为单个设备（Compute Module 的屏幕）签发带签名的令牌；`POST /api/device/login` 将其换成一个短时登录，并在令牌过期或被撤销（`DELETE /api/admin/device-tokens/{id}`）之前持续续期；关闭时，这些路由返回 `404`。
+- `HYDRA_UMC_UPDATE_CHECK=1` （`updateCheck.enabled`） - `GET /api/admin/updates` 将每个程序的已安装版本与其 GitHub 上最新发布的版本进行对比；关闭时返回 `404`，服务器不会向 GitHub 发出任何请求。
+- `HYDRA_UMC_ADVERTISE_ADDRESS=1` （`discovery.advertiseAddress`） - `GET /api/hydra-info` 还会列出服务器在本地网络中的地址；关闭时不包含任何地址。
 - `HYDRA_UMC_PRESENCE=1`(`presence.enabled`)和 `HYDRA_UMC_PRESENCE_ACTION`(`presence.action`) - 操作员在场的死人开关:`POST /api/operator/presence` 接收手表带编号的心跳;心跳丢失时,服务器会对该人持有的机器人采取动作,默认是减速并提醒(也可暂停、仅提醒或停止);关闭时该路由返回 `404`。
 - `HYDRA_UMC_MQTT_HOME_ASSISTANT=1` （`mqtt.homeAssistant.enabled`） - MQTT 桥还会为 Home Assistant 发布每台机器人的发现配置（保留消息，位于 `homeassistant/` 下）；默认关闭，下次启动时生效。
 - `HYDRA_UMC_RUL=1`（`rul.enabled`）- AI 仪表板卡片背后的剩余使用寿命估算 `POST /api/ai/anomaly-detector/rul`，除管理员外也向操作员开放（仅限这一个请求，并限制其大小和时间）；关闭时只有管理员可以发送。已登录的客户端可通过 `GET /api/rul/config` 读取它是否开启及两项上限（只有开启时，AI 仪表板的卡片才会出现）。

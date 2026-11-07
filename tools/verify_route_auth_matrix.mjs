@@ -31,6 +31,8 @@ const OPERATOR = { username: "matrix-operator", password: "matrix-operator-passw
 const PUBLIC_ROUTES = new Set([
   "POST /api/login",
   "POST /api/refresh",
+  // A device signs in with the token an administrator issued for it; 404 while deviceTokens.enabled is off, every refusal gives the same 401.
+  "POST /api/device/login",
   "POST /api/logout",
   "GET /api/hydra-info",
   // The public keys of the EdDSA sign-in tokens (public parameters only); 404 while the server signs HS256, the default.

@@ -192,6 +192,36 @@ export interface InfoTicketsFile {
   maxTtlSeconds?: number;
 }
 
+/** The signed tokens of one device (POST /api/admin/device-tokens and POST /api/device/login, src/deviceTokens.ts). */
+export interface DeviceTokensFile {
+  /** Whether device tokens can be issued and used (default: no; the routes then answer 404 and a device session cannot be renewed). */
+  enabled?: boolean;
+  /** Life of a token in days when the request does not ask for another (1 to maxTtlDays; 30 by default). Read from the file only. */
+  ttlDays?: number;
+  /** The longest life a token may be asked for, in days (1 to 365; 90 by default). Read from the file only. */
+  maxTtlDays?: number;
+  /** How many tokens may be active at once (1 to 500; 20 by default). Read from the file only. */
+  maxDevices?: number;
+  /** Life of the sign-in a device gets, in minutes (5 to 1440; 15 by default): the longest a revoked device keeps working. Read from the file only. */
+  accessMinutes?: number;
+}
+
+/** The look at the newest published version of each program of the ecosystem (GET /api/admin/updates, src/updateCheck.ts). */
+export interface UpdateCheckFile {
+  /** Whether the server asks GitHub for the newest release of each program (default: no; the route then answers 404 and nothing leaves the server). */
+  enabled?: boolean;
+  /** The GitHub account the programs are looked up under (letters, digits and dashes; JuanenRac by default). Read from the file only. */
+  owner?: string;
+  /** How long an answer is kept before the next look, in minutes (10 to 10080; 360 by default). Read from the file only. */
+  cacheMinutes?: number;
+}
+
+/** What GET /api/hydra-info tells a client that is not signed in. */
+export interface DiscoveryFile {
+  /** Whether the answer lists the addresses of this server on the local network (default: no; it then carries no address). */
+  advertiseAddress?: boolean;
+}
+
 /** The dead-man of the presence of the operator (POST /api/operator/presence, src/operatorPresence.ts). */
 export interface PresenceFile {
   /** Whether the heartbeat route answers and a lost heartbeat acts on the robots of the operator (default: no; the route then answers 404). */
@@ -328,6 +358,9 @@ export interface SecurityFile {
   health?: HealthFile;
   ecosystemHealth?: EcosystemHealthFile;
   infoTickets?: InfoTicketsFile;
+  deviceTokens?: DeviceTokensFile;
+  updateCheck?: UpdateCheckFile;
+  discovery?: DiscoveryFile;
   auth?: AuthFile;
   presence?: PresenceFile;
   bridgeGateway?: BridgeGatewayFile;
@@ -366,6 +399,9 @@ export interface SecurityEnv {
   ingest?: Partial<Record<IngestSwitchKey | "proposalKeysFile", string>>;
   ecosystemHealth?: string;
   infoTickets?: string;
+  deviceTokens?: string;
+  updateCheck?: string;
+  advertiseAddress?: string;
   jwtAlgorithm?: string;
   jwtAcceptHs256?: string;
   /** HYDRA_UMC_SERVICE_IDENTITY: "1" on, "0" off, as written. */
@@ -410,6 +446,9 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     ingest: { ...Object.fromEntries(INGEST_SWITCH_KEYS.map((key) => [key, env[INGEST_SWITCH_VARIABLES[key]]])), proposalKeysFile: env[PROPOSAL_KEYS_VARIABLE] },
     ecosystemHealth: env.HYDRA_UMC_ECOSYSTEM_HEALTH,
     infoTickets: env.HYDRA_UMC_INFO_TICKETS,
+    deviceTokens: env.HYDRA_UMC_DEVICE_TOKENS,
+    updateCheck: env.HYDRA_UMC_UPDATE_CHECK,
+    advertiseAddress: env.HYDRA_UMC_ADVERTISE_ADDRESS,
     jwtAlgorithm: env.HYDRA_UMC_JWT_ALGORITHM,
     jwtAcceptHs256: env.HYDRA_UMC_JWT_ACCEPT_HS256,
     serviceIdentity: env.HYDRA_UMC_SERVICE_IDENTITY,
@@ -555,6 +594,27 @@ export function presenceTimes(file: PresenceFile | undefined): { timeoutSeconds:
 export function resolveInfoTickets(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
   if (isSet(env)) return { value: env.trim() === "1", source: "env" };
   if (typeof file.infoTickets?.enabled === "boolean") return { value: file.infoTickets.enabled, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** The device tokens: only the exact word "1" in the environment switches them on; the default is off. */
+export function resolveDeviceTokens(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.deviceTokens?.enabled === "boolean") return { value: file.deviceTokens.enabled, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** The look at the newest published versions (GET /api/admin/updates): only the exact word "1" in the environment switches it on; the default is off. */
+export function resolveUpdateCheck(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.updateCheck?.enabled === "boolean") return { value: file.updateCheck.enabled, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** The addresses in the answer of GET /api/hydra-info: only the exact word "1" in the environment switches them on; the default is off. */
+export function resolveAdvertiseAddress(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.discovery?.advertiseAddress === "boolean") return { value: file.discovery.advertiseAddress, source: "config" };
   return { value: false, source: "default" };
 }
 
@@ -844,6 +904,9 @@ export interface SecuritySnapshot {
   health: { open: { value: boolean; source: Source } };
   ecosystemHealth: { enabled: { value: boolean; source: Source } };
   infoTickets: { enabled: { value: boolean; source: Source } };
+  deviceTokens: { enabled: { value: boolean; source: Source } };
+  updateCheck: { enabled: { value: boolean; source: Source } };
+  discovery: { advertiseAddress: { value: boolean; source: Source } };
   /** How the sign-in tokens are signed; the overlap of a rotation is edited in the configuration file. */
   auth: { jwtAlgorithm: { value: JwtAlgorithm; source: Source }; acceptHs256: { value: boolean; source: Source }; keyOverlapSeconds: number; serviceIdentity: { enabled: { value: boolean; source: Source } } };
   /** The switch and the action of the dead-man of the presence of the operator; the times are edited in the configuration file. */
@@ -1031,6 +1094,21 @@ export class SecurityConfig {
     return resolveInfoTickets(this.options.env.infoTickets, this.file).value;
   }
 
+  /** Whether device tokens can be issued and used (off unless an administrator turned it on). */
+  deviceTokensEnabled(): boolean {
+    return resolveDeviceTokens(this.options.env.deviceTokens, this.file).value;
+  }
+
+  /** Whether the server looks up the newest published versions (off unless an administrator turned it on). */
+  updateCheckEnabled(): boolean {
+    return resolveUpdateCheck(this.options.env.updateCheck, this.file).value;
+  }
+
+  /** Whether GET /api/hydra-info lists the addresses of this server (off unless an administrator turned it on). */
+  advertiseAddressEnabled(): boolean {
+    return resolveAdvertiseAddress(this.options.env.advertiseAddress, this.file).value;
+  }
+
   /** Whether the dead-man of the presence of the operator is on (off unless an administrator turned it on). */
   presenceEnabled(): boolean {
     return resolvePresence(this.options.env.presence, this.file).value;
@@ -1163,6 +1241,9 @@ export class SecurityConfig {
       health: { open: resolveHealthOpen(this.options.env.healthOpen, this.file) },
       ecosystemHealth: { enabled: resolveEcosystemHealth(this.options.env.ecosystemHealth, this.file) },
       infoTickets: { enabled: resolveInfoTickets(this.options.env.infoTickets, this.file) },
+      deviceTokens: { enabled: resolveDeviceTokens(this.options.env.deviceTokens, this.file) },
+      updateCheck: { enabled: resolveUpdateCheck(this.options.env.updateCheck, this.file) },
+      discovery: { advertiseAddress: resolveAdvertiseAddress(this.options.env.advertiseAddress, this.file) },
       auth: { jwtAlgorithm: resolveJwtAlgorithm(this.options.env.jwtAlgorithm, this.file), acceptHs256: resolveJwtAcceptHs256(this.options.env.jwtAcceptHs256, this.file), keyOverlapSeconds: resolveKeyOverlapSeconds(this.file), serviceIdentity: { enabled: resolveServiceIdentity(this.options.env.serviceIdentity, this.file) } },
       presence: (() => {
         const p = presenceTimes(this.file.presence);
@@ -1228,7 +1309,7 @@ export class SecurityConfig {
   /** Applies a change asked for by an administrator; returns the new state and the warnings to show. */
   update(patch: any, actor: string): { snapshot: SecuritySnapshot; warnings: string[]; appliesOnRestart: boolean } {
     const warnings: string[] = [];
-    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, ingest: this.file.ingest ? { ...this.file.ingest } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, infoTickets: this.file.infoTickets ? { ...this.file.infoTickets } : undefined, presence: this.file.presence ? { ...this.file.presence } : undefined, bridgeGateway: this.file.bridgeGateway ? { ...this.file.bridgeGateway } : undefined, push: this.file.push ? { ...this.file.push } : undefined, trustedNetworks: this.file.trustedNetworks ? { ...this.file.trustedNetworks } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
+    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, ingest: this.file.ingest ? { ...this.file.ingest } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, infoTickets: this.file.infoTickets ? { ...this.file.infoTickets } : undefined, deviceTokens: this.file.deviceTokens ? { ...this.file.deviceTokens } : undefined, updateCheck: this.file.updateCheck ? { ...this.file.updateCheck } : undefined, discovery: this.file.discovery ? { ...this.file.discovery } : undefined, presence: this.file.presence ? { ...this.file.presence } : undefined, bridgeGateway: this.file.bridgeGateway ? { ...this.file.bridgeGateway } : undefined, push: this.file.push ? { ...this.file.push } : undefined, trustedNetworks: this.file.trustedNetworks ? { ...this.file.trustedNetworks } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
     let appliesOnRestart = false;
     const log = this.options.log ?? (() => undefined);
     const lockedBy = (name: string) => new SecurityConfigError(409, `${name} is set in the environment of this server; remove it there to change it here`);
@@ -1475,6 +1556,50 @@ export class SecurityConfig {
         if (ticketsPatch.enabled === true) warnings.push("info_tickets_on");
       }
       next.infoTickets = merged;
+    }
+
+    if (patch.deviceTokens !== undefined) {
+      const devicesPatch = patch.deviceTokens;
+      if (typeof devicesPatch !== "object" || devicesPatch === null || Array.isArray(devicesPatch)) throw new SecurityConfigError(400, "deviceTokens must be an object");
+      if (devicesPatch.confirm !== undefined && typeof devicesPatch.confirm !== "boolean") throw new SecurityConfigError(400, "deviceTokens.confirm must be true or false");
+      const merged: DeviceTokensFile = { ...(next.deviceTokens ?? {}) };
+      if (devicesPatch.enabled !== undefined) {
+        if (typeof devicesPatch.enabled !== "boolean") throw new SecurityConfigError(400, "deviceTokens.enabled must be true or false");
+        if (resolveDeviceTokens(this.options.env.deviceTokens, this.file).source === "env") throw lockedBy("HYDRA_UMC_DEVICE_TOKENS");
+        // A device token signs a screen in without a person: turning that on needs the confirmation. Turning it off needs nothing and ends the sessions at their next renewal.
+        if (devicesPatch.enabled === true && resolveDeviceTokens(this.options.env.deviceTokens, this.file).value !== true) {
+          if (devicesPatch.confirm !== true) throw new SecurityConfigError(400, "Turning on the device tokens needs confirm: true");
+          warnings.push("device_tokens_on");
+        }
+        merged.enabled = devicesPatch.enabled;
+      }
+      next.deviceTokens = merged;
+    }
+
+    if (patch.updateCheck !== undefined) {
+      const updatePatch = patch.updateCheck;
+      if (typeof updatePatch !== "object" || updatePatch === null || Array.isArray(updatePatch)) throw new SecurityConfigError(400, "updateCheck must be an object");
+      const merged: UpdateCheckFile = { ...(next.updateCheck ?? {}) };
+      if (updatePatch.enabled !== undefined) {
+        if (typeof updatePatch.enabled !== "boolean") throw new SecurityConfigError(400, "updateCheck.enabled must be true or false");
+        if (resolveUpdateCheck(this.options.env.updateCheck, this.file).source === "env") throw lockedBy("HYDRA_UMC_UPDATE_CHECK");
+        merged.enabled = updatePatch.enabled;
+        if (updatePatch.enabled === true) warnings.push("update_check_on");
+      }
+      next.updateCheck = merged;
+    }
+
+    if (patch.discovery !== undefined) {
+      const discoveryPatch = patch.discovery;
+      if (typeof discoveryPatch !== "object" || discoveryPatch === null || Array.isArray(discoveryPatch)) throw new SecurityConfigError(400, "discovery must be an object");
+      const merged: DiscoveryFile = { ...(next.discovery ?? {}) };
+      if (discoveryPatch.advertiseAddress !== undefined) {
+        if (typeof discoveryPatch.advertiseAddress !== "boolean") throw new SecurityConfigError(400, "discovery.advertiseAddress must be true or false");
+        if (resolveAdvertiseAddress(this.options.env.advertiseAddress, this.file).source === "env") throw lockedBy("HYDRA_UMC_ADVERTISE_ADDRESS");
+        merged.advertiseAddress = discoveryPatch.advertiseAddress;
+        if (discoveryPatch.advertiseAddress === true) warnings.push("discovery_address_on");
+      }
+      next.discovery = merged;
     }
 
     if (patch.auth !== undefined) {
@@ -1847,6 +1972,15 @@ export class SecurityConfig {
     }
     if (patch.infoTickets !== undefined) {
       log(`[SECURITY] ${actor} turned the signed tickets of the information routes (POST /api/info/ticket) ${snapshot.infoTickets.enabled.value ? "on" : "off"}.`);
+    }
+    if (patch.deviceTokens !== undefined) {
+      log(`[SECURITY] ${actor} turned the device tokens (POST /api/admin/device-tokens, POST /api/device/login) ${snapshot.deviceTokens.enabled.value ? "on" : "off"}.`);
+    }
+    if (patch.updateCheck !== undefined) {
+      log(`[SECURITY] ${actor} turned the look at the newest published versions (GET /api/admin/updates) ${snapshot.updateCheck.enabled.value ? "on (this server now asks GitHub)" : "off"}.`);
+    }
+    if (patch.discovery !== undefined) {
+      log(`[SECURITY] ${actor} ${snapshot.discovery.advertiseAddress.value ? "let" : "stopped"} GET /api/hydra-info list${snapshot.discovery.advertiseAddress.value ? "" : "ing"} the addresses of this server to clients that are not signed in.`);
     }
     if (patch.auth?.serviceIdentity !== undefined) {
       log(`[SECURITY] ${actor} turned the identity of this server in its calls to the services ${snapshot.auth.serviceIdentity.enabled.value ? "ON (a service with its identity key on now receives a signed token)" : "off (a service with its identity key on will refuse this server)"}.`);

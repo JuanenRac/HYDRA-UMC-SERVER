@@ -188,6 +188,13 @@
           },
           "uptimeSeconds": {
             "type": "integer"
+          },
+          "addresses": {
+            "type": "array",
+            "description": "The addresses of this server on the local network. Present only while an administrator allowed it (discovery.advertiseAddress); a client must not rely on it.",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -981,6 +988,223 @@
           "expiresInSeconds": {
             "type": "integer",
             "minimum": 30
+          }
+        }
+      },
+      "DeviceTokenView": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "username",
+          "createdAt",
+          "expiresAt",
+          "revokedAt",
+          "lastUsedAt",
+          "state"
+        ],
+        "description": "A device token as the administrator sees it: who it is for and until when, never the token.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The id of the token (22 URL-safe characters); the token itself is never kept."
+          },
+          "name": {
+            "type": "string",
+            "description": "What the administrator called the device."
+          },
+          "username": {
+            "type": "string",
+            "description": "The account the device signs in as."
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "revokedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastUsedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "active",
+              "expired",
+              "revoked"
+            ]
+          }
+        }
+      },
+      "DeviceTokenIssued": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "username",
+          "createdAt",
+          "expiresAt",
+          "revokedAt",
+          "lastUsedAt",
+          "state",
+          "token"
+        ],
+        "description": "A device token just issued. The token is in this answer and nowhere else: the server does not keep it.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The id of the token (22 URL-safe characters); the token itself is never kept."
+          },
+          "name": {
+            "type": "string",
+            "description": "What the administrator called the device."
+          },
+          "username": {
+            "type": "string",
+            "description": "The account the device signs in as."
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "revokedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastUsedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "active",
+              "expired",
+              "revoked"
+            ]
+          },
+          "token": {
+            "type": "string",
+            "description": "Signed token of one device; the device presents it on POST /api/device/login."
+          }
+        }
+      },
+      "DeviceTokenList": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeviceTokenView"
+            }
+          }
+        }
+      },
+      "DeviceTokenRevoked": {
+        "type": "object",
+        "required": [
+          "revoked",
+          "sessionsEnded"
+        ],
+        "properties": {
+          "revoked": {
+            "type": "boolean"
+          },
+          "sessionsEnded": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "UpdateItem": {
+        "type": "object",
+        "required": [
+          "name",
+          "family",
+          "installed",
+          "latest",
+          "state"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "family": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "installed": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "latest": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The newest published release, or null when it could not be looked up."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "current",
+              "behind",
+              "ahead",
+              "unknown"
+            ]
+          }
+        }
+      },
+      "UpdateReport": {
+        "type": "object",
+        "required": [
+          "checkedAt",
+          "owner",
+          "rateLimited",
+          "items"
+        ],
+        "description": "The installed version of each program set against its newest published release. It reports; it never installs anything.",
+        "properties": {
+          "checkedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "owner": {
+            "type": "string"
+          },
+          "rateLimited": {
+            "type": "boolean",
+            "description": "True when GitHub refused for quota during the look; the programs it did not reach have no newest version."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UpdateItem"
+            }
           }
         }
       },
@@ -1942,6 +2166,187 @@
         ]
       }
     },
+    "/api/admin/device-tokens": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/admin/device-tokens",
+        "description": "Requires a signed-in account with the admin role.",
+        "x-access": "admin",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceTokenList"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-rate-limited": true
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/admin/device-tokens",
+        "description": "Requires a signed-in account with the admin role.",
+        "x-access": "admin",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceTokenIssued"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict with the current state. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "username",
+                  "confirm"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "username": {
+                    "type": "string"
+                  },
+                  "ttlDays": {
+                    "type": "number"
+                  },
+                  "confirm": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-rate-limited": true
+      }
+    },
+    "/api/admin/device-tokens/{id}": {
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "DELETE /api/admin/device-tokens/{id}",
+        "description": "Requires a signed-in account with the admin role.",
+        "x-access": "admin",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceTokenRevoked"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-rate-limited": true
+      }
+    },
     "/api/admin/jwt-keys": {
       "get": {
         "tags": [
@@ -2326,6 +2731,64 @@
             "bearerAuth": []
           }
         ]
+      }
+    },
+    "/api/admin/updates": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "GET /api/admin/updates",
+        "description": "Requires a signed-in account with the admin role.",
+        "x-access": "admin",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateReport"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-rate-limited": true
       }
     },
     "/api/anomaly/verdicts": {
@@ -3650,6 +4113,77 @@
             "bearerAuth": []
           }
         ],
+        "x-rate-limited": true
+      }
+    },
+    "/api/device/login": {
+      "post": {
+        "tags": [
+          "device"
+        ],
+        "summary": "POST /api/device/login",
+        "description": "No authentication required by the route itself.",
+        "x-access": "public",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in or token rejected. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in but not allowed. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
         "x-rate-limited": true
       }
     },

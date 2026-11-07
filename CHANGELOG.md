@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **Signed tokens of one device:** an administrator can issue a token for a device (the screen of a Compute Module) with `POST /api/admin/device-tokens`, list the tokens with `GET /api/admin/device-tokens` and revoke one with `DELETE /api/admin/device-tokens/{id}`; the device signs in with `POST /api/device/login` and gets a short sign-in (15 minutes by default) that it renews until the token expires or is revoked. A token belongs to one operator or viewer account, never an administrator's, expires, is shown once and is not kept. Off by default (`deviceTokens.enabled`, `HYDRA_UMC_DEVICE_TOKENS`), the routes then answer 404, and turning it on needs a confirmation.
+- **The newest published version of each program:** `GET /api/admin/updates` sets the installed version of every program of the ecosystem against its newest GitHub release, keeps the answer six hours by default and stops at the first refusal for quota. Off by default (`updateCheck.enabled`, `HYDRA_UMC_UPDATE_CHECK`); it reports and never installs.
+- **The addresses of the server in the discovery answer:** `GET /api/hydra-info` can list the local-network addresses of the server in `addresses`. Off by default (`discovery.advertiseAddress`, `HYDRA_UMC_ADVERTISE_ADDRESS`).
+
 ## [0.8.2.6] - The contract check also compares the route table the SDK generates for its clients: when the SDK checkout carries generated/hydra-routes.json, tools/verifysdkcontract.mjs fails if the server registers a route the table does... (and 1 more changes)
 
 - **The contract check also compares the route table the SDK generates for its clients:** when the SDK checkout carries `generated/hydra-routes.json`, `tools/verify_sdk_contract.mjs` fails if the server registers a route the table does not list, if the table lists a route the server does not register, or if the kind of access or the query parameters of a route differ. A checkout without the table leaves nothing to compare.

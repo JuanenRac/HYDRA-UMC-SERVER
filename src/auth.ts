@@ -53,6 +53,11 @@ export function signLoginToken(claims: Record<string, unknown>): string {
   return signAccessToken(claims, JWT_SECRET, JWT_EXPIRES_IN);
 }
 
+/** The short sign-in a device gets for its device token (src/deviceTokens.ts): it lives for minutes, so that revoking the token ends the device's access soon. */
+export function signDeviceLoginToken(claims: Record<string, unknown>, minutes: number): string {
+  return signAccessToken(claims, JWT_SECRET, `${Math.max(1, Math.floor(minutes))}m`);
+}
+
 // Middleware to verify JWT token - the decoded payload now carries
 // {username, role}, not just {username}, so requireAdmin below can gate
 // the routes an "operator" account shouldn't reach.

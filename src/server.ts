@@ -58,6 +58,12 @@ import type { BleGateway } from "./ble/bleGateway";
 import { issueMediaTicket, mediaTicketKey, verifyMediaTicket } from "./mediaTickets";
 import { infoTicketKey, verifyInfoTicket, type InfoTicketLimits } from "./infoTickets";
 import { registerAuthRoutes } from "./routes/auth";
+import { DeviceTokenStore, deviceTokenKey, type DeviceTokenLimits } from "./deviceTokens";
+import { registerDeviceRoutes } from "./routes/deviceRoutes";
+import { registerUpdateRoutes } from "./routes/updateRoutes";
+import { advertisedAddresses } from "./advertisedAddresses";
+import { getEcosystemStatus } from "./ecosystemStatus";
+import type { UpdateCheckSettings } from "./updateCheck";
 import { jwtKeyStore, setJwtPolicyProvider, setKeyOverlapProvider } from "./jwtKeys";
 import { setServiceIdentitySwitch, identityHeader } from "./serviceIdentity";
 import { classify as classifyAddress, makeTrustedNetworksGate } from "./trustedNetworks";
@@ -333,7 +339,11 @@ async function startServer() {
 
   registerStaticRoutes(app, { dataPath });
 
-  registerAuthRoutes(app, { trustedNetworks: () => security.trustedNetworks() });
+  // The signed tokens of one device (off by default: deviceTokens.enabled). The sign-in of a device and the renewal of its session live with the other sign-in routes.
+  const deviceTokens = new DeviceTokenStore({ file: path.join(dataPath, "device-tokens.json"), key: deviceTokenKey(JWT_SECRET) });
+  const deviceTokenLimits = () => (loadServerConfig() as { deviceTokens?: DeviceTokenLimits }).deviceTokens;
+  registerAuthRoutes(app, { trustedNetworks: () => security.trustedNetworks(), devices: { enabled: () => security.deviceTokensEnabled(), store: deviceTokens, limits: deviceTokenLimits } });
+  registerDeviceRoutes(app, { authenticate, requireAdmin, enabled: () => security.deviceTokensEnabled(), store: deviceTokens, limits: deviceTokenLimits, audit });
   registerConnectionRoutes(app);
   registerTotpRoutes(app);
 
@@ -352,8 +362,8 @@ async function startServer() {
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
     save: (file) => {
-      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging, rateLimits, bridges } = file;
-      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging, rateLimits, bridges });
+      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, deviceTokens, updateCheck, discovery, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging, rateLimits, bridges } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, deviceTokens, updateCheck, discovery, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging, rateLimits, bridges });
     },
     bridgeSigningStatus: () => bridgeSettingsSigner.status(BRIDGE_NAMES),
     afterBridgesWritten: () => { if (security.bridgeGatewayEnabled()) { bridgeGateway.ensureStarted(); bridgeGateway.announceSettings(); } },
@@ -568,7 +578,14 @@ async function startServer() {
     CONNECTOR_HUB_GATE_URL, SEMANTIC_PLANNER_URL, HIL_BRIDGE_URL, requireOperator, audit, opsAgentChannel,
   });
 
-  registerInfoRoutes(app, { infoAccess, getSettings, REMOTE_API_VERSION, healthOpen: () => security.healthOpen() });
+  registerInfoRoutes(app, {
+    infoAccess, getSettings, REMOTE_API_VERSION, healthOpen: () => security.healthOpen(),
+    // The addresses of this server on the local network, only while an administrator allowed it (discovery.advertiseAddress, off by default).
+    addresses: () => (security.advertiseAddressEnabled() ? advertisedAddresses({ port: PORT, tls: startupTls.enabled }) : []),
+  });
+
+  // The newest published version of each program, behind a switch of Server Admin (updateCheck.enabled, off by default: 404). It asks GitHub; nothing else leaves the server.
+  registerUpdateRoutes(app, { authenticate, requireAdmin, enabled: () => security.updateCheckEnabled(), getStatus: () => getEcosystemStatus(), config: () => (loadServerConfig() as { updateCheck?: UpdateCheckSettings }).updateCheck });
 
   registerPowerRoutes(app, { audit });
 
