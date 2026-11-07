@@ -4,6 +4,9 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **Maintenance routes for the installed releases (off by default, `maintenance.enabled`):** `GET /api/admin/maintenance/status` and `POST /api/admin/maintenance/install`, `/rollback` and `/prune` (administrator) wrap the deploy tool of the operating system image without a shell. A package is named, never given as a path, and must be a regular file inside one folder; a component is a short plain name; every change needs `confirm: true`, runs one at a time and is written to the audit record whatever its result. The environment variable `HYDRA_UMC_MAINTENANCE` locks the switch.
+- **The reports of loaded models of DETECTION-HEF can be switched from Server Admin (off by default, `detectionHef.acceptLoadedReports`):** the saved value is also written to the settings file that service re-reads while it runs, whole and readable by its owner and group only, so no restart is needed; a file that cannot be written is told in the answer.
+
 ## [0.8.2.7] - Signed tokens of one device: an administrator can issue a token for a device (the screen of a Compute Module) with POST /api/admin/device-tokens, list the tokens with GET /api/admin/device-tokens and revoke one with DELETE... (and 2 more changes)
 
 - **Signed tokens of one device:** an administrator can issue a token for a device (the screen of a Compute Module) with `POST /api/admin/device-tokens`, list the tokens with `GET /api/admin/device-tokens` and revoke one with `DELETE /api/admin/device-tokens/{id}`; the device signs in with `POST /api/device/login` and gets a short sign-in (15 minutes by default) that it renews until the token expires or is revoked. A token belongs to one operator or viewer account, never an administrator's, expires, is shown once and is not kept. Off by default (`deviceTokens.enabled`, `HYDRA_UMC_DEVICE_TOKENS`), the routes then answer 404, and turning it on needs a confirmation.

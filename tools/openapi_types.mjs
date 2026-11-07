@@ -68,6 +68,10 @@ export const RESPONSES = {
   "DELETE /api/admin/device-tokens/{id}": ref("DeviceTokenRevoked"),
   "POST /api/device/login": ref("LoginResult"),
   "GET /api/admin/updates": ref("UpdateReport"),
+  "GET /api/admin/maintenance/status": ref("MaintenanceOutcome"),
+  "POST /api/admin/maintenance/install": ref("MaintenanceOutcome"),
+  "POST /api/admin/maintenance/rollback": ref("MaintenanceOutcome"),
+  "POST /api/admin/maintenance/prune": ref("MaintenanceOutcome"),
   "POST /api/operator/presence": ref("OperatorPresenceAck"),
   "GET /api/operator/presence": ref("OperatorPresence"),
   "GET /health": ref("HealthReport"),
@@ -138,6 +142,9 @@ export const REQUESTS = {
   "POST /api/totp/disable": { required: ["password", "code"], fields: { password: str, code: str } },
   "POST /api/refresh": { required: ["refreshToken"], fields: { refreshToken: str } },
   "POST /api/device/login": { required: ["token"], fields: { token: str } },
+  "POST /api/admin/maintenance/install": { required: ["package", "confirm"], fields: { package: str, allowDowngrade: bool, confirm: bool } },
+  "POST /api/admin/maintenance/rollback": { required: ["component", "confirm"], fields: { component: str, confirm: bool } },
+  "POST /api/admin/maintenance/prune": { required: ["component", "confirm"], fields: { component: str, keep: num, confirm: bool } },
   "POST /api/admin/device-tokens": { required: ["name", "username", "confirm"], fields: { name: str, username: str, ttlDays: num, confirm: bool } },
   "POST /api/logout": { required: [], fields: { refreshToken: str } },
   "POST /api/users": { required: ["username", "password", "role"], fields: { username: str, password: str, role: str } },
@@ -184,6 +191,11 @@ export const EXTRA_STATUSES = {
   "GET /api/admin/device-tokens": [404],
   // 404 while updateCheck.enabled is off.
   "GET /api/admin/updates": [404],
+  // 404 while maintenance.enabled is off (as if the routes did not exist); 400 for a request the checks refuse or that lacks confirm; 409 while another run is going on; 502 when the deploy tool ran and failed.
+  "GET /api/admin/maintenance/status": [400, 404, 502],
+  "POST /api/admin/maintenance/install": [400, 404, 409, 502],
+  "POST /api/admin/maintenance/rollback": [400, 404, 409, 502],
+  "POST /api/admin/maintenance/prune": [400, 404, 409, 502],
   // 404 while push.enabled is off (as if the route did not exist).
   "POST /api/push/devices": [404],
   "DELETE /api/push/devices/{token}": [404],

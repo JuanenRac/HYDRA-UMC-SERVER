@@ -216,6 +216,30 @@ export interface UpdateCheckFile {
   cacheMinutes?: number;
 }
 
+/** The maintenance routes that install, go back, prune and list the releases of the programs installed here (/api/admin/maintenance, src/maintenance.ts). */
+export interface MaintenanceFile {
+  /** Whether the maintenance routes answer (default: no; they then answer 404 and nothing is run). */
+  enabled?: boolean;
+  /** The folder that holds the components, as the deploy tool wants it (/opt/hydra-umc by default). Read from the file only. */
+  root?: string;
+  /** The only folder a package may be read from (data/packages by default); a package is named, never given as a path. Read from the file only. */
+  packagesDir?: string;
+  /** The deploy tool of the operating system image (tools/deploy_release.py under the root by default). Read from the file only. */
+  tool?: string;
+  /** The interpreter that runs the tool (python3 by default). Read from the file only. */
+  python?: string;
+  /** How long one run may take, in seconds (10 to 1800; 300 by default). Read from the file only. */
+  timeoutSeconds?: number;
+}
+
+/** The settings file of the loaded-model reports of HYDRA-UMC-DETECTION-HEF, which this server writes and that service re-reads while it runs. */
+export interface DetectionHefFile {
+  /** Whether the service accepts the reports of loaded models (default: no). Writing it here also writes `settingsFile`. */
+  acceptLoadedReports?: boolean;
+  /** Where the settings file is written (data/detection-hef-settings.json by default): the same path goes to the service as HYDRA_UMC_DETECTION_HEF_SETTINGS_FILE. Read from the file only. */
+  settingsFile?: string;
+}
+
 /** What GET /api/hydra-info tells a client that is not signed in. */
 export interface DiscoveryFile {
   /** Whether the answer lists the addresses of this server on the local network (default: no; it then carries no address). */
@@ -361,6 +385,8 @@ export interface SecurityFile {
   deviceTokens?: DeviceTokensFile;
   updateCheck?: UpdateCheckFile;
   discovery?: DiscoveryFile;
+  maintenance?: MaintenanceFile;
+  detectionHef?: DetectionHefFile;
   auth?: AuthFile;
   presence?: PresenceFile;
   bridgeGateway?: BridgeGatewayFile;
@@ -402,6 +428,7 @@ export interface SecurityEnv {
   deviceTokens?: string;
   updateCheck?: string;
   advertiseAddress?: string;
+  maintenance?: string;
   jwtAlgorithm?: string;
   jwtAcceptHs256?: string;
   /** HYDRA_UMC_SERVICE_IDENTITY: "1" on, "0" off, as written. */
@@ -449,6 +476,7 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     deviceTokens: env.HYDRA_UMC_DEVICE_TOKENS,
     updateCheck: env.HYDRA_UMC_UPDATE_CHECK,
     advertiseAddress: env.HYDRA_UMC_ADVERTISE_ADDRESS,
+    maintenance: env.HYDRA_UMC_MAINTENANCE,
     jwtAlgorithm: env.HYDRA_UMC_JWT_ALGORITHM,
     jwtAcceptHs256: env.HYDRA_UMC_JWT_ACCEPT_HS256,
     serviceIdentity: env.HYDRA_UMC_SERVICE_IDENTITY,
@@ -608,6 +636,19 @@ export function resolveDeviceTokens(env: string | undefined, file: SecurityFile)
 export function resolveUpdateCheck(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
   if (isSet(env)) return { value: env.trim() === "1", source: "env" };
   if (typeof file.updateCheck?.enabled === "boolean") return { value: file.updateCheck.enabled, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** The maintenance routes: only the exact word "1" in the environment switches them on; the default is off. */
+export function resolveMaintenance(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.maintenance?.enabled === "boolean") return { value: file.maintenance.enabled, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** The reports of loaded models of DETECTION-HEF: only what the file holds decides (there is no environment word: the service has its own flag); the default is off. */
+export function resolveDetectionHefReports(file: SecurityFile): { value: boolean; source: Source } {
+  if (typeof file.detectionHef?.acceptLoadedReports === "boolean") return { value: file.detectionHef.acceptLoadedReports, source: "config" };
   return { value: false, source: "default" };
 }
 
@@ -907,6 +948,8 @@ export interface SecuritySnapshot {
   deviceTokens: { enabled: { value: boolean; source: Source } };
   updateCheck: { enabled: { value: boolean; source: Source } };
   discovery: { advertiseAddress: { value: boolean; source: Source } };
+  maintenance: { enabled: { value: boolean; source: Source } };
+  detectionHef: { acceptLoadedReports: { value: boolean; source: Source } };
   /** How the sign-in tokens are signed; the overlap of a rotation is edited in the configuration file. */
   auth: { jwtAlgorithm: { value: JwtAlgorithm; source: Source }; acceptHs256: { value: boolean; source: Source }; keyOverlapSeconds: number; serviceIdentity: { enabled: { value: boolean; source: Source } } };
   /** The switch and the action of the dead-man of the presence of the operator; the times are edited in the configuration file. */
@@ -952,6 +995,8 @@ export interface SecurityConfigOptions {
   env: SecurityEnv;
   /** Called once the switches of the bridges are saved, so the gateway can announce them (src/bridgeGateway.ts). */
   afterBridgesWritten?: () => void;
+  /** Writes the settings file that DETECTION-HEF re-reads (src/detectionHefSettings.ts); called once the value is saved. */
+  writeDetectionHefSettings?: (acceptLoadedReports: boolean, settingsFile: string | undefined) => void;
   /** The state of the keys that sign the settings of the bridges (src/bridgeSettingsSigning.ts). */
   bridgeSigningStatus?: () => Record<string, { keyFile: string; key: "present" | "missing" | "unusable"; lastSignedAt: string | null; seq: number }>;
   load: () => SecurityFile;
@@ -1104,6 +1149,11 @@ export class SecurityConfig {
     return resolveUpdateCheck(this.options.env.updateCheck, this.file).value;
   }
 
+  /** Whether the maintenance routes answer (off unless an administrator turned it on). */
+  maintenanceEnabled(): boolean {
+    return resolveMaintenance(this.options.env.maintenance, this.file).value;
+  }
+
   /** Whether GET /api/hydra-info lists the addresses of this server (off unless an administrator turned it on). */
   advertiseAddressEnabled(): boolean {
     return resolveAdvertiseAddress(this.options.env.advertiseAddress, this.file).value;
@@ -1244,6 +1294,8 @@ export class SecurityConfig {
       deviceTokens: { enabled: resolveDeviceTokens(this.options.env.deviceTokens, this.file) },
       updateCheck: { enabled: resolveUpdateCheck(this.options.env.updateCheck, this.file) },
       discovery: { advertiseAddress: resolveAdvertiseAddress(this.options.env.advertiseAddress, this.file) },
+      maintenance: { enabled: resolveMaintenance(this.options.env.maintenance, this.file) },
+      detectionHef: { acceptLoadedReports: resolveDetectionHefReports(this.file) },
       auth: { jwtAlgorithm: resolveJwtAlgorithm(this.options.env.jwtAlgorithm, this.file), acceptHs256: resolveJwtAcceptHs256(this.options.env.jwtAcceptHs256, this.file), keyOverlapSeconds: resolveKeyOverlapSeconds(this.file), serviceIdentity: { enabled: resolveServiceIdentity(this.options.env.serviceIdentity, this.file) } },
       presence: (() => {
         const p = presenceTimes(this.file.presence);
@@ -1309,7 +1361,7 @@ export class SecurityConfig {
   /** Applies a change asked for by an administrator; returns the new state and the warnings to show. */
   update(patch: any, actor: string): { snapshot: SecuritySnapshot; warnings: string[]; appliesOnRestart: boolean } {
     const warnings: string[] = [];
-    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, ingest: this.file.ingest ? { ...this.file.ingest } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, infoTickets: this.file.infoTickets ? { ...this.file.infoTickets } : undefined, deviceTokens: this.file.deviceTokens ? { ...this.file.deviceTokens } : undefined, updateCheck: this.file.updateCheck ? { ...this.file.updateCheck } : undefined, discovery: this.file.discovery ? { ...this.file.discovery } : undefined, presence: this.file.presence ? { ...this.file.presence } : undefined, bridgeGateway: this.file.bridgeGateway ? { ...this.file.bridgeGateway } : undefined, push: this.file.push ? { ...this.file.push } : undefined, trustedNetworks: this.file.trustedNetworks ? { ...this.file.trustedNetworks } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
+    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, ingest: this.file.ingest ? { ...this.file.ingest } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, infoTickets: this.file.infoTickets ? { ...this.file.infoTickets } : undefined, deviceTokens: this.file.deviceTokens ? { ...this.file.deviceTokens } : undefined, updateCheck: this.file.updateCheck ? { ...this.file.updateCheck } : undefined, discovery: this.file.discovery ? { ...this.file.discovery } : undefined, maintenance: this.file.maintenance ? { ...this.file.maintenance } : undefined, detectionHef: this.file.detectionHef ? { ...this.file.detectionHef } : undefined, presence: this.file.presence ? { ...this.file.presence } : undefined, bridgeGateway: this.file.bridgeGateway ? { ...this.file.bridgeGateway } : undefined, push: this.file.push ? { ...this.file.push } : undefined, trustedNetworks: this.file.trustedNetworks ? { ...this.file.trustedNetworks } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
     let appliesOnRestart = false;
     const log = this.options.log ?? (() => undefined);
     const lockedBy = (name: string) => new SecurityConfigError(409, `${name} is set in the environment of this server; remove it there to change it here`);
@@ -1600,6 +1652,41 @@ export class SecurityConfig {
         if (discoveryPatch.advertiseAddress === true) warnings.push("discovery_address_on");
       }
       next.discovery = merged;
+    }
+
+    if (patch.maintenance !== undefined) {
+      const maintenancePatch = patch.maintenance;
+      if (typeof maintenancePatch !== "object" || maintenancePatch === null || Array.isArray(maintenancePatch)) throw new SecurityConfigError(400, "maintenance must be an object");
+      if (maintenancePatch.confirm !== undefined && typeof maintenancePatch.confirm !== "boolean") throw new SecurityConfigError(400, "maintenance.confirm must be true or false");
+      const merged: MaintenanceFile = { ...(next.maintenance ?? {}) };
+      if (maintenancePatch.enabled !== undefined) {
+        if (typeof maintenancePatch.enabled !== "boolean") throw new SecurityConfigError(400, "maintenance.enabled must be true or false");
+        if (resolveMaintenance(this.options.env.maintenance, this.file).source === "env") throw lockedBy("HYDRA_UMC_MAINTENANCE");
+        // The routes install and replace the programs of this machine: turning them on needs the confirmation. Turning them off needs nothing.
+        if (maintenancePatch.enabled === true && resolveMaintenance(this.options.env.maintenance, this.file).value !== true) {
+          if (maintenancePatch.confirm !== true) throw new SecurityConfigError(400, "Turning on the maintenance routes needs confirm: true");
+          warnings.push("maintenance_on");
+        }
+        merged.enabled = maintenancePatch.enabled;
+      }
+      next.maintenance = merged;
+    }
+
+    if (patch.detectionHef !== undefined) {
+      const hefPatch = patch.detectionHef;
+      if (typeof hefPatch !== "object" || hefPatch === null || Array.isArray(hefPatch)) throw new SecurityConfigError(400, "detectionHef must be an object");
+      if (hefPatch.confirm !== undefined && typeof hefPatch.confirm !== "boolean") throw new SecurityConfigError(400, "detectionHef.confirm must be true or false");
+      const merged: DetectionHefFile = { ...(next.detectionHef ?? {}) };
+      if (hefPatch.acceptLoadedReports !== undefined) {
+        if (typeof hefPatch.acceptLoadedReports !== "boolean") throw new SecurityConfigError(400, "detectionHef.acceptLoadedReports must be true or false");
+        // Accepting the reports of a loaded model lets the model be taken as seen by the safety chain: turning it on needs the confirmation.
+        if (hefPatch.acceptLoadedReports === true && resolveDetectionHefReports(this.file).value !== true) {
+          if (hefPatch.confirm !== true) throw new SecurityConfigError(400, "Turning on the reports of loaded models needs confirm: true");
+          warnings.push("detection_hef_reports_on");
+        }
+        merged.acceptLoadedReports = hefPatch.acceptLoadedReports;
+      }
+      next.detectionHef = merged;
     }
 
     if (patch.auth !== undefined) {
@@ -1907,6 +1994,15 @@ export class SecurityConfig {
     // the file is on disk and the settings are saved: now the dispatcher is asked to read it (the answer comes later)
     if (replanWritten) this.options.afterReplanWritten?.();
     if (patch.bridges !== undefined) this.options.afterBridgesWritten?.();
+    // the settings file of DETECTION-HEF follows the saved value; a failed write is told, never hidden
+    if (patch.detectionHef?.acceptLoadedReports !== undefined) {
+      try {
+        this.options.writeDetectionHefSettings?.(resolveDetectionHefReports(next).value, next.detectionHef?.settingsFile);
+      } catch (error) {
+        warnings.push("detection_hef_settings_file_not_written");
+        log(`[SECURITY] The settings file of DETECTION-HEF could not be written: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
     if (patch.mavlink !== undefined) this.mavlinkTouched = true;
     const snapshot = this.snapshot();
     if (patch.aiAccess !== undefined) log(`[SECURITY] ${actor} set the local AI relay access to ${snapshot.aiAccess.value}.`);
@@ -1978,6 +2074,12 @@ export class SecurityConfig {
     }
     if (patch.updateCheck !== undefined) {
       log(`[SECURITY] ${actor} turned the look at the newest published versions (GET /api/admin/updates) ${snapshot.updateCheck.enabled.value ? "on (this server now asks GitHub)" : "off"}.`);
+    }
+    if (patch.maintenance !== undefined) {
+      log(`[SECURITY] ${actor} turned the maintenance routes (/api/admin/maintenance) ${snapshot.maintenance.enabled.value ? "on (an administrator can now install, go back and prune releases)" : "off"}.`);
+    }
+    if (patch.detectionHef?.acceptLoadedReports !== undefined) {
+      log(`[SECURITY] ${actor} turned the reports of loaded models of DETECTION-HEF ${snapshot.detectionHef.acceptLoadedReports.value ? "on" : "off"}.`);
     }
     if (patch.discovery !== undefined) {
       log(`[SECURITY] ${actor} ${snapshot.discovery.advertiseAddress.value ? "let" : "stopped"} GET /api/hydra-info list${snapshot.discovery.advertiseAddress.value ? "" : "ing"} the addresses of this server to clients that are not signed in.`);

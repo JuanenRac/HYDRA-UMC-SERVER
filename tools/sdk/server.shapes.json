@@ -2027,6 +2027,41 @@
           "type": "string"
         }
       }
+    },
+    "MaintenanceOutcome": {
+      "type": "object",
+      "required": [
+        "ok",
+        "action",
+        "exitCode",
+        "timedOut",
+        "result",
+        "message"
+      ],
+      "description": "What one run of the deploy tool of the operating system image did (status, install, rollback or prune). `result` is the JSON the tool printed on success (the state of the components, or the list of removed releases) and null otherwise; `message` is the last lines the tool printed on its error output, cut to a fixed size.",
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "action": {
+          "enum": [
+            "status",
+            "install",
+            "rollback",
+            "prune"
+          ]
+        },
+        "exitCode": {
+          "type": "integer"
+        },
+        "timedOut": {
+          "type": "boolean"
+        },
+        "result": {},
+        "message": {
+          "type": "string"
+        }
+      }
     }
   }
 }

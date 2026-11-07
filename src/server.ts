@@ -61,6 +61,10 @@ import { registerAuthRoutes } from "./routes/auth";
 import { DeviceTokenStore, deviceTokenKey, type DeviceTokenLimits } from "./deviceTokens";
 import { registerDeviceRoutes } from "./routes/deviceRoutes";
 import { registerUpdateRoutes } from "./routes/updateRoutes";
+import { registerMaintenanceRoutes } from "./routes/maintenanceRoutes";
+import { Maintenance, maintenanceSettings } from "./maintenance";
+import { writeDetectionHefSettings } from "./detectionHefSettings";
+import type { MaintenanceFile } from "./securityConfig";
 import { advertisedAddresses } from "./advertisedAddresses";
 import { getEcosystemStatus } from "./ecosystemStatus";
 import type { UpdateCheckSettings } from "./updateCheck";
@@ -362,10 +366,11 @@ async function startServer() {
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
     save: (file) => {
-      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, deviceTokens, updateCheck, discovery, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging, rateLimits, bridges } = file;
-      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, deviceTokens, updateCheck, discovery, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging, rateLimits, bridges });
+      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, deviceTokens, updateCheck, discovery, maintenance, detectionHef, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging, rateLimits, bridges } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, deviceTokens, updateCheck, discovery, maintenance, detectionHef, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging, rateLimits, bridges });
     },
     bridgeSigningStatus: () => bridgeSettingsSigner.status(BRIDGE_NAMES),
+    writeDetectionHefSettings: (value, file) => { const written = writeDetectionHefSettings(dataPath, value, file); industrialLog(`[SECURITY] DETECTION-HEF settings file written: ${written}`); },
     afterBridgesWritten: () => { if (security.bridgeGatewayEnabled()) { bridgeGateway.ensureStarted(); bridgeGateway.announceSettings(); } },
     tlsActive: startupTls.enabled,
     bleActiveMode: resolveBleMode(securityEnvFrom(process.env).bleGatt, loadServerConfig()).value,
@@ -586,6 +591,9 @@ async function startServer() {
 
   // The newest published version of each program, behind a switch of Server Admin (updateCheck.enabled, off by default: 404). It asks GitHub; nothing else leaves the server.
   registerUpdateRoutes(app, { authenticate, requireAdmin, enabled: () => security.updateCheckEnabled(), getStatus: () => getEcosystemStatus(), config: () => (loadServerConfig() as { updateCheck?: UpdateCheckSettings }).updateCheck });
+
+  // Install, go back and prune the releases of the programs installed here, behind a switch of Server Admin (maintenance.enabled, off by default: 404).
+  registerMaintenanceRoutes(app, { authenticate, requireAdmin, enabled: () => security.maintenanceEnabled(), audit, maintenance: new Maintenance({ settings: () => maintenanceSettings((loadServerConfig() as { maintenance?: MaintenanceFile }).maintenance, dataPath) }) });
 
   registerPowerRoutes(app, { audit });
 
