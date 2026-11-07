@@ -913,6 +913,16 @@ STUDIO and SUITE show and edit that switch through these two routes, which carry
 
 Both answer `503` with `available: false` while `HYDRA_UMC_HIL_BRIDGE_URL` is not set (off by default).
 
+### The arm state of the URTC tools: `GET /api/tool-arms`
+
+A tool of the URTC family is armed when its power stage may act. The safety zones service keeps the last report of each pair of robot and tool
+(`GET /tool-arms` there, started with `--tool-arms`) and this route carries the answer of any signed-in account to the panels, with the caller's own
+`Authorization` header, as it is: `schema_version`, `ttlSeconds`, `arms` (`robot`, `toolId`, `armed`, `by`, `seq`, `ageSeconds`, `stale`),
+`armedCount` and `staleCount`. A report older than `ttlSeconds` is `stale` and is not counted in `armedCount`: show a stale armed tool as a warning
+and a stale disarmed tool as unknown, never as safe. The list lives in the memory of the service, so a restart of it is an empty list until the tools
+report again. `503` with `available: false` while `HYDRA_UMC_SAFETY_ZONES_URL` is not set (off by default) or when the service is down or times out;
+`404` when the service runs without `--tool-arms`; `401` without a bearer token. Information only: it arms, disarms and stops nothing.
+
 ## 2k. Settings of the installation that harden this API
 
 Environment variables, read once at start (see `docs/PRODUCTION_BOOTSTRAP.md`):

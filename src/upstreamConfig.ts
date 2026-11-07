@@ -67,6 +67,9 @@ export const SEMANTIC_PLANNER_URL = (process.env.HYDRA_UMC_SEMANTIC_PLANNER_URL 
 // The HIL bridge (`serve`): STUDIO and SUITE read and edit through this server the switch that makes a real command need a pass verdict of the twin.
 // A relay that carries the signed-in person's own token to it. Off until the address is set.
 export const HIL_BRIDGE_URL = (process.env.HYDRA_UMC_HIL_BRIDGE_URL || "").replace(/\/$/, "");
+// The safety zones service (its HTTP API, e.g. http://127.0.0.1:PORT, started with --tool-arms): the panels read through this server the arm state of the URTC tools.
+// A relay that carries the signed-in person's own token to it. Off (503) until the address is set.
+export const SAFETY_ZONES_URL = (process.env.HYDRA_UMC_SAFETY_ZONES_URL || "").replace(/\/$/, "");
 export const CONNECTOR_HUB_TIMEOUT_MS = Math.min(
   Math.max(Number(process.env.HYDRA_UMC_CONNECTOR_HUB_TIMEOUT_MS) || 4000, 250),
   10000,

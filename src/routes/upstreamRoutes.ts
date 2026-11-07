@@ -32,6 +32,8 @@ export interface UpstreamDeps {
   SEMANTIC_PLANNER_URL?: string;
   /** The address of the HIL bridge (empty: the relay of the switch that requires a pass verdict of the twin answers 503). */
   HIL_BRIDGE_URL?: string;
+  /** The address of the safety zones service (empty: the read of the arm state of the tools answers 503). */
+  SAFETY_ZONES_URL?: string;
   requireOperator?: Middleware;
   /** The signed channel to the node watchdog (OPS-AGENT); null or absent: the proposals routes answer 503. Read on every call so a fixed file is picked up. */
   opsAgentChannel?: () => OpsAgentChannel | null;
@@ -50,6 +52,7 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
   const CONNECTOR_HUB_GATE_URL = deps.CONNECTOR_HUB_GATE_URL ?? "";
   const SEMANTIC_PLANNER_URL = deps.SEMANTIC_PLANNER_URL ?? "";
   const HIL_BRIDGE_URL = deps.HIL_BRIDGE_URL ?? "";
+  const SAFETY_ZONES_URL = deps.SAFETY_ZONES_URL ?? "";
   const requireOperator: Middleware = deps.requireOperator ?? ((_req, _res, next) => (next as () => unknown)());
 
   // Real, authenticated read-only proxy to HYDRA-UMC-DATALAKE's own /query
@@ -374,6 +377,14 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
       record(status === 200 ? "ok" : status >= 500 ? "failed" : "refused", { requireTwinPass: body.requireTwinPass, bridgeStatus: status });
     });
     await relayWithOwnToken(HIL_BRIDGE_URL, "The HIL bridge", "HYDRA-UMC-HIL-BRIDGE", req, res, "POST", "/settings/twin-pass");
+  });
+
+  // The arm state of the URTC tools, as the safety zones service lists it (GET /tool-arms there; it exists only when that service was started with
+  // --tool-arms). Read only: the service only records what the driving service reports, and this route carries the signed-in person's own token to it
+  // and passes the answer on as it is (a stale report stays stale: the panel decides how to show it, and never as safe). A service without the option
+  // answers 404, which the screen reads as "not reported".
+  app.get("/api/tool-arms", authenticate, async (req, res) => {
+    await relayWithOwnToken(SAFETY_ZONES_URL, "The safety zones service", "HYDRA-UMC-SAFETY-ZONES", req, res, "GET", "/tool-arms");
   });
 
   // Real relay to the local spi_bridge HTTP service (HYDRA-UMC/src/

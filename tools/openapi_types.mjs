@@ -69,6 +69,7 @@ export const RESPONSES = {
   "POST /api/device/login": ref("LoginResult"),
   "GET /api/admin/updates": ref("UpdateReport"),
   "GET /api/admin/maintenance/status": ref("MaintenanceOutcome"),
+  "GET /api/tool-arms": ref("ToolArmsReport"),
   "POST /api/admin/maintenance/install": ref("MaintenanceOutcome"),
   "POST /api/admin/maintenance/rollback": ref("MaintenanceOutcome"),
   "POST /api/admin/maintenance/prune": ref("MaintenanceOutcome"),
@@ -193,6 +194,8 @@ export const EXTRA_STATUSES = {
   "GET /api/admin/updates": [404],
   // 404 while maintenance.enabled is off (as if the routes did not exist); 400 for a request the checks refuse or that lacks confirm; 409 while another run is going on; 502 when the deploy tool ran and failed.
   "GET /api/admin/maintenance/status": [400, 404, 502],
+  // 503 until the safety zones service has an address (or when it is down), 404 when it runs without --tool-arms, 502 when it answers something that is not JSON.
+  "GET /api/tool-arms": [404, 502, 503],
   "POST /api/admin/maintenance/install": [400, 404, 409, 502],
   "POST /api/admin/maintenance/rollback": [400, 404, 409, 502],
   "POST /api/admin/maintenance/prune": [400, 404, 409, 502],

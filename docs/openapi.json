@@ -2063,6 +2063,68 @@
             "type": "string"
           }
         }
+      },
+      "ToolArmsReport": {
+        "type": "object",
+        "required": [
+          "schema_version",
+          "ttlSeconds",
+          "arms",
+          "armedCount",
+          "staleCount"
+        ],
+        "description": "The arm state of the URTC tools as the safety zones service lists it, carried by the server unchanged (the schema tool-arms.schema.json is the contract of the service). The last report of each pair of robot and tool, how old it is, and whether it is stale; a stale report is not counted in armedCount, and a panel shows a stale armed tool as a warning and a stale disarmed tool as unknown. A restart of the service forgets the reports, which a panel sees as an empty list.",
+        "properties": {
+          "schema_version": {
+            "type": "string"
+          },
+          "ttlSeconds": {
+            "type": "number"
+          },
+          "arms": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "robot",
+                "toolId",
+                "armed",
+                "seq",
+                "ageSeconds",
+                "stale"
+              ],
+              "properties": {
+                "robot": {
+                  "type": "string"
+                },
+                "toolId": {
+                  "type": "integer"
+                },
+                "armed": {
+                  "type": "boolean"
+                },
+                "by": {
+                  "type": "string"
+                },
+                "seq": {
+                  "type": "integer"
+                },
+                "ageSeconds": {
+                  "type": "number"
+                },
+                "stale": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "armedCount": {
+            "type": "integer"
+          },
+          "staleCount": {
+            "type": "integer"
+          }
+        }
       }
     }
   },
@@ -7247,6 +7309,63 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Passthrough"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/tool-arms": {
+      "get": {
+        "tags": [
+          "tool-arms"
+        ],
+        "summary": "GET /api/tool-arms",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolArmsReport"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream service rejected the request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

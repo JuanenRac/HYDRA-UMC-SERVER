@@ -4,6 +4,8 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **The panels can read the arm state of the URTC tools through the server:** `GET /api/tool-arms` (any signed-in account) carries the answer of `GET /tool-arms` of the safety zones service (`HYDRA_UMC_SAFETY_ZONES_URL`, off by default: 503 until it is set) with the caller's own token and passes it on unchanged, a stale report included. The contract is `ToolArmsReport` in the SDK. Read only: it arms, disarms and stops nothing.
+
 - **Maintenance routes for the installed releases (off by default, `maintenance.enabled`):** `GET /api/admin/maintenance/status` and `POST /api/admin/maintenance/install`, `/rollback` and `/prune` (administrator) wrap the deploy tool of the operating system image without a shell. A package is named, never given as a path, and must be a regular file inside one folder; a component is a short plain name; every change needs `confirm: true`, runs one at a time and is written to the audit record whatever its result. The environment variable `HYDRA_UMC_MAINTENANCE` locks the switch.
 - **The reports of loaded models of DETECTION-HEF can be switched from Server Admin (off by default, `detectionHef.acceptLoadedReports`):** the saved value is also written to the settings file that service re-reads while it runs, whole and readable by its owner and group only, so no restart is needed; a file that cannot be written is told in the answer.
 

@@ -2062,6 +2062,68 @@
           "type": "string"
         }
       }
+    },
+    "ToolArmsReport": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "ttlSeconds",
+        "arms",
+        "armedCount",
+        "staleCount"
+      ],
+      "description": "The arm state of the URTC tools as the safety zones service lists it, carried by the server unchanged (the schema tool-arms.schema.json is the contract of the service). The last report of each pair of robot and tool, how old it is, and whether it is stale; a stale report is not counted in armedCount, and a panel shows a stale armed tool as a warning and a stale disarmed tool as unknown. A restart of the service forgets the reports, which a panel sees as an empty list.",
+      "properties": {
+        "schema_version": {
+          "type": "string"
+        },
+        "ttlSeconds": {
+          "type": "number"
+        },
+        "arms": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "robot",
+              "toolId",
+              "armed",
+              "seq",
+              "ageSeconds",
+              "stale"
+            ],
+            "properties": {
+              "robot": {
+                "type": "string"
+              },
+              "toolId": {
+                "type": "integer"
+              },
+              "armed": {
+                "type": "boolean"
+              },
+              "by": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "ageSeconds": {
+                "type": "number"
+              },
+              "stale": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "armedCount": {
+          "type": "integer"
+        },
+        "staleCount": {
+          "type": "integer"
+        }
+      }
     }
   }
 }
