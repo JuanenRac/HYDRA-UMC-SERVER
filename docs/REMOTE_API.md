@@ -923,6 +923,20 @@ and a stale disarmed tool as unknown, never as safe. The list lives in the memor
 report again. `503` with `available: false` while `HYDRA_UMC_SAFETY_ZONES_URL` is not set (off by default) or when the service is down or times out;
 `404` when the service runs without `--tool-arms`; `401` without a bearer token. Information only: it arms, disarms and stops nothing.
 
+### The Live Activity of a robot on the lock screen: `POST /api/push/live-activities`, `DELETE /api/push/live-activities/{token}`
+
+**Off by default** (`push.liveActivity.enabled` in Server Admin, and `push.enabled` as well; there is no environment word): while it is off both routes answer `404`.
+The phone sends the token of the Live Activity it started for a robot (`{"activityToken": "<hex>", "robotId": "<controller>:<robot>"}`; `400` for a token or a
+robot id that does not have the shape, `409` above 8 activities per account or 200 in all) and the server updates the card through the Apple push service
+(`apns-push-type: liveactivity`, the topic of the app with `.push-type.liveactivity`; the key of the push service is read only from the environment, as for the
+other notifications). An account removes only its own activity; an administrator any. **What the card shows is the level that an administrator chooses**
+(`push.liveActivity.level`, `status` by default): `status` is the state of the robot only (running, idle, stopped, error, finished); `progress` adds the percent and
+the step of the job; `full` adds the panel of the robot (name, model, tool, joints, position). `full` is the most the server will ever put on a lock screen, and the
+level is applied on the server: a phone cannot ask for more. A lock screen is read by whoever holds the phone, so turning the card on or raising the level in
+`PUT /api/admin/server-config` (`{"push": {"liveActivity": {"enabled": true, "level": "progress", "confirm": true}}}`, `warnings: ["live_activity_exposure_raised"]`)
+needs `confirm: true`; turning it off or lowering the level needs nothing. `GET /api/admin/push` also reports `liveActivity` (whether it is sent, the level, how many
+activities). A card ends (and is dismissed after five minutes) when the job finishes.
+
 ### Reset of the arm state of a tool changer: `POST /api/tool-arms/reset`
 
 Administrator only; **off by default** (`atc.resetEnabled` in Server Admin, or `HYDRA_UMC_ATC_RESET=1`, which wins and locks it): while it is off the

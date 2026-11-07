@@ -1583,6 +1583,32 @@
               "type": "boolean"
             }
           }
+        },
+        "liveActivity": {
+          "type": "object",
+          "required": [
+            "enabled",
+            "level",
+            "activities"
+          ],
+          "description": "The Live Activity on the lock screen: whether it is sent (off by default), the most it may show (status, progress or full; status by default) and how many activities are registered.",
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "level": {
+              "type": "string",
+              "enum": [
+                "status",
+                "progress",
+                "full"
+              ]
+            },
+            "activities": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
         }
       }
     },
@@ -2142,6 +2168,28 @@
         },
         "toolId": {
           "type": "integer"
+        }
+      }
+    },
+    "LiveActivityRegistered": {
+      "type": "object",
+      "required": [
+        "registered"
+      ],
+      "properties": {
+        "registered": {
+          "type": "boolean"
+        }
+      }
+    },
+    "LiveActivityRemoved": {
+      "type": "object",
+      "required": [
+        "removed"
+      ],
+      "properties": {
+        "removed": {
+          "type": "boolean"
         }
       }
     }

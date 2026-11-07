@@ -9,6 +9,7 @@
 import express from "express";
 import type { AuditEvent } from "../auditLog";
 import { LOCALES, PushRegistryError, validDeviceToken, type PushDevices, type PushStatus } from "../pushNotifications";
+import { LiveActivityError, validActivityToken, validRobotId, type LiveActivities } from "../liveActivity";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
@@ -20,6 +21,9 @@ export interface PushRouteDeps {
   devices: PushDevices;
   status: () => PushStatus;
   audit?: { record: (event: AuditEvent) => unknown };
+  /** The tokens of the Live Activities and the gate that answers 404 while the Live Activity switch (or push) is off. */
+  liveActivities?: LiveActivities;
+  liveActivityGate?: Middleware;
 }
 
 export function makePushGate(isEnabled: () => boolean): Middleware {
@@ -60,6 +64,33 @@ export function registerPushRoutes(app: express.Express, deps: PushRouteDeps): v
     if (removed) audit?.record({ type: "push-device-removed", outcome: "ok", userId: req.user?.id, username: req.user?.username, ip: req.ip });
     res.json({ removed });
   });
+
+  // The Live Activity of a robot on the lock screen: the phone sends the token of the activity it started, and takes it back when the activity ends.
+  // While the switch of the Live Activity is off these answer 404 as if they did not exist.
+  const { liveActivities, liveActivityGate } = deps;
+  if (liveActivities && liveActivityGate) {
+    app.post("/api/push/live-activities", authenticate, liveActivityGate, (req: any, res) => {
+      const { activityToken, robotId } = req.body || {};
+      if (!validActivityToken(activityToken)) return res.status(400).json({ error: "activityToken must be the hexadecimal token of the Live Activity" });
+      if (!validRobotId(robotId)) return res.status(400).json({ error: "robotId must be a robot id of letters, digits and . _ : - (1 to 64 characters)" });
+      try {
+        liveActivities.register(activityToken, String(req.user?.username ?? ""), robotId);
+      } catch (error) {
+        if (error instanceof LiveActivityError) return res.status(error.status).json({ error: error.message });
+        throw error;
+      }
+      audit?.record({ type: "live-activity-registered", outcome: "ok", userId: req.user?.id, username: req.user?.username, ip: req.ip, detail: { robotId } });
+      res.json({ registered: true });
+    });
+
+    app.delete("/api/push/live-activities/:token", authenticate, liveActivityGate, (req: any, res) => {
+      const token = String(req.params.token ?? "");
+      if (!validActivityToken(token)) return res.status(400).json({ error: "token must be the hexadecimal token of the Live Activity" });
+      const removed = liveActivities.remove(token, req.user?.role === "admin" ? null : String(req.user?.username ?? ""));
+      if (removed) audit?.record({ type: "live-activity-removed", outcome: "ok", userId: req.user?.id, username: req.user?.username, ip: req.ip });
+      res.json({ removed });
+    });
+  }
 
   app.get("/api/admin/push", authenticate, requireAdmin, (req, res) => {
     res.json(status());

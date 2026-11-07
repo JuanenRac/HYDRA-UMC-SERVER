@@ -10,6 +10,7 @@
 // the administrator saved in data/server-config.json, then the built-in default (the behaviour
 // the server always had: AI relay open to any signed-in user, host information open, plain HTTP, no
 // Bluetooth).
+import { DEFAULT_LIVE_ACTIVITY_LEVEL, LIVE_ACTIVITY_LEVELS, MAX_LIVE_ACTIVITY_LEVEL, isLevel as isLiveLevel, raisesExposure, type LiveActivityLevel } from "./liveActivity";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -136,6 +137,16 @@ export interface PushFile {
   notifyPresenceLost?: boolean;
   /** How many device tokens the server keeps (1 to 10000; 500 by default). Read from the file only. */
   maxDevices?: number;
+  /** The Live Activity (the card of a robot on the lock screen, src/liveActivity.ts): off by default, and its level is the most it may show. */
+  liveActivity?: LiveActivityFile;
+}
+
+/** What the card of a robot on the lock screen may show: only the state (the default), the state and the progress, or everything of the panel. */
+export interface LiveActivityFile {
+  /** Whether the server sends Live Activities at all (default: no; push.enabled has to be on as well). */
+  enabled?: boolean;
+  /** "status", "progress" or "full" (default: "status"). "full" is the most there is. */
+  level?: string;
 }
 
 /** The health of the ecosystem in one answer (GET /api/ecosystem/health, src/ecosystemHealth.ts). */
@@ -733,6 +744,14 @@ export function resolveBridgeGateway(env: string | undefined, file: SecurityFile
 }
 
 /** Push notifications: only the exact word "1" in the environment switches them on; the default is off. */
+/** The Live Activity: only the file decides (there is no environment word); off by default, and the level is the conservative one unless an administrator raised it. */
+export function resolveLiveActivity(file: SecurityFile): { enabled: { value: boolean; source: Source }; level: { value: LiveActivityLevel; source: Source } } {
+  const enabled = typeof file.push?.liveActivity?.enabled === "boolean" ? { value: file.push.liveActivity.enabled, source: "config" as Source } : { value: false, source: "default" as Source };
+  const raw = file.push?.liveActivity?.level;
+  const level = isLiveLevel(raw) ? { value: raw, source: "config" as Source } : { value: DEFAULT_LIVE_ACTIVITY_LEVEL, source: "default" as Source };
+  return { enabled, level };
+}
+
 export function resolvePush(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
   if (isSet(env)) return { value: env.trim() === "1", source: "env" };
   if (typeof file.push?.enabled === "boolean") return { value: file.push.enabled, source: "config" };
@@ -972,7 +991,7 @@ export interface SecuritySnapshot {
   /** The switch and the action of the dead-man of the presence of the operator; the times are edited in the configuration file. */
   presence: { enabled: { value: boolean; source: Source }; action: { value: PresenceActionValue; source: Source }; timeoutSeconds: number; slowFactor: number; recoverBeats: number; rampSeconds: number; leftImmediate: boolean };
   bridgeGateway: { enabled: { value: boolean; source: Source } };
-  push: { enabled: { value: boolean; source: Source } };
+  push: { enabled: { value: boolean; source: Source }; liveActivity: { enabled: { value: boolean; source: Source }; level: { value: LiveActivityLevel; source: Source }; maxLevel: LiveActivityLevel } };
   /** The switch, and what the configuration file says about the rest (read only here: the ranges are edited in the file). */
   trustedNetworks: { enabled: { value: boolean; source: Source }; outside: "operate" | "view"; outsideRequiresSecondFactor: boolean; localRanges: number; vpnRanges: number; invalidEntries: number };
   rul: { enabled: { value: boolean; source: Source } };
@@ -1132,6 +1151,16 @@ export class SecurityConfig {
   }
 
   /** Whether the server sends push notifications (off unless an administrator turned it on). */
+  /** Whether the Live Activities are sent (off unless an administrator turned them on, and push as well). */
+  liveActivityEnabled(): boolean {
+    return this.pushEnabled() && resolveLiveActivity(this.file).enabled.value;
+  }
+
+  /** The most the card of a robot may show on the lock screen. */
+  liveActivityLevel(): LiveActivityLevel {
+    return resolveLiveActivity(this.file).level.value;
+  }
+
   pushEnabled(): boolean {
     return resolvePush(this.options.env.push, this.file).value;
   }
@@ -1325,7 +1354,7 @@ export class SecurityConfig {
         return { enabled: resolvePresence(this.options.env.presence, this.file), action: resolvePresenceAction(this.options.env.presenceAction, this.file), ...p };
       })(),
       bridgeGateway: { enabled: resolveBridgeGateway(this.options.env.bridgeGateway, this.file) },
-      push: { enabled: resolvePush(this.options.env.push, this.file) },
+      push: { enabled: resolvePush(this.options.env.push, this.file), liveActivity: { ...resolveLiveActivity(this.file), maxLevel: MAX_LIVE_ACTIVITY_LEVEL } },
       trustedNetworks: (() => {
         const settings = this.trustedNetworks();
         return {
@@ -1802,6 +1831,30 @@ export class SecurityConfig {
         if (resolvePush(this.options.env.push, this.file).source === "env") throw lockedBy("HYDRA_UMC_PUSH");
         merged.enabled = pushPatch.enabled;
       }
+      if (pushPatch.liveActivity !== undefined) {
+        const live = pushPatch.liveActivity;
+        if (typeof live !== "object" || live === null || Array.isArray(live)) throw new SecurityConfigError(400, "push.liveActivity must be an object");
+        if (live.confirm !== undefined && typeof live.confirm !== "boolean") throw new SecurityConfigError(400, "push.liveActivity.confirm must be true or false");
+        const before = resolveLiveActivity(this.file);
+        const mergedLive: LiveActivityFile = { ...(merged.liveActivity ?? {}) };
+        let exposes = false;
+        if (live.enabled !== undefined) {
+          if (typeof live.enabled !== "boolean") throw new SecurityConfigError(400, "push.liveActivity.enabled must be true or false");
+          if (live.enabled === true && before.enabled.value !== true) exposes = true;
+          mergedLive.enabled = live.enabled;
+        }
+        if (live.level !== undefined) {
+          if (!isLiveLevel(live.level)) throw new SecurityConfigError(400, `push.liveActivity.level must be one of ${LIVE_ACTIVITY_LEVELS.join(", ")}`);
+          if (raisesExposure(before.level.value, live.level)) exposes = true;
+          mergedLive.level = live.level;
+        }
+        // more on a lock screen, or the card on at all, is what a person who only holds the phone can read: it asks for the confirmation. Less never does.
+        if (exposes) {
+          if (live.confirm !== true) throw new SecurityConfigError(400, "Turning on the Live Activity or raising its level needs confirm: true");
+          warnings.push("live_activity_exposure_raised");
+        }
+        merged.liveActivity = mergedLive;
+      }
       next.push = merged;
       if (pushPatch.enabled === true) warnings.push("push_enabled");
     }
@@ -2102,7 +2155,8 @@ export class SecurityConfig {
       log(`[SECURITY] ${actor} ${snapshot.health.open.value ? "opened" : "closed"} GET /health to clients that are not signed in.`);
     }
     if (patch.push !== undefined) {
-      log(`[SECURITY] ${actor} turned the push notifications to the registered phones ${snapshot.push.enabled.value ? "on" : "off"}.`);
+      if (patch.push.enabled !== undefined) log(`[SECURITY] ${actor} turned the push notifications to the registered phones ${snapshot.push.enabled.value ? "on" : "off"}.`);
+      if (patch.push.liveActivity !== undefined) log(`[SECURITY] ${actor} set the Live Activity on the lock screen to ${snapshot.push.liveActivity.enabled.value ? "on" : "off"}, showing ${snapshot.push.liveActivity.level.value}.`);
     }
     if (patch.ecosystemHealth !== undefined) {
       log(`[SECURITY] ${actor} turned the health of the ecosystem (GET /api/ecosystem/health) ${snapshot.ecosystemHealth.enabled.value ? "on" : "off"}.`);

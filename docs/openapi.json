@@ -1584,6 +1584,32 @@
                 "type": "boolean"
               }
             }
+          },
+          "liveActivity": {
+            "type": "object",
+            "required": [
+              "enabled",
+              "level",
+              "activities"
+            ],
+            "description": "The Live Activity on the lock screen: whether it is sent (off by default), the most it may show (status, progress or full; status by default) and how many activities are registered.",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "level": {
+                "type": "string",
+                "enum": [
+                  "status",
+                  "progress",
+                  "full"
+                ]
+              },
+              "activities": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
           }
         }
       },
@@ -2143,6 +2169,28 @@
           },
           "toolId": {
             "type": "integer"
+          }
+        }
+      },
+      "LiveActivityRegistered": {
+        "type": "object",
+        "required": [
+          "registered"
+        ],
+        "properties": {
+          "registered": {
+            "type": "boolean"
+          }
+        }
+      },
+      "LiveActivityRemoved": {
+        "type": "object",
+        "required": [
+          "removed"
+        ],
+        "properties": {
+          "removed": {
+            "type": "boolean"
           }
         }
       }
@@ -5914,6 +5962,128 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PushDeviceRemoved"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. No body."
+          }
+        },
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/push/live-activities": {
+      "post": {
+        "tags": [
+          "push"
+        ],
+        "summary": "POST /api/push/live-activities",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveActivityRegistered"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. No body."
+          },
+          "409": {
+            "description": "Conflict with the current state. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "activityToken",
+                  "robotId"
+                ],
+                "properties": {
+                  "activityToken": {
+                    "type": "string"
+                  },
+                  "robotId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/push/live-activities/{token}": {
+      "delete": {
+        "tags": [
+          "push"
+        ],
+        "summary": "DELETE /api/push/live-activities/{token}",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveActivityRemoved"
                 }
               }
             }

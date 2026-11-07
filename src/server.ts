@@ -81,6 +81,7 @@ import { BridgeSettingsSigner } from "./bridgeSettingsSigning";
 import { makeEcosystemHealthGate, registerEcosystemHealthRoutes } from "./routes/ecosystemHealthRoutes";
 import { makePushGate, registerPushRoutes } from "./routes/pushRoutes";
 import { PushDevices, PushService, emitPush } from "./pushNotifications";
+import { LiveActivities, LiveActivityService, liveBus, snapshotFromRobot, emitRobotSnapshot, type RobotSnapshot } from "./liveActivity";
 import type { PushFile } from "./securityConfig";
 import { LastSeenMemory, collectEcosystemHealth } from "./ecosystemHealth";
 import { RobotLivenessTracker } from "./robotLiveness";
@@ -287,6 +288,8 @@ async function startServer() {
     onRobotDelta: (deltas) => {
       for (const delta of deltas) livenessTracker.touch(delta.robotId, "state");
       telemetryProducer?.record(deltas);
+      // the card of the robot on the lock screen follows the state of the robot (a no-op while the Live Activity switch is off)
+      for (const delta of deltas) { if ((delta.patch as any)?.playbackState !== undefined) { const snapshot = snapshotFromRobot(getSettings(), delta); if (snapshot) emitRobotSnapshot(snapshot, snapshot.state === "finished" ? "end" : "update"); } }
     },
     onStateChanged: () => { bleGateway?.publishState(); mqttBridge?.publishState(); },
   });
@@ -557,7 +560,15 @@ async function startServer() {
     maxDevices: () => { const n = Number(pushConfig()?.maxDevices); return Number.isInteger(n) && n >= 1 && n <= 10000 ? n : 500; },
   });
   const pushService = new PushService({ enabled: () => security.pushEnabled(), config: pushConfig, devices: pushDevices, env: () => process.env, log: industrialLog });
-  registerPushRoutes(app, { authenticate, requireAdmin, pushGate: makePushGate(() => security.pushEnabled()), devices: pushDevices, status: () => pushService.status(), audit });
+  // The Live Activity: the card of a robot on the lock screen. Off by default; what it shows is the level an administrator chose in Server Admin.
+  const liveActivities = new LiveActivities(path.join(process.cwd(), "data", "push-live-activities.json"));
+  const liveService = new LiveActivityService({ enabled: () => security.liveActivityEnabled(), level: () => security.liveActivityLevel(), activities: liveActivities, sender: () => pushService.liveSender(), log: industrialLog });
+  liveBus.on("live", (event: "update" | "end", snapshot: RobotSnapshot) => { void liveService.push(event, snapshot); });
+  registerPushRoutes(app, {
+    authenticate, requireAdmin, pushGate: makePushGate(() => security.pushEnabled()), devices: pushDevices,
+    status: () => ({ ...pushService.status(), liveActivity: { enabled: security.liveActivityEnabled(), level: security.liveActivityLevel(), activities: liveActivities.count() } }),
+    audit, liveActivities, liveActivityGate: makePushGate(() => security.liveActivityEnabled()),
+  });
   registerEcosystemHealthRoutes(app, {
     authenticate, requireOperator,
     ecosystemHealthGate: makeEcosystemHealthGate(() => security.ecosystemHealthEnabled()),

@@ -204,7 +204,7 @@ export interface ApnsResult {
 }
 
 export interface ApnsSender {
-  send(token: string, payload: Record<string, unknown>, options: { collapseId?: string; expiresInSeconds: number }): Promise<ApnsResult>;
+  send(token: string, payload: Record<string, unknown>, options: { collapseId?: string; expiresInSeconds: number; pushType?: "alert" | "liveactivity" }): Promise<ApnsResult>;
   close(): void;
 }
 
@@ -252,7 +252,7 @@ export class ApnsClient implements ApnsSender {
     return session;
   }
 
-  send(token: string, payload: Record<string, unknown>, options: { collapseId?: string; expiresInSeconds: number }): Promise<ApnsResult> {
+  send(token: string, payload: Record<string, unknown>, options: { collapseId?: string; expiresInSeconds: number; pushType?: "alert" | "liveactivity" }): Promise<ApnsResult> {
     return new Promise((resolve) => {
       let settled = false;
       const done = (r: ApnsResult) => {
@@ -267,8 +267,9 @@ export class ApnsClient implements ApnsSender {
           ":method": "POST",
           ":path": `/3/device/${token}`,
           authorization: `bearer ${this.providerToken()}`,
-          "apns-topic": this.credentials.topic,
-          "apns-push-type": "alert",
+          // a Live Activity is addressed to the topic of the app with the suffix of its push type
+          "apns-topic": options.pushType === "liveactivity" ? `${this.credentials.topic}.push-type.liveactivity` : this.credentials.topic,
+          "apns-push-type": options.pushType ?? "alert",
           "apns-priority": "10",
           "apns-expiration": String(Math.floor(Date.now() / 1000) + options.expiresInSeconds),
           ...(options.collapseId ? { "apns-collapse-id": options.collapseId.slice(0, 64) } : {}),
@@ -321,6 +322,8 @@ export interface PushStatus {
   devices: number;
   sandbox: boolean;
   events: { jobFinished: boolean; globalStop: boolean };
+  /** The Live Activity on the lock screen: whether it is sent, what it may show and how many activities are registered (added by the server). */
+  liveActivity?: { enabled: boolean; level: "status" | "progress" | "full"; activities: number };
 }
 
 export class PushService {
@@ -371,6 +374,15 @@ export class PushService {
     const config = this.deps.config();
     if (event === "presence-lost") return config?.notifyPresenceLost !== false;
     return event === "job-finished" ? config?.notifyJobFinished !== false : config?.notifyGlobalStop !== false;
+  }
+
+  /** The sender of the Apple push service for the Live Activities: null while push is off or the credentials are not usable. */
+  liveSender(): ApnsSender | null {
+    if (!this.deps.enabled()) return null;
+    const state = this.credentials();
+    if (!("credentials" in state)) return null;
+    if (!this.sender) this.sender = (this.deps.makeSender ?? ((c, sandbox) => new ApnsClient(c, { sandbox, baseUrl: this.deps.env().HYDRA_UMC_APNS_URL?.trim() || undefined })))(state.credentials, this.sandbox());
+    return this.sender;
   }
 
   /** Sends the notification of [event] to every registered phone. Never throws. Returns how many were accepted. */
