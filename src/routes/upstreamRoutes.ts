@@ -438,7 +438,7 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
         signal: AbortSignal.timeout(CONNECTOR_HUB_TIMEOUT_MS),
       });
       if (upstream.status >= 200 && upstream.status < 300) {
-        record("ok", request);
+        record("ok", { ...request });
         return res.status(200).json({ success: true, robot: request.robot, toolId: request.toolId });
       }
       const answer = await upstream.json().catch(() => null);
