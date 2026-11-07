@@ -18,6 +18,7 @@ const CARRIES = /\b(upstreamHeaders|identityHeader|withIdentity)\b/;
 /** Calls that deliberately do not present the identity of the server, found by the text near the call. */
 const EXEMPT: ReadonlyArray<{ near: RegExp; why: string }> = [
   { near: /relayWithOwnToken/, why: "the connector hub gate is reached with the Bearer token of the signed-in account itself, passed on as it came" },
+  { near: /\/atc\/reset|SAFETY_ZONES_URL\}\/tool-arms/, why: "the reset of the arm state of a tool changer carries the Bearer token of the signed-in administrator itself, passed on as it came, like the other relays of that kind" },
   { near: /api\.github\.com\/repos\//, why: "the look at the newest published versions asks GitHub, which is not a service of the family and must never receive the identity of the server" },
 ];
 
