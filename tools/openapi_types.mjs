@@ -70,6 +70,7 @@ export const RESPONSES = {
   "GET /api/admin/updates": ref("UpdateReport"),
   "GET /api/admin/maintenance/status": ref("MaintenanceOutcome"),
   "GET /api/tool-arms": ref("ToolArmsReport"),
+  "POST /api/tool-arms/reset": ref("ToolArmResetResult"),
   "POST /api/admin/maintenance/install": ref("MaintenanceOutcome"),
   "POST /api/admin/maintenance/rollback": ref("MaintenanceOutcome"),
   "POST /api/admin/maintenance/prune": ref("MaintenanceOutcome"),
@@ -143,6 +144,7 @@ export const REQUESTS = {
   "POST /api/totp/disable": { required: ["password", "code"], fields: { password: str, code: str } },
   "POST /api/refresh": { required: ["refreshToken"], fields: { refreshToken: str } },
   "POST /api/device/login": { required: ["token"], fields: { token: str } },
+  "POST /api/tool-arms/reset": { required: ["robot", "toolId", "confirm"], fields: { robot: str, toolId: num, confirm: str } },
   "POST /api/admin/maintenance/install": { required: ["package", "confirm"], fields: { package: str, allowDowngrade: bool, confirm: bool } },
   "POST /api/admin/maintenance/rollback": { required: ["component", "confirm"], fields: { component: str, confirm: bool } },
   "POST /api/admin/maintenance/prune": { required: ["component", "confirm"], fields: { component: str, keep: num, confirm: bool } },
@@ -196,6 +198,8 @@ export const EXTRA_STATUSES = {
   "GET /api/admin/maintenance/status": [400, 404, 502],
   // 503 until the safety zones service has an address (or when it is down), 404 when it runs without --tool-arms, 502 when it answers something that is not JSON.
   "GET /api/tool-arms": [404, 502, 503],
+  // 404 while atc.resetEnabled is off (as if the route did not exist); 400 for a request the checks refuse or whose confirm does not repeat the robot id; 409 unless the robot is stopped and every tool of it is reported disarmed and fresh; 502 when the tool changer service rejects it; 503 until the safety zones and tool changer services have an address (or when one is down).
+  "POST /api/tool-arms/reset": [400, 404, 409, 502, 503],
   "POST /api/admin/maintenance/install": [400, 404, 409, 502],
   "POST /api/admin/maintenance/rollback": [400, 404, 409, 502],
   "POST /api/admin/maintenance/prune": [400, 404, 409, 502],

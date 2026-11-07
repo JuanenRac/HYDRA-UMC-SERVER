@@ -923,6 +923,20 @@ and a stale disarmed tool as unknown, never as safe. The list lives in the memor
 report again. `503` with `available: false` while `HYDRA_UMC_SAFETY_ZONES_URL` is not set (off by default) or when the service is down or times out;
 `404` when the service runs without `--tool-arms`; `401` without a bearer token. Information only: it arms, disarms and stops nothing.
 
+### Reset of the arm state of a tool changer: `POST /api/tool-arms/reset`
+
+Administrator only; **off by default** (`atc.resetEnabled` in Server Admin, or `HYDRA_UMC_ATC_RESET=1`, which wins and locks it): while it is off the
+route answers `404` and nothing leaves the server. The reset puts back the arm state the tool changer reports and **moves nothing mechanical**. The body is
+`{"robot": "arm-3", "toolId": 4, "confirm": "arm-3"}` and nothing else: `confirm` must repeat the robot id exactly as typed (`400` with `code:
+"CONFIRMATION_MISMATCH"` otherwise). Before anything is forwarded the server reads the arm state of the tools from the safety zones service with the
+caller's own token and answers `409` (`reason`: `armed`, `moving`, `report_stale`, `tool_not_reported`, `motion_unknown` or `no_report`) unless that tool
+is reported disarmed and fresh, no tool of that robot is armed or out of date, and the robot is known to be stopped: whatever cannot be read or matched
+is a refusal, never a guess. Then it forwards `POST /atc/reset` with `{robot, toolId}` and the same token to `HYDRA_UMC_ATC_URL` and answers `200` with
+`{"success": true, "robot", "toolId"}`; `502` when the tool changer service rejects it; `503` with `available: false` while `HYDRA_UMC_SAFETY_ZONES_URL`
+or `HYDRA_UMC_ATC_URL` is not set or when a service is down. Every attempt and its outcome is written to the audit record (`atc-reset`). Turning the
+switch on needs `confirm: true` in `PUT /api/admin/server-config` (`{"atc": {"resetEnabled": true, "confirm": true}}`, `warnings: ["atc_reset_on"]`);
+turning it off needs nothing.
+
 ## 2k. Settings of the installation that harden this API
 
 Environment variables, read once at start (see `docs/PRODUCTION_BOOTSTRAP.md`):

@@ -61,6 +61,7 @@ import { registerAuthRoutes } from "./routes/auth";
 import { DeviceTokenStore, deviceTokenKey, type DeviceTokenLimits } from "./deviceTokens";
 import { registerDeviceRoutes } from "./routes/deviceRoutes";
 import { registerUpdateRoutes } from "./routes/updateRoutes";
+import { robotMotionOf } from "./atcReset";
 import { registerMaintenanceRoutes } from "./routes/maintenanceRoutes";
 import { Maintenance, maintenanceSettings } from "./maintenance";
 import { writeDetectionHefSettings } from "./detectionHefSettings";
@@ -105,7 +106,7 @@ import { createPlayback } from "./playback";
 import { createWsHub, attachWebSocketServer } from "./ws";
 import { createTelemetryProducer } from "./telemetryProducer";
 import { NODE_ENV, JWT_SECRET, authenticate, asyncHandler, requireAdmin, requireOperator, stopAllRateLimiter, setRateLimitSettingsProvider } from "./auth";
-import { VOICE_UI_URL, VOICE_UI_TOKEN, VOICE_UI_TIMEOUT_MS, DATALAKE_URL, DATALAKE_TIMEOUT_MS, CONNECTOR_HUB_URL, CONNECTOR_HUB_GATE_URL, SEMANTIC_PLANNER_URL, HIL_BRIDGE_URL, SAFETY_ZONES_URL, CONNECTOR_HUB_TIMEOUT_MS, SPI_BRIDGE_URL, SPI_BRIDGE_VERSION_TIMEOUT_MS, SPI_BRIDGE_FLASH_TIMEOUT_MS } from "./upstreamConfig";
+import { VOICE_UI_URL, VOICE_UI_TOKEN, VOICE_UI_TIMEOUT_MS, DATALAKE_URL, DATALAKE_TIMEOUT_MS, CONNECTOR_HUB_URL, CONNECTOR_HUB_GATE_URL, SEMANTIC_PLANNER_URL, HIL_BRIDGE_URL, SAFETY_ZONES_URL, ATC_URL, CONNECTOR_HUB_TIMEOUT_MS, SPI_BRIDGE_URL, SPI_BRIDGE_VERSION_TIMEOUT_MS, SPI_BRIDGE_FLASH_TIMEOUT_MS } from "./upstreamConfig";
 import { LOG_FILE, bonjour, setupDiscovery, loadServerConfig, saveServerConfig, resolvePort, industrialLog, setCurrentPort, getCurrentPort, closeLog, setLogRedaction } from "./runtime";
 import { setSignatureRequirement } from "./voiceConfirm";
 
@@ -366,8 +367,8 @@ async function startServer() {
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
     save: (file) => {
-      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, deviceTokens, updateCheck, discovery, maintenance, detectionHef, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging, rateLimits, bridges } = file;
-      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, deviceTokens, updateCheck, discovery, maintenance, detectionHef, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging, rateLimits, bridges });
+      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, deviceTokens, updateCheck, discovery, maintenance, atc, detectionHef, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging, rateLimits, bridges } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, deviceTokens, updateCheck, discovery, maintenance, atc, detectionHef, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging, rateLimits, bridges });
     },
     bridgeSigningStatus: () => bridgeSettingsSigner.status(BRIDGE_NAMES),
     writeDetectionHefSettings: (value, file) => { const written = writeDetectionHefSettings(dataPath, value, file); industrialLog(`[SECURITY] DETECTION-HEF settings file written: ${written}`); },
@@ -580,7 +581,8 @@ async function startServer() {
   registerUpstreamRoutes(app, {
     authenticate, requireAdmin, industrialLog, wsClients, DATALAKE_URL, DATALAKE_TIMEOUT_MS, CONNECTOR_HUB_URL,
     CONNECTOR_HUB_TIMEOUT_MS, SPI_BRIDGE_URL, SPI_BRIDGE_VERSION_TIMEOUT_MS, SPI_BRIDGE_FLASH_TIMEOUT_MS,
-    CONNECTOR_HUB_GATE_URL, SEMANTIC_PLANNER_URL, HIL_BRIDGE_URL, SAFETY_ZONES_URL, requireOperator, audit, opsAgentChannel,
+    CONNECTOR_HUB_GATE_URL, SEMANTIC_PLANNER_URL, HIL_BRIDGE_URL, SAFETY_ZONES_URL, ATC_URL, requireOperator, audit, opsAgentChannel,
+    atcResetEnabled: () => security.atcResetEnabled(), robotMotion: robotMotionOf(getSettings),
   });
 
   registerInfoRoutes(app, {

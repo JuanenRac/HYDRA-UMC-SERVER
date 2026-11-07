@@ -240,6 +240,12 @@ export interface DetectionHefFile {
   settingsFile?: string;
 }
 
+/** The reset of the arm state of one URTC tool changer (POST /api/tool-arms/reset, src/atcReset.ts). */
+export interface AtcFile {
+  /** Whether the reset route answers (default: no; it then answers 404 and nothing is forwarded). */
+  resetEnabled?: boolean;
+}
+
 /** What GET /api/hydra-info tells a client that is not signed in. */
 export interface DiscoveryFile {
   /** Whether the answer lists the addresses of this server on the local network (default: no; it then carries no address). */
@@ -386,6 +392,7 @@ export interface SecurityFile {
   updateCheck?: UpdateCheckFile;
   discovery?: DiscoveryFile;
   maintenance?: MaintenanceFile;
+  atc?: AtcFile;
   detectionHef?: DetectionHefFile;
   auth?: AuthFile;
   presence?: PresenceFile;
@@ -429,6 +436,7 @@ export interface SecurityEnv {
   updateCheck?: string;
   advertiseAddress?: string;
   maintenance?: string;
+  atcReset?: string;
   jwtAlgorithm?: string;
   jwtAcceptHs256?: string;
   /** HYDRA_UMC_SERVICE_IDENTITY: "1" on, "0" off, as written. */
@@ -477,6 +485,7 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     updateCheck: env.HYDRA_UMC_UPDATE_CHECK,
     advertiseAddress: env.HYDRA_UMC_ADVERTISE_ADDRESS,
     maintenance: env.HYDRA_UMC_MAINTENANCE,
+    atcReset: env.HYDRA_UMC_ATC_RESET,
     jwtAlgorithm: env.HYDRA_UMC_JWT_ALGORITHM,
     jwtAcceptHs256: env.HYDRA_UMC_JWT_ACCEPT_HS256,
     serviceIdentity: env.HYDRA_UMC_SERVICE_IDENTITY,
@@ -643,6 +652,13 @@ export function resolveUpdateCheck(env: string | undefined, file: SecurityFile):
 export function resolveMaintenance(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
   if (isSet(env)) return { value: env.trim() === "1", source: "env" };
   if (typeof file.maintenance?.enabled === "boolean") return { value: file.maintenance.enabled, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** The reset of the arm state of a tool changer: only the exact word "1" in the environment switches it on; the default is off. */
+export function resolveAtcReset(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.atc?.resetEnabled === "boolean") return { value: file.atc.resetEnabled, source: "config" };
   return { value: false, source: "default" };
 }
 
@@ -949,6 +965,7 @@ export interface SecuritySnapshot {
   updateCheck: { enabled: { value: boolean; source: Source } };
   discovery: { advertiseAddress: { value: boolean; source: Source } };
   maintenance: { enabled: { value: boolean; source: Source } };
+  atc: { resetEnabled: { value: boolean; source: Source } };
   detectionHef: { acceptLoadedReports: { value: boolean; source: Source } };
   /** How the sign-in tokens are signed; the overlap of a rotation is edited in the configuration file. */
   auth: { jwtAlgorithm: { value: JwtAlgorithm; source: Source }; acceptHs256: { value: boolean; source: Source }; keyOverlapSeconds: number; serviceIdentity: { enabled: { value: boolean; source: Source } } };
@@ -1149,6 +1166,11 @@ export class SecurityConfig {
     return resolveUpdateCheck(this.options.env.updateCheck, this.file).value;
   }
 
+  /** Whether the reset of the arm state of a tool changer answers (off unless an administrator turned it on). */
+  atcResetEnabled(): boolean {
+    return resolveAtcReset(this.options.env.atcReset, this.file).value;
+  }
+
   /** Whether the maintenance routes answer (off unless an administrator turned it on). */
   maintenanceEnabled(): boolean {
     return resolveMaintenance(this.options.env.maintenance, this.file).value;
@@ -1295,6 +1317,7 @@ export class SecurityConfig {
       updateCheck: { enabled: resolveUpdateCheck(this.options.env.updateCheck, this.file) },
       discovery: { advertiseAddress: resolveAdvertiseAddress(this.options.env.advertiseAddress, this.file) },
       maintenance: { enabled: resolveMaintenance(this.options.env.maintenance, this.file) },
+      atc: { resetEnabled: resolveAtcReset(this.options.env.atcReset, this.file) },
       detectionHef: { acceptLoadedReports: resolveDetectionHefReports(this.file) },
       auth: { jwtAlgorithm: resolveJwtAlgorithm(this.options.env.jwtAlgorithm, this.file), acceptHs256: resolveJwtAcceptHs256(this.options.env.jwtAcceptHs256, this.file), keyOverlapSeconds: resolveKeyOverlapSeconds(this.file), serviceIdentity: { enabled: resolveServiceIdentity(this.options.env.serviceIdentity, this.file) } },
       presence: (() => {
@@ -1361,7 +1384,7 @@ export class SecurityConfig {
   /** Applies a change asked for by an administrator; returns the new state and the warnings to show. */
   update(patch: any, actor: string): { snapshot: SecuritySnapshot; warnings: string[]; appliesOnRestart: boolean } {
     const warnings: string[] = [];
-    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, ingest: this.file.ingest ? { ...this.file.ingest } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, infoTickets: this.file.infoTickets ? { ...this.file.infoTickets } : undefined, deviceTokens: this.file.deviceTokens ? { ...this.file.deviceTokens } : undefined, updateCheck: this.file.updateCheck ? { ...this.file.updateCheck } : undefined, discovery: this.file.discovery ? { ...this.file.discovery } : undefined, maintenance: this.file.maintenance ? { ...this.file.maintenance } : undefined, detectionHef: this.file.detectionHef ? { ...this.file.detectionHef } : undefined, presence: this.file.presence ? { ...this.file.presence } : undefined, bridgeGateway: this.file.bridgeGateway ? { ...this.file.bridgeGateway } : undefined, push: this.file.push ? { ...this.file.push } : undefined, trustedNetworks: this.file.trustedNetworks ? { ...this.file.trustedNetworks } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
+    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, ingest: this.file.ingest ? { ...this.file.ingest } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, infoTickets: this.file.infoTickets ? { ...this.file.infoTickets } : undefined, deviceTokens: this.file.deviceTokens ? { ...this.file.deviceTokens } : undefined, updateCheck: this.file.updateCheck ? { ...this.file.updateCheck } : undefined, discovery: this.file.discovery ? { ...this.file.discovery } : undefined, maintenance: this.file.maintenance ? { ...this.file.maintenance } : undefined, atc: this.file.atc ? { ...this.file.atc } : undefined, detectionHef: this.file.detectionHef ? { ...this.file.detectionHef } : undefined, presence: this.file.presence ? { ...this.file.presence } : undefined, bridgeGateway: this.file.bridgeGateway ? { ...this.file.bridgeGateway } : undefined, push: this.file.push ? { ...this.file.push } : undefined, trustedNetworks: this.file.trustedNetworks ? { ...this.file.trustedNetworks } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
     let appliesOnRestart = false;
     const log = this.options.log ?? (() => undefined);
     const lockedBy = (name: string) => new SecurityConfigError(409, `${name} is set in the environment of this server; remove it there to change it here`);
@@ -1670,6 +1693,24 @@ export class SecurityConfig {
         merged.enabled = maintenancePatch.enabled;
       }
       next.maintenance = merged;
+    }
+
+    if (patch.atc !== undefined) {
+      const atcPatch = patch.atc;
+      if (typeof atcPatch !== "object" || atcPatch === null || Array.isArray(atcPatch)) throw new SecurityConfigError(400, "atc must be an object");
+      if (atcPatch.confirm !== undefined && typeof atcPatch.confirm !== "boolean") throw new SecurityConfigError(400, "atc.confirm must be true or false");
+      const merged: AtcFile = { ...(next.atc ?? {}) };
+      if (atcPatch.resetEnabled !== undefined) {
+        if (typeof atcPatch.resetEnabled !== "boolean") throw new SecurityConfigError(400, "atc.resetEnabled must be true or false");
+        if (resolveAtcReset(this.options.env.atcReset, this.file).source === "env") throw lockedBy("HYDRA_UMC_ATC_RESET");
+        // The route puts back the arm state of a tool changer, so turning it on needs the confirmation. Turning it off needs nothing.
+        if (atcPatch.resetEnabled === true && resolveAtcReset(this.options.env.atcReset, this.file).value !== true) {
+          if (atcPatch.confirm !== true) throw new SecurityConfigError(400, "Turning on the reset of the tool changer needs confirm: true");
+          warnings.push("atc_reset_on");
+        }
+        merged.resetEnabled = atcPatch.resetEnabled;
+      }
+      next.atc = merged;
     }
 
     if (patch.detectionHef !== undefined) {
@@ -2077,6 +2118,9 @@ export class SecurityConfig {
     }
     if (patch.maintenance !== undefined) {
       log(`[SECURITY] ${actor} turned the maintenance routes (/api/admin/maintenance) ${snapshot.maintenance.enabled.value ? "on (an administrator can now install, go back and prune releases)" : "off"}.`);
+    }
+    if (patch.atc !== undefined) {
+      log(`[SECURITY] ${actor} turned the reset of the arm state of the tool changers (POST /api/tool-arms/reset) ${snapshot.atc.resetEnabled.value ? "on (an administrator can now put back the arm state of a stopped, disarmed robot)" : "off"}.`);
     }
     if (patch.detectionHef?.acceptLoadedReports !== undefined) {
       log(`[SECURITY] ${actor} turned the reports of loaded models of DETECTION-HEF ${snapshot.detectionHef.acceptLoadedReports.value ? "on" : "off"}.`);

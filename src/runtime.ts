@@ -45,7 +45,7 @@ const SERVER_CONFIG_FILE = path.join(process.cwd(), "data", "server-config.json"
 
 import type { BleFile } from "./securityConfig";
 import type { MqttFile } from "./mqttBridge";
-import type { BridgeGatewayFile, ConnectionsFile, HealthFile, EcosystemHealthFile, InfoTicketsFile, DeviceTokensFile, UpdateCheckFile, DiscoveryFile, MaintenanceFile, DetectionHefFile, AuthFile, PresenceFile, PushFile, TrustedNetworksFile, RulFile, MavlinkFile, RobotsFile, SafetyFile, JobDispatcherFile, CameraFile, InstallFile, WebsocketFile, LoggingFile, RateLimitsFile, VoiceFile } from "./securityConfig";
+import type { BridgeGatewayFile, ConnectionsFile, HealthFile, EcosystemHealthFile, InfoTicketsFile, DeviceTokensFile, UpdateCheckFile, DiscoveryFile, MaintenanceFile, AtcFile, DetectionHefFile, AuthFile, PresenceFile, PushFile, TrustedNetworksFile, RulFile, MavlinkFile, RobotsFile, SafetyFile, JobDispatcherFile, CameraFile, InstallFile, WebsocketFile, LoggingFile, RateLimitsFile, VoiceFile } from "./securityConfig";
 
 export interface ServerConfig {
   port?: number;
@@ -65,6 +65,7 @@ export interface ServerConfig {
   updateCheck?: UpdateCheckFile;
   discovery?: DiscoveryFile;
   maintenance?: MaintenanceFile;
+  atc?: AtcFile;
   detectionHef?: DetectionHefFile;
   auth?: AuthFile;
   presence?: PresenceFile;

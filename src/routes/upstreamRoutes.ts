@@ -7,6 +7,7 @@
 // adapters, the CAN-OTA spi_bridge) and the connection test, moved out of
 // server.ts unchanged. The upstream settings arrive through `deps` so this
 // module never reads the process environment on its own.
+import { armEntriesFrom, decideReset, parseResetRequest, resetRefusalText, type ArmEntry, type RobotMotion } from "../atcReset";
 import express from "express";
 import { WebSocket } from "ws";
 import { probeTcp } from "../ecosystemStatus";
@@ -34,6 +35,12 @@ export interface UpstreamDeps {
   HIL_BRIDGE_URL?: string;
   /** The address of the safety zones service (empty: the read of the arm state of the tools answers 503). */
   SAFETY_ZONES_URL?: string;
+  /** The address of the URTC tool changer service (empty: the reset of the arm state of a tool changer answers 503). */
+  ATC_URL?: string;
+  /** Whether the reset route answers (atc.resetEnabled, off by default: it then answers 404 and nothing leaves this server). */
+  atcResetEnabled?: () => boolean;
+  /** Whether a robot of the arm report is stopped, moving or cannot be told; absent means "cannot be told", which refuses the reset. */
+  robotMotion?: (robot: string) => RobotMotion;
   requireOperator?: Middleware;
   /** The signed channel to the node watchdog (OPS-AGENT); null or absent: the proposals routes answer 503. Read on every call so a fixed file is picked up. */
   opsAgentChannel?: () => OpsAgentChannel | null;
@@ -53,6 +60,7 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
   const SEMANTIC_PLANNER_URL = deps.SEMANTIC_PLANNER_URL ?? "";
   const HIL_BRIDGE_URL = deps.HIL_BRIDGE_URL ?? "";
   const SAFETY_ZONES_URL = deps.SAFETY_ZONES_URL ?? "";
+  const ATC_URL = deps.ATC_URL ?? "";
   const requireOperator: Middleware = deps.requireOperator ?? ((_req, _res, next) => (next as () => unknown)());
 
   // Real, authenticated read-only proxy to HYDRA-UMC-DATALAKE's own /query
@@ -385,6 +393,62 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
   // answers 404, which the screen reads as "not reported".
   app.get("/api/tool-arms", authenticate, async (req, res) => {
     await relayWithOwnToken(SAFETY_ZONES_URL, "The safety zones service", "HYDRA-UMC-SAFETY-ZONES", req, res, "GET", "/tool-arms");
+  });
+
+  // The reset of the arm state of one URTC tool changer. It puts back the arm state the tool changer reports and moves nothing mechanical. An
+  // administrator only; off by default (atc.resetEnabled): while it is off the route answers 404 and nothing leaves this server. The request names
+  // the robot and the tool and repeats the robot id as typed (confirm). Before anything is forwarded this server reads the arm state of the tools from
+  // the safety zones service with the administrator's own token and refuses (409) unless the tool is reported disarmed and fresh, no tool of that robot is
+  // armed or out of date, and the robot is known to be stopped: whatever cannot be read or matched is a refusal, never a guess. Every attempt and its
+  // outcome is written to the audit record.
+  app.post("/api/tool-arms/reset", authenticate, requireAdmin, (req, res, next) => (deps.atcResetEnabled?.() === true ? (next as () => unknown)() : res.status(404).json({ error: "Not found" })), async (req, res) => {
+    const user = (req as any).user;
+    const record = (outcome: "ok" | "refused" | "failed", detail: Record<string, unknown>) =>
+      deps.audit?.record({ type: "atc-reset", outcome, userId: user?.id, username: user?.username, ip: req.ip, detail });
+    const parsed = parseResetRequest(req.body);
+    if (!parsed.ok) {
+      record("refused", { reason: parsed.error });
+      return res.status(400).json({ error: parsed.error, ...(parsed.code ? { code: parsed.code } : {}) });
+    }
+    const request = parsed.request;
+    if (!SAFETY_ZONES_URL || !ATC_URL) {
+      record("failed", { ...request, reason: "an address is not configured" });
+      return res.status(503).json({ error: !SAFETY_ZONES_URL ? "The safety zones service is not configured on this Server" : "The tool changer service is not configured on this Server", available: false });
+    }
+    const authorization = req.headers.authorization;
+    if (typeof authorization !== "string" || !/^Bearer\s+\S+$/i.test(authorization)) return res.status(401).json({ error: "A bearer token is required" });
+    let arms: ArmEntry[] | null = null;
+    try {
+      const read = await fetch(`${SAFETY_ZONES_URL}/tool-arms`, { headers: { authorization }, redirect: "error", signal: AbortSignal.timeout(CONNECTOR_HUB_TIMEOUT_MS) });
+      arms = read.status === 200 ? armEntriesFrom(await read.json().catch(() => null)) : null;
+    } catch {
+      arms = null;
+    }
+    const decision = decideReset(arms, request, deps.robotMotion?.(request.robot) ?? "unknown");
+    if (!decision.ok) {
+      record("refused", { ...request, reason: decision.reason });
+      return res.status(409).json({ error: resetRefusalText(decision.reason), reason: decision.reason });
+    }
+    try {
+      const upstream = await fetch(`${ATC_URL}/atc/reset`, {
+        method: "POST",
+        headers: { authorization, "content-type": "application/json" },
+        body: JSON.stringify({ robot: request.robot, toolId: request.toolId }),
+        redirect: "error",
+        signal: AbortSignal.timeout(CONNECTOR_HUB_TIMEOUT_MS),
+      });
+      if (upstream.status >= 200 && upstream.status < 300) {
+        record("ok", request);
+        return res.status(200).json({ success: true, robot: request.robot, toolId: request.toolId });
+      }
+      const answer = await upstream.json().catch(() => null);
+      record("failed", { ...request, toolChangerStatus: upstream.status });
+      return res.status(502).json({ error: answer && typeof (answer as any).error === "string" ? String((answer as any).error).slice(0, 300) : "The tool changer service rejected the reset" });
+    } catch (error) {
+      const timedOut = error instanceof DOMException && error.name === "TimeoutError";
+      record("failed", { ...request, reason: timedOut ? "timeout" : "unreachable" });
+      return res.status(503).json({ error: timedOut ? "The tool changer service timed out" : "The tool changer service is unavailable" });
+    }
   });
 
   // Real relay to the local spi_bridge HTTP service (HYDRA-UMC/src/

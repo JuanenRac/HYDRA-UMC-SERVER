@@ -2124,6 +2124,26 @@
           "type": "integer"
         }
       }
+    },
+    "ToolArmResetResult": {
+      "type": "object",
+      "required": [
+        "success",
+        "robot",
+        "toolId"
+      ],
+      "description": "The answer of a reset of the arm state of one URTC tool changer: the robot and the tool that were reset. The reset moves nothing mechanical; it puts the tool changer back to the disarmed state it reports.",
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "robot": {
+          "type": "string"
+        },
+        "toolId": {
+          "type": "integer"
+        }
+      }
     }
   }
 }

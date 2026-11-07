@@ -70,6 +70,9 @@ export const HIL_BRIDGE_URL = (process.env.HYDRA_UMC_HIL_BRIDGE_URL || "").repla
 // The safety zones service (its HTTP API, e.g. http://127.0.0.1:PORT, started with --tool-arms): the panels read through this server the arm state of the URTC tools.
 // A relay that carries the signed-in person's own token to it. Off (503) until the address is set.
 export const SAFETY_ZONES_URL = (process.env.HYDRA_UMC_SAFETY_ZONES_URL || "").replace(/\/$/, "");
+// The URTC tool changer service (its HTTP API, e.g. http://127.0.0.1:PORT): the reset of the arm state of a tool changer (POST /api/tool-arms/reset) is forwarded to its
+// POST /atc/reset with the signed-in administrator's own token. Off (503) until the address is set, and the route itself stays off until its switch (atc.resetEnabled) is on.
+export const ATC_URL = (process.env.HYDRA_UMC_ATC_URL || "").replace(/\/$/, "");
 export const CONNECTOR_HUB_TIMEOUT_MS = Math.min(
   Math.max(Number(process.env.HYDRA_UMC_CONNECTOR_HUB_TIMEOUT_MS) || 4000, 250),
   10000,
