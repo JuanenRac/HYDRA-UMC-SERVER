@@ -117,6 +117,7 @@ export class UpdateChecker {
 
   private async look(): Promise<UpdateReport> {
     const owner = updateOwner(this.deps.settings());
+    // GitHub (api.github.com/repos/...) is not a service of the family: this call never carries the identity of the server.
     const fetchFn: FetchLike = this.deps.fetch ?? ((url, init) => fetch(url, init));
     const projects = (await this.deps.projects()).filter((p) => NAME_PATTERN.test(p.name)).slice(0, UPDATE_MAX_PROGRAMS);
     let rateLimited = false;
