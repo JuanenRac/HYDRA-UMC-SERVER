@@ -23,6 +23,10 @@ last word, and a part that has not adopted this contract is exactly as safe as i
 - Only an administrator ends it: `POST /api/stop-all/release` publishes `{ "state": "READY", ... }` on the same topic and records it in the audit record. The release moves no robot: each robot is brought back by its own commands.
 - If the broker keeps no retained messages after its own restart, the latch is lost with it; a bridge that must not forget a stop should also ask the server (`GET /api/claims` and the robot state show the stopped playback).
 
+## One stop state for the apps
+
+The apps show one state for both stops. The server reads the physical emergency stop (the frame on identifier `0x001` of the stack bus, as the kinematic brain holds it) from the SPI bridge of the CM5 (`GET /estop`), joins it with the global stop above and pushes a `stop-state` message on the WebSocket (see `docs/REMOTE_API.md`) at every change and right after a client connects. The watch is off unless `HYDRA_UMC_ESTOP_WATCH_MS` is set; without it the physical part is `unknown` and the state follows the global stop alone. It is read only: it can not cause a stop and it can not release one, and a silent bridge is `unknown`, never `READY`.
+
 ## What a bridge or service does to adopt it
 
 1. Subscribe to `<prefix>/safety/estop` with QoS 1 when it connects, and after every reconnection.

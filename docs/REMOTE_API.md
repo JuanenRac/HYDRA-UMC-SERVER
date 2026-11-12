@@ -1200,6 +1200,13 @@ values today:
   2, "controllerId", "robotId", "patch", "cameraId"?, "cameraPatch"? }`.
 - `"claims"` - who controls which robot, for the clients that opened `/ws` with `?remoteApiVersion=2` (section 2m).
 - `"command-lifecycle"` - the `CommandLifecycleEvent` of an accepted command, same clients (section 2m).
+- `"stop-state"` - the one stop state of the installation, for the clients that opened `/ws` with `?remoteApiVersion=2`: `{ "type": "stop-state", "schema": 2, "state":
+  { "schema": 1, "state": "STOPPED" | "READY" | "UNKNOWN", "physical": "latched" | "ready" | "unknown", "software": "stopped" | "ready", "physicalLinkOk": boolean | null,
+  "source": "brain-telemetry" | "none", "changedAt": ms }`. It is sent right after the first `settings` message and again at every change. The physical stop is the frame on identifier `0x001` of the
+  stack bus as the kinematic brain holds it, read through the SPI bridge of the CM5 (`GET /estop`) every `HYDRA_UMC_ESTOP_WATCH_MS` milliseconds (500 to 60000; `0` or unset: off, the
+  default, and the physical part stays `unknown`); `software` is the global stop of this server (`POST /api/stop-all`, released by `POST /api/stop-all/release`; kept in memory, so it is
+  `ready` again after a restart). `STOPPED` when either is on, `READY` only when the physical stop is known to be released and the global stop is not on, otherwise `UNKNOWN`. A bridge that
+  does not answer is never read as a released stop. The server only reads: the message can not cause or release a stop.
 - `"canota_progress"` - real, live per-page flash progress from `POST
   /api/hardware/canota/flash` (section 2h), sent to every connected
   `admin` client (operators and viewers do not receive it, the same rule as the

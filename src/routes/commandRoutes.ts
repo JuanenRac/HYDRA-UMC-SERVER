@@ -57,6 +57,8 @@ export interface CommandRouteDeps {
   announceGlobalStop?: (reason: string) => boolean | undefined;
   /** Announces that an administrator released the global stop (READY). Returns whether it went out. */
   announceGlobalStopReleased?: (reason: string) => boolean;
+  /** Told when the global stop is applied (true) and when an administrator releases it (false), for the one stop state the apps show (stopState.ts). Never able to break the stop. */
+  onGlobalStopChanged?: (stopped: boolean) => void;
   /** The guard of the administrator-only routes. */
   requireAdmin?: Middleware;
   /** Tells the clients that opened the WebSocket with remoteApiVersion=2 what became of a command (a CommandLifecycleEvent). */
@@ -188,6 +190,7 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
       detail: { stoppedCount, failedCount, reservedByOthers },
     });
     onClaimsChanged?.();
+    try { deps.onGlobalStopChanged?.(true); } catch { /* the stop state of the apps must never break the stop */ }
     // Outside announcement (optional, behind a switch): after the stop is applied in memory, never before, and never able to break it.
     let announced: boolean | undefined;
     if (deps.announceGlobalStop) {
@@ -223,6 +226,7 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     } catch (error) {
       industrialLog(`GLOBAL STOP: the release announcement failed (${error instanceof Error ? error.message : "unknown error"}).`);
     }
+    try { deps.onGlobalStopChanged?.(false); } catch { /* the stop state of the apps must never break the release */ }
     industrialLog(`GLOBAL STOP released by ${user?.username ?? "unknown"} from ${req.ip ?? "unknown"}; announced: ${announced ? "yes" : "no"}.`);
     audit?.record({ type: "stop-all-release", outcome: announced ? "ok" : "failed", userId: user?.id, username: user?.username, ip: req.ip, detail: { announced } });
     res.json({ success: true, announced });

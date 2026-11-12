@@ -176,6 +176,18 @@ test("claims and command events only reach the clients that declared schema 2", 
   assert.equal(states, 1, "a command event is not a state change");
 });
 
+test("the one stop state only reaches the clients that declared schema 2, and a closed client is skipped", () => {
+  const { hub } = newHub();
+  const modern = fakeClient({ schema: 2 });
+  const legacy = fakeClient({ schema: 1 });
+  const closedModern = fakeClient({ schema: 2, open: false });
+  for (const c of [modern, legacy, closedModern]) hub.wsClients.add(c.client);
+  hub.broadcastStopState({ schema: 1, state: "STOPPED", physical: "latched", software: "ready" });
+  assert.deepEqual(JSON.parse(modern.sent[0]), { type: "stop-state", schema: 2, state: { schema: 1, state: "STOPPED", physical: "latched", software: "ready" } });
+  assert.equal(legacy.sent.length, 0);
+  assert.equal(closedModern.sent.length, 0);
+});
+
 // ---- the endpoint ---------------------------------------------------------------------------------------------------------------------------
 
 function tokenFor(username: string, overrides: Record<string, unknown> = {}): string {

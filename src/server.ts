@@ -52,6 +52,8 @@ import { SecurityConfig, certFingerprint, resolveBleMode, resolveTls, securityEn
 import { applyNewInstallTlsDefault } from "./newInstallTls";
 import { resolveMqttMode, type MqttBridge } from "./mqttBridge";
 import { startMqttBridge } from "./mqttStart";
+import { StopState, bridgeFetcher, stopWatchIntervalMs } from "./stopState";
+import { upstreamHeaders } from "./upstreamAuth";
 import { readSecret } from "./mqttBridge";
 import { startBle } from "./ble/start";
 import type { BleGateway } from "./ble/bleGateway";
@@ -294,6 +296,13 @@ async function startServer() {
     onStateChanged: () => { bleGateway?.publishState(); mqttBridge?.publishState(); },
   });
   const { wsClients, broadcastSettings, broadcastRobotDelta } = hub;
+  // One stop state for the apps: the physical emergency stop as the brain holds it (read from the SPI bridge of the CM5 every HYDRA_UMC_ESTOP_WATCH_MS, off at 0, the default)
+  // together with the global stop of this server. Read only: nothing here can cause or release a stop.
+  const stopState = new StopState({
+    fetchPhysical: bridgeFetcher(SPI_BRIDGE_URL, () => upstreamHeaders("spi-bridge"), SPI_BRIDGE_VERSION_TIMEOUT_MS),
+    onChange: (snapshot) => hub.broadcastStopState(snapshot),
+  });
+  if (SPI_BRIDGE_URL) stopState.start(stopWatchIntervalMs(process.env));
 
   const playback = createPlayback({ getSettings, queueSettingsWrite, broadcastRobotDelta });
   const {
@@ -444,6 +453,7 @@ async function startServer() {
     // A global stop is also announced on the MQTT bridge only when an administrator allowed it (safety.publishGlobalStop, off by default).
     announceGlobalStop: () => (security.globalStopPublished() ? mqttBridge?.publishSafety("SAFE_STOP", "global stop") ?? false : undefined),
     announceGlobalStopReleased: () => (security.globalStopPublished() ? mqttBridge?.publishSafety("READY", "global stop released") ?? false : false),
+    onGlobalStopChanged: (stopped) => stopState.setSoftware(stopped),
     requireAdmin,
   });
 
@@ -659,7 +669,7 @@ async function startServer() {
   }
 
   attachWebSocketServer(httpServer, {
-    wsClients, getSettings, applySettingsUpdate, WS_QUERY_TOKEN_ALLOWED, twinWsUrl: () => (security.twinRelayEnabled() ? TWIN_WS_URL : ""),
+    wsClients, getSettings, applySettingsUpdate, WS_QUERY_TOKEN_ALLOWED, twinWsUrl: () => (security.twinRelayEnabled() ? TWIN_WS_URL : ""), getStopState: () => stopState.snapshot(),
     adminWriteAllowed: (address) => { const networks = security.trustedNetworks(); return !networks.enabled || classifyAddress(address, networks) === "local"; },
   });
 

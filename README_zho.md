@@ -241,6 +241,7 @@ CORS 通过一个可配置的白名单（`CORS_ALLOWED_ORIGINS`，见下文“�
 - `HYDRA_UMC_HEALTH_OPEN=1`（`health.open`）- `GET /health` 无需登录即可返回精简的健康报告（不含版本、主机或计数）；关闭时返回 `404`。
 - `HYDRA_UMC_ECOSYSTEM_HEALTH=1`（`ecosystemHealth.enabled`）- `GET /api/ecosystem/health` 返回生态系统各服务的健康状况；关闭时返回 `404`。
 - `HYDRA_UMC_TWIN_RELAY=1`（`twinRelay.enabled`）- `WebSocket /api/twin/ws` 将孪生体的实时状态（`HYDRA_UMC_TWIN_WS_URL`）转发给面板；关闭时套接字以 `1013` 关闭。
+- `HYDRA_UMC_ESTOP_WATCH_MS=2000`（500 到 60000；`0` 或未设置：关闭）- 服务器通过 CM5 的 SPI 桥（`GET /estop`）读取运动学大脑的急停状态，并通过 `/ws` 推送一条 `stop-state` 消息（物理急停与全局停止合并）；只读，桥无响应时为 `UNKNOWN`，绝不会是 `READY`。
 - `HYDRA_UMC_SERVICE_IDENTITY=1`（`auth.serviceIdentity.enabled`） - 此服务器对各服务的调用（健康探测、中继、停止中继、接管）会带上它自己签发的短期令牌（使用 `JWT_SECRET` 的 HS256，有效期六十秒），已开启身份密钥的服务会要求它；有自己令牌的服务仍收到原令牌，`JWT_SECRET` 未设置、为示例值或过短时不会签发任何令牌；关闭时不会向任何调用添加内容。开启需要确认，并且必须在向任何服务提供身份密钥之前开启。
 - `HYDRA_UMC_INFO_TICKETS=1` （`infoTickets.enabled`） - `POST /api/info/ticket` 签发带签名的票据（地址中的 `?ticket=`），在 `HYDRA_UMC_INFO_AUTH=required` 关闭这些只读信息路由（`/metrics`、系统指标、监控器、生态系统状态）后，仍让无法发送令牌的采集器或仪表板读取；关闭时该路由返回 `404`，票据会被忽略。
 - `HYDRA_UMC_DEVICE_TOKENS=1` （`deviceTokens.enabled`） - `POST /api/admin/device-tokens` 为单个设备（Compute Module 的屏幕）签发带签名的令牌；`POST /api/device/login` 将其换成一个短时登录，并在令牌过期或被撤销（`DELETE /api/admin/device-tokens/{id}`）之前持续续期；关闭时，这些路由返回 `404`。

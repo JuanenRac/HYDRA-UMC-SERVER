@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **One stop state for the apps, joining the physical emergency stop with the global stop:** `src/stopState.ts` reads the stop as the kinematic brain holds it (the frame on identifier `0x001` of the stack bus) from the SPI bridge of the CM5 (`GET /estop`) every `HYDRA_UMC_ESTOP_WATCH_MS` milliseconds (500 to 60000; off at `0`, the default), joins it with the global stop of the server and pushes a `stop-state` message on `/ws` (clients with `remoteApiVersion=2`) at every change and right after the first `settings` message. `STOPPED` when either stop is on, `READY` only when the physical stop is known to be released and the global stop is not on, `UNKNOWN` otherwise; a bridge that is silent, fails or answers something unusable is never read as a released stop, and releasing the global stop does not release a latched physical one. Read only: nothing here can cause or release a stop. Unit tests with a fake bridge; not run against a real brain.
+
 ## [0.8.2.9] - More tests for the live connection hub, the Bluetooth calls and the administration routes: the WebSocket hub is checked for what each kind of client hears (the credentials of the cameras only for an administrator, the small patch only for a client that declare
 
 All notable changes to this project are documented here.

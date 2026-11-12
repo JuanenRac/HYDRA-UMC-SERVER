@@ -144,7 +144,15 @@ export function createWsHub(deps: {
     }
   }
 
-  return { wsClients, broadcastSettings, broadcastRobotDelta, broadcastClaims, broadcastCommandLifecycle };
+  /** Tells the clients that declared schema 2 the one stop state (the physical stop together with the global stop, stopState.ts). */
+  function broadcastStopState(state: unknown) {
+    const msg = JSON.stringify({ type: "stop-state", schema: 2, state });
+    for (const client of wsClients) {
+      if (client.readyState === WebSocket.OPEN && (client as any).schema >= 2) client.send(msg);
+    }
+  }
+
+  return { wsClients, broadcastSettings, broadcastRobotDelta, broadcastClaims, broadcastCommandLifecycle, broadcastStopState };
 }
 
 export type WsHub = ReturnType<typeof createWsHub>;
@@ -176,6 +184,8 @@ export function attachWebSocketServer(
     adminWriteAllowed?: (address: string | undefined) => boolean;
     /** The ws:// address of the push route of the twin, or a function that reads it. Empty or absent: `/api/twin/ws` answers that the twin is not configured. */
     twinWsUrl?: string | (() => string);
+    /** The one stop state for a connection that declared schema 2: it is sent right after the first settings push, so the app does not wait for a change. */
+    getStopState?: () => unknown;
   },
 ) {
   const { wsClients, getSettings, applySettingsUpdate } = deps;
@@ -286,6 +296,9 @@ export function attachWebSocketServer(
       // controller in a swarm) doesn't have to also do a separate REST GET
       // /api/settings just to get its first real payload.
       ws.send(JSON.stringify({ type: "settings", payload: decoded?.role === "admin" ? getSettings() : redactSettingsSecrets(getSettings()) }));
+      if ((ws as any).schema >= 2 && deps.getStopState) {
+        try { ws.send(JSON.stringify({ type: "stop-state", schema: 2, state: deps.getStopState() })); } catch { /* the first push is not worth a connection */ }
+      }
 
       ws.on("message", async (raw) => {
         try {
