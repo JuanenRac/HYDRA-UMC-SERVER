@@ -73,6 +73,9 @@ export const SAFETY_ZONES_URL = (process.env.HYDRA_UMC_SAFETY_ZONES_URL || "").r
 // The URTC tool changer service (its HTTP API, e.g. http://127.0.0.1:PORT): the reset of the arm state of a tool changer (POST /api/tool-arms/reset) is forwarded to its
 // POST /atc/reset with the signed-in administrator's own token. Off (503) until the address is set, and the route itself stays off until its switch (atc.resetEnabled) is on.
 export const ATC_URL = (process.env.HYDRA_UMC_ATC_URL || "").replace(/\/$/, "");
+// The push route of the twin (its own WebSocket listener, e.g. ws://127.0.0.1:8112/twin/ws): `/api/twin/ws` of this server opens it with the signed-in person's own token
+// (a browser cannot send the header the twin asks for) and passes on what the twin pushes. Off (the route says the twin is not configured) until the address is set.
+export const TWIN_WS_URL = (process.env.HYDRA_UMC_TWIN_WS_URL || "").trim();
 export const CONNECTOR_HUB_TIMEOUT_MS = Math.min(
   Math.max(Number(process.env.HYDRA_UMC_CONNECTOR_HUB_TIMEOUT_MS) || 4000, 250),
   10000,

@@ -14,6 +14,7 @@ import { authFailuresTotal, setWsClientsSource } from "./metrics";
 import { JWT_SECRET } from "./auth";
 import { verifyAccessToken } from "./jwtKeys";
 import { setupDiscovery } from "./runtime";
+import { TWIN_RELAY_PATH, handleTwinRelay, type SessionCheck } from "./twinRelay";
 
 export function createWsHub(deps: {
   setSettings: (payload: any) => void;
@@ -148,6 +149,21 @@ export function createWsHub(deps: {
 
 export type WsHub = ReturnType<typeof createWsHub>;
 
+/** The same session check as the opening of `/ws`: a valid signature, and an account that still exists with the same generation and id. */
+export function verifyWsSession(token: string): Promise<SessionCheck> {
+  return new Promise((resolve) => {
+    verifyAccessToken(token, JWT_SECRET, (err: any, decoded: any) => {
+      if (err) return resolve({ ok: false, reason: "Invalid token" });
+      const stillValid = (): boolean => {
+        const user = findUser(decoded?.username || "");
+        return !!user && effectiveTokenVersion(user) === decoded?.tokenVersion && effectiveId(user) === decoded?.id;
+      };
+      if (!stillValid()) return resolve({ ok: false, reason: "this session is no longer valid, please log in again" });
+      resolve({ ok: true, recheck: stillValid });
+    });
+  });
+}
+
 /** Attaches /ws to the shared listener: token check, the first settings push, the admin-only settings message and the heartbeat. */
 export function attachWebSocketServer(
   httpServer: http.Server,
@@ -158,15 +174,30 @@ export function attachWebSocketServer(
     WS_QUERY_TOKEN_ALLOWED: boolean | (() => boolean);
     /** Whether a connection from this address may overwrite the settings (false: the trusted networks keep that for the house and the VPN). Optional: without it every administrator may. */
     adminWriteAllowed?: (address: string | undefined) => boolean;
+    /** The ws:// address of the push route of the twin, or a function that reads it. Empty or absent: `/api/twin/ws` answers that the twin is not configured. */
+    twinWsUrl?: string | (() => string);
   },
 ) {
   const { wsClients, getSettings, applySettingsUpdate } = deps;
   const queryTokenAllowed = (): boolean => (typeof deps.WS_QUERY_TOKEN_ALLOWED === "function" ? deps.WS_QUERY_TOKEN_ALLOWED() : deps.WS_QUERY_TOKEN_ALLOWED);
   // A client may send its token as a subprotocol (`Sec-WebSocket-Protocol: hydra.bearer, <token>`), which keeps it out of the address that proxies and logs record; the server
   // answers with the `hydra.bearer` subprotocol only. `/ws?token=` is refused unless the installation opts back in with HYDRA_UMC_WS_QUERY_TOKEN=allow.
-  const wss = new WebSocketServer({ server: httpServer, path: "/ws", handleProtocols: protocols => (protocols.has(WS_TOKEN_SUBPROTOCOL) ? WS_TOKEN_SUBPROTOCOL : false) });
+  // Two paths share this listener (`/ws` and the relay of the twin), so the path is checked here and not with the `path` option, which would refuse the second.
+  const wss = new WebSocketServer({
+    server: httpServer,
+    verifyClient: (info: { req: http.IncomingMessage }, done: (ok: boolean, code?: number, message?: string) => void) => {
+      const pathname = (info.req.url || "").split("?")[0];
+      if (pathname === "/ws" || pathname === TWIN_RELAY_PATH) done(true);
+      else done(false, 400, "Bad Request");
+    },
+    handleProtocols: protocols => (protocols.has(WS_TOKEN_SUBPROTOCOL) ? WS_TOKEN_SUBPROTOCOL : false),
+  });
 
   wss.on("connection", (ws, req) => {
+    if ((req.url || "").split("?")[0] === TWIN_RELAY_PATH) {
+      handleTwinRelay(ws, req, { twinWsUrl: typeof deps.twinWsUrl === "function" ? deps.twinWsUrl() : deps.twinWsUrl ?? "", verifySession: verifyWsSession });
+      return;
+    }
     // The token: the subprotocol; the query string (?token=...) only when the installation opted back in for the clients that have not moved yet
     const url = new URL(req.url || "", "http://localhost");
     const subprotocolToken = wsTokenFromSubprotocol(req.headers["sec-websocket-protocol"]);
