@@ -20,7 +20,7 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/Framework-Express-000000.svg" alt="Framework">
   <img src="https://img.shields.io/badge/Language-TypeScript-3178C6.svg" alt="Language">
   <img src="https://img.shields.io/badge/Protocol-WebSocket-lightgrey.svg" alt="Protocol">
-  <img src="https://img.shields.io/badge/Tests-993%20passing-2ea44f.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-996%20passing-2ea44f.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Version-0.8.2.8-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
@@ -41,7 +41,7 @@ GPL-3.0-or-later - see LICENSE
 |---|---|
 | Version | `0.8.2.8` |
 | Maturity | Functional |
-| Tests | 993 (`npm run test:unit`) |
+| Tests | 996 (`npm run test:unit`) |
 | Stack | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
 | Target | The Raspberry Pi CM5 of a HYDRA-UMC cell |
 | On real hardware | Run on a bench setup: the honesty check above says which parts ran on real hardware |
@@ -57,7 +57,7 @@ Each line is one part of this repository and the light says how far it is today.
 | Area | State | What it means here |
 |---|---|---|
 | Software | 🟡 | Works for its main purpose; the honesty check above lists what is still missing |
-| Tests | 🟢 | 993 automated tests, run on every change |
+| Tests | 🟢 | 996 automated tests, run on every change |
 | Real hardware | 🟡 | Run on a bench setup: the honesty check above says which parts ran on real hardware |
 | Interface and protocols | 🟡 | The routes or messages it offers are documented and tested with a client; not every client has used them yet |
 | Integration | 🟡 | It runs together with the other services on the CM5 test bench and its messages follow the shared contracts of the SDK |
@@ -421,7 +421,7 @@ The server listens on `0.0.0.0:3000`; all its state lives in `data/`. This repos
 
 ## 🧪 Testing
 
-993 automated tests run with `npm run test:unit`. On top of them `npm test` runs the OpenAPI check and 29 end-to-end contract scripts under `tools/` against a live instance of this server (discovery, sign-in without and with credentials, production bootstrap, robot commands and ownership, refresh tokens, voice relay and its error paths, playback, the global stop, Bluetooth and MQTT bridges, camera media, the AI and connector-hub relays, viewer role and more); all of them pass. None needs hardware.
+996 automated tests run with `npm run test:unit`. On top of them `npm test` runs the OpenAPI check and 29 end-to-end contract scripts under `tools/` against a live instance of this server (discovery, sign-in without and with credentials, production bootstrap, robot commands and ownership, refresh tokens, voice relay and its error paths, playback, the global stop, Bluetooth and MQTT bridges, camera media, the AI and connector-hub relays, viewer role and more); all of them pass. None needs hardware.
 
 The CI runs `HYDRA_UMC_CI=1 python tools/ci_validate.py`, which checks the manifest, the documents, the eight READMEs and the pictures.
 
