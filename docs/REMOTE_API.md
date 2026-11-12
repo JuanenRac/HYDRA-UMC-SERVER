@@ -677,11 +677,11 @@ deployment, keep Voice UI on `127.0.0.1:8091` and do not expose its port.
   basename; `500` with `{ "error": <message> }` on an unexpected write
   failure.
 
-## 2h. Hardware bridge: real CM5<->STM32H745 SPI-OTA relay
+## 2h. Hardware bridge: real CM5<->STM32H757 SPI-OTA relay
 
 Relays to the local `spi_bridge` HTTP service
 (`HYDRA-UMC/src/cm5_host/spi_bridge/`) - the real SPI1 + `HYDRA_DATA_READY`
-GPIO link to the STM32H745 "Kinematic Brain", the same link
+GPIO link to the STM32H757 "Kinematic Brain", the same link
 `HYDRA-UMC-STUDIO`'s Flasher/Tester read once `settings.canOta.transport
 === 'hardware'` (previously always `'mock'`). Both routes answer `503`
 when `HYDRA_UMC_SPI_BRIDGE_URL` is unset, the same "never a guessed
@@ -1223,7 +1223,7 @@ values today:
 - `"canota_progress"` - real, live per-page flash progress from `POST
   /api/hardware/canota/flash` (section 2h), sent to every connected
   `admin` client (operators and viewers do not receive it, the same rule as the
-  flash itself) while a real STM32H745 flash cycle is in progress: `{ "type":
+  flash itself) while a real STM32H757 flash cycle is in progress: `{ "type":
   "canota_progress", "payload": { "phase", "pages_sent", "pages_total",
   "percent", "error" } }`.
 
@@ -1238,10 +1238,10 @@ POST/broadcast ping-pong on every single change.
 
 ## 4. What this API does NOT cover (yet)
 
-- **Real STM32H745 hardware verification** - `POST /api/hardware/canota/flash`
+- **Real STM32H757 hardware verification** - `POST /api/hardware/canota/flash`
   and `GET /api/hardware/canota/version` (section 2h) are a real relay to a
   real local `spi_bridge` service with a real, unit-tested SPI-OTA state
-  machine - but no populated STM32H745 board exists yet (no schematic, see
+  machine - but no populated STM32H757 board exists yet (no schematic, see
   `HYDRA-UMC/hardware/PCB/kinematic_brain_stm32h745/README.md`), so none of
   this has been exercised against real silicon. `Flasher.tsx`/`Tester.tsx`
   (`src/lib/canOta.ts`) still default to `transport: 'mock'`; `'hardware'`

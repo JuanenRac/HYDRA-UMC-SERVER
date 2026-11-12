@@ -27,7 +27,7 @@ GPL-3.0-or-later - see LICENSE
 
 ---
 
-> **诚实检查——今天真正可运行的部分：** Express + WebSocket 引擎、其 REST 和 WebSocket 接口（58 条路径上的 63 个操作）、带刷新令牌轮换和 scrypt 的 JWT 登录、mDNS 发现、机器人预约与修订、播放，以及通往 CAN-OTA、遥测、语音、本地 AI 服务和连接器中枢的中继都是真实的，并针对测试自己启动的本服务器真实实例做过测试：1026 个单元测试加 29 个端到端契约脚本，全部通过。与硬件相关、此处未验证的部分：到带 STM32H745 板的真实 HYDRA-UMC CM5 的连接，这是真实代码，但只通过 API 和契约层验证过。TLS、蓝牙 LE、MQTT 桥以及 Prometheus 和 Grafana 栈都是真实的、可选的，默认关闭。
+> **诚实检查——今天真正可运行的部分：** Express + WebSocket 引擎、其 REST 和 WebSocket 接口（58 条路径上的 63 个操作）、带刷新令牌轮换和 scrypt 的 JWT 登录、mDNS 发现、机器人预约与修订、播放，以及通往 CAN-OTA、遥测、语音、本地 AI 服务和连接器中枢的中继都是真实的，并针对测试自己启动的本服务器真实实例做过测试：1026 个单元测试加 29 个端到端契约脚本，全部通过。与硬件相关、此处未验证的部分：到带 STM32H757 板的真实 HYDRA-UMC CM5 的连接，这是真实代码，但只通过 API 和契约层验证过。TLS、蓝牙 LE、MQTT 桥以及 Prometheus 和 Grafana 栈都是真实的、可选的，默认关闭。
 
 ---
 
@@ -398,7 +398,7 @@ HYDRA-UMC-SERVER/
 
 **目前已知的限制**
 
-* 与带 STM32H745 板的真实 CM5 的连接（`spi_bridge`）是真实的代码，但只通过 API 和契约层验证过；从来没有实体板卡来完成最后一跳。
+* 与带 STM32H757 板的真实 CM5 的连接（`spi_bridge`）是真实的代码，但只通过 API 和契约层验证过；从来没有实体板卡来完成最后一跳。
 * 服务器监听所有接口（`0.0.0.0`）；目前还没有监听地址开关，因此限制暴露面的是防火墙或上面的访问开关。
 * 开发环境（`NODE_ENV` 不是 `production`）使用内置签名密钥、`admin`/`admin` 账户和开放的 CORS 策略，各自带警告；生产环境拒绝它们。
 * TLS、蓝牙 LE 和 MQTT 桥是可选的，默认关闭。
@@ -430,7 +430,7 @@ HYDRA-UMC-SERVER/
 
 **直接相关**
 - **[HYDRA-UMC-VOICE-UI](https://github.com/JuanenRac/HYDRA-UMC-VOICE-UI)** —— 本服务器通过回环连接向其中继有限的、经过认证的语音对话轮次,网关令牌始终保留在服务器端,因此语音永远不会直接变成机器人指令。
-- **[HYDRA-UMC](https://github.com/JuanenRac/HYDRA-UMC)** —— 机器人手臂主板设计(尚无已组装的电路板);本服务器自身的 `spi_bridge` 服务计划通过 CM5↔STM32H745 的 SPI-OTA 连接与之通信(仅针对模拟替身测试)。
+- **[HYDRA-UMC](https://github.com/JuanenRac/HYDRA-UMC)** —— 机器人手臂主板设计(尚无已组装的电路板);本服务器自身的 `spi_bridge` 服务计划通过 CM5↔STM32H757 的 SPI-OTA 连接与之通信(仅针对模拟替身测试)。
 
 **生态系统中的其他项目**
 

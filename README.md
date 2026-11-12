@@ -27,7 +27,7 @@ GPL-3.0-or-later - see LICENSE
 
 ---
 
-> **Honesty check - what actually runs today:** the Express + WebSocket engine, its REST and WebSocket surface (63 operations in 58 paths), JWT sign-in with refresh-token rotation and scrypt, mDNS discovery, robot reservations and revisions, playback, and the relays to CAN-OTA, telemetry, voice, the local AI services and the connector hub are real and tested against a live instance of this same server that the tests start themselves: 1026 unit tests plus 29 end-to-end contract scripts, all passing. What is hardware-adjacent and not verified here: the link to a real HYDRA-UMC CM5 with an STM32H745 board, which is real code exercised only through the API and contract layer. TLS, Bluetooth LE, the MQTT bridge and the Prometheus and Grafana stack are real, optional and off by default.
+> **Honesty check - what actually runs today:** the Express + WebSocket engine, its REST and WebSocket surface (63 operations in 58 paths), JWT sign-in with refresh-token rotation and scrypt, mDNS discovery, robot reservations and revisions, playback, and the relays to CAN-OTA, telemetry, voice, the local AI services and the connector hub are real and tested against a live instance of this same server that the tests start themselves: 1026 unit tests plus 29 end-to-end contract scripts, all passing. What is hardware-adjacent and not verified here: the link to a real HYDRA-UMC CM5 with an STM32H757 board, which is real code exercised only through the API and contract layer. TLS, Bluetooth LE, the MQTT bridge and the Prometheus and Grafana stack are real, optional and off by default.
 
 ---
 
@@ -526,7 +526,7 @@ HYDRA-UMC-SERVER/
 
 **Known limits today**
 
-* The link to a real CM5 with an STM32H745 board (`spi_bridge`) is real code that was exercised through the API and contract layer only; there was never a physical board to close the last hop.
+* The link to a real CM5 with an STM32H757 board (`spi_bridge`) is real code that was exercised through the API and contract layer only; there was never a physical board to close the last hop.
 * The server listens on all interfaces (`0.0.0.0`); there is no switch for the listening address yet, so a firewall or the access switches above are what limit exposure.
 * In development (`NODE_ENV` not `production`) a built-in signing key, the account `admin`/`admin` and an open CORS policy are used, each with a warning; production refuses them.
 * TLS, Bluetooth LE and the MQTT bridge are optional and off by default.
@@ -558,7 +558,7 @@ This project is part of the HYDRA-UMC robotics ecosystem by the same author (Jua
 
 **Directly Related**
 - **[HYDRA-UMC-VOICE-UI](https://github.com/JuanenRac/HYDRA-UMC-VOICE-UI)** — this server relays bounded, authenticated voice turns to it over a loopback connection, retaining the gateway token server-side so voice never becomes a direct robot command.
-- **[HYDRA-UMC](https://github.com/JuanenRac/HYDRA-UMC)** — the robot-arm motherboard design (no populated board yet); this server's own `spi_bridge` service is meant to talk to it over the CM5↔STM32H745 SPI-OTA link (tested against fakes only).
+- **[HYDRA-UMC](https://github.com/JuanenRac/HYDRA-UMC)** — the robot-arm motherboard design (no populated board yet); this server's own `spi_bridge` service is meant to talk to it over the CM5↔STM32H757 SPI-OTA link (tested against fakes only).
 
 **Also Part of the Ecosystem**
 

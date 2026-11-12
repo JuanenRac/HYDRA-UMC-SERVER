@@ -27,7 +27,7 @@ GPL-3.0-or-later - see LICENSE
 
 ---
 
-> **Comprobación de honestidad - qué funciona realmente hoy:** el motor Express + WebSocket, su superficie REST y WebSocket (63 operaciones en 58 rutas), el inicio de sesión JWT con rotación del token de refresco y scrypt, el descubrimiento mDNS, las reservas y revisiones de robots, la reproducción, y los relés hacia CAN-OTA, telemetría, voz, los servicios de IA locales y el connector hub son reales y se prueban contra una instancia real de este mismo servidor que arrancan las propias pruebas: 1026 pruebas unitarias más 29 scripts de contrato de extremo a extremo, todos pasan. Lo que roza el hardware y no se verifica aquí: el enlace con una CM5 HYDRA-UMC real con una placa STM32H745, que es código real ejercitado solo por la capa de API y contratos. TLS, Bluetooth LE, el puente MQTT y la pila Prometheus y Grafana son reales, opcionales y están apagados por defecto.
+> **Comprobación de honestidad - qué funciona realmente hoy:** el motor Express + WebSocket, su superficie REST y WebSocket (63 operaciones en 58 rutas), el inicio de sesión JWT con rotación del token de refresco y scrypt, el descubrimiento mDNS, las reservas y revisiones de robots, la reproducción, y los relés hacia CAN-OTA, telemetría, voz, los servicios de IA locales y el connector hub son reales y se prueban contra una instancia real de este mismo servidor que arrancan las propias pruebas: 1026 pruebas unitarias más 29 scripts de contrato de extremo a extremo, todos pasan. Lo que roza el hardware y no se verifica aquí: el enlace con una CM5 HYDRA-UMC real con una placa STM32H757, que es código real ejercitado solo por la capa de API y contratos. TLS, Bluetooth LE, el puente MQTT y la pila Prometheus y Grafana son reales, opcionales y están apagados por defecto.
 
 ---
 
@@ -557,7 +557,7 @@ HYDRA-UMC-SERVER/
 
 **Límites conocidos hoy**
 
-* El enlace con una CM5 real con una placa STM32H745 (`spi_bridge`) es código real que solo se ha ejercitado por la capa de API y de contratos; nunca hubo una placa física para cerrar el último salto.
+* El enlace con una CM5 real con una placa STM32H757 (`spi_bridge`) es código real que solo se ha ejercitado por la capa de API y de contratos; nunca hubo una placa física para cerrar el último salto.
 * El servidor escucha en todas las interfaces (`0.0.0.0`); todavía no hay interruptor para la dirección de escucha, así que un cortafuegos o los interruptores de acceso de arriba son lo que limita la exposición.
 * En desarrollo (`NODE_ENV` distinto de `production`) se usan una clave de firma integrada, la cuenta `admin`/`admin` y una política CORS abierta, cada una con aviso; producción las rechaza.
 * TLS, Bluetooth LE y el puente MQTT son opcionales y están apagados por defecto.
@@ -589,7 +589,7 @@ Este proyecto es parte del ecosistema de robótica HYDRA-UMC del mismo autor (Ju
 
 **Directamente Relacionados**
 - **[HYDRA-UMC-VOICE-UI](https://github.com/JuanenRac/HYDRA-UMC-VOICE-UI)** — este servidor retransmite turnos de voz autenticados y acotados hacia él por conexión loopback, conservando el token de la puerta de enlace en el servidor para que la voz nunca se convierta en un comando de robot directo.
-- **[HYDRA-UMC](https://github.com/JuanenRac/HYDRA-UMC)** — el diseño de la placa madre del brazo robótico (todavía sin placa poblada); el propio servicio `spi_bridge` de este servidor está pensado para hablar con ella por el enlace SPI-OTA CM5↔STM32H745 (probado solo con dobles de prueba).
+- **[HYDRA-UMC](https://github.com/JuanenRac/HYDRA-UMC)** — el diseño de la placa madre del brazo robótico (todavía sin placa poblada); el propio servicio `spi_bridge` de este servidor está pensado para hablar con ella por el enlace SPI-OTA CM5↔STM32H757 (probado solo con dobles de prueba).
 
 **También Forma Parte del Ecosistema**
 
