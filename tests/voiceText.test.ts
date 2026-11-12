@@ -35,3 +35,31 @@ test("English keeps the sentences the server always spoke", () => {
     "Robot 3 is registered on this Server. 2 controllers, 1 robot configured. CPU load 12%, memory 40%, uptime 3600s.",
   );
 });
+
+test("a registered robot's last news is told in each language, and an unregistered one gets none", () => {
+  for (const language of VOICE_LANGUAGES) {
+    const base = voiceStatusText({ ...FACTS, robotId: 7, robotRegistered: true }, language);
+    const live = voiceStatusText({ ...FACTS, robotId: 7, robotRegistered: true, robotNews: { state: "live", ageS: 12 } }, language);
+    const stale = voiceStatusText({ ...FACTS, robotId: 7, robotRegistered: true, robotNews: { state: "stale", ageS: 95 } }, language);
+    const unknown = voiceStatusText({ ...FACTS, robotId: 7, robotRegistered: true, robotNews: { state: "unknown" } }, language);
+    assert.ok(live.includes("12") && !live.includes("95"), language);
+    assert.ok(stale.includes("95"), language);
+    assert.equal(new Set([base, live, stale, unknown]).size, 4, `${language}: each state has its own sentence`);
+    assert.ok(live.length > base.length && unknown.length > base.length, language);
+    // the news of a robot the server does not have is never told
+    assert.equal(
+      voiceStatusText({ ...FACTS, robotId: 7, robotRegistered: false, robotNews: { state: "live", ageS: 1 } }, language),
+      voiceStatusText({ ...FACTS, robotId: 7, robotRegistered: false }, language),
+      language,
+    );
+  }
+  assert.equal(
+    voiceStatusText({ ...FACTS, robotId: 3, robotRegistered: true, robotNews: { state: "stale", ageS: 40 } }, "en"),
+    "Robot 3 is registered on this Server. It has been silent for 40s. 2 controllers, 1 robot configured. CPU load 12%, memory 40%, uptime 3600s.",
+  );
+  // no news given: the sentence is what it always was
+  assert.equal(
+    voiceStatusText({ ...FACTS, robotId: 3, robotRegistered: true }, "en"),
+    "Robot 3 is registered on this Server. 2 controllers, 1 robot configured. CPU load 12%, memory 40%, uptime 3600s.",
+  );
+});

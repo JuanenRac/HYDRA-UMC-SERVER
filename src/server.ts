@@ -84,7 +84,7 @@ import { PushDevices, PushService, emitPush } from "./pushNotifications";
 import { LiveActivities, LiveActivityService, liveBus, snapshotFromRobot, emitRobotSnapshot, type RobotSnapshot } from "./liveActivity";
 import type { PushFile } from "./securityConfig";
 import { LastSeenMemory, collectEcosystemHealth } from "./ecosystemHealth";
-import { RobotLivenessTracker } from "./robotLiveness";
+import { RobotLivenessTracker, staleAfterFrom } from "./robotLiveness";
 import { connectionTracker, setRecordAddress } from "./connections";
 import { registerTotpRoutes } from "./routes/totpRoutes";
 import { registerSettingsRoutes } from "./routes/settings";
@@ -418,7 +418,12 @@ async function startServer() {
 
   registerSettingsRoutes(app, { authenticate, requireAdmin, loadFullSettingsFromDisk, applySettingsUpdate, getSettings });
 
-  registerAssistantRoutes(app, { authenticate, getSettings, security, onVoiceEvent: (event) => { recordVoiceEvent(ingest().voice, event, ingestEnv(), industrialLog); }, nodeState: (node) => (switchOn(SWITCH_ANOMALY_FEED, ingestEnv()) ? ingest().anomaly.stateOfNode(node) : "off") });
+  registerAssistantRoutes(app, { authenticate, getSettings, security, onVoiceEvent: (event) => { recordVoiceEvent(ingest().voice, event, ingestEnv(), industrialLog); }, nodeState: (node) => (switchOn(SWITCH_ANOMALY_FEED, ingestEnv()) ? ingest().anomaly.stateOfNode(node) : "off"),
+    robotNews: (robotId) => {
+      const staleAfterS = staleAfterFrom((loadServerConfig() as { liveness?: { staleAfterS?: unknown } }).liveness?.staleAfterS);
+      const entry = livenessTracker.report(getSettings(), staleAfterS).robots.find((r) => r.robot_id === robotId);
+      return entry ? { state: entry.state, ageS: entry.age_s } : undefined;
+    } });
 
   registerCommandRoutes(app, {
     authenticate,

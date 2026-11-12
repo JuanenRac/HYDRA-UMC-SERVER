@@ -11,14 +11,14 @@ import { industrialLog } from "../runtime";
 import { VOICE_UI_URL, VOICE_UI_TOKEN, VOICE_UI_TIMEOUT_MS, validateVoiceTurnPayload, isAssistantReplyForRequest } from "../upstreamConfig";
 import type { SecurityConfig } from "../securityConfig";
 import { identityHeader } from "../serviceIdentity";
-import { voiceLanguageOf, voiceStatusText, nodeStateText, type NodeState } from "../voiceText";
+import { voiceLanguageOf, voiceStatusText, nodeStateText, type NodeState, type RobotNews } from "../voiceText";
 import { judgeConfirmationResult, subjectOf, validateConfirmRequest } from "../voiceConfirm";
 import type { VoiceEvent } from "../voiceChain";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
-export function registerAssistantRoutes(app: express.Express, deps: { authenticate: Middleware; getSettings: () => any; security: SecurityConfig; onVoiceEvent?: (event: VoiceEvent) => void; nodeState?: (node: string) => NodeState }): void {
-  const { authenticate, getSettings, security, onVoiceEvent, nodeState } = deps;
+export function registerAssistantRoutes(app: express.Express, deps: { authenticate: Middleware; getSettings: () => any; security: SecurityConfig; onVoiceEvent?: (event: VoiceEvent) => void; nodeState?: (node: string) => NodeState; robotNews?: (robotId: number) => RobotNews | undefined }): void {
+  const { authenticate, getSettings, security, onVoiceEvent, nodeState, robotNews } = deps;
   // Real spoken "status" text for the voice assistant's own status intent -
   // see this function's one real call site (POST /api/voice/turn) for why
   // this exists at all. Reuses the exact same real sources
@@ -26,9 +26,9 @@ export function registerAssistantRoutes(app: express.Express, deps: { authentica
   // GET /api/watch/system-status (CPU/memory/uptime) already read from -
   // never a second, competing computation of either. `robotIdEntity`, when
   // present ("status of robot N"), is answered honestly from this Server's
-  // own real registered-robot list - there is no real per-robot LIVE
-  // telemetry available at this relay step yet, so this never fabricates
-  // an online/offline claim for one, only whether it's actually registered.
+  // own real registered-robot list and, for a registered one, from when the
+  // server last had news of it (the signal of life it keeps per robot): it
+  // never claims the machine is online, only what this server has heard.
   async function buildVoiceStatusText(entities: unknown, locale: unknown): Promise<string> {
     const s = getSettings();
     const controllers = Array.isArray(s?.controllers) ? s.controllers : [];
@@ -56,7 +56,7 @@ export function registerAssistantRoutes(app: express.Express, deps: { authentica
         break;
       }
     }
-    return voiceStatusText({ ...facts, robotId, robotRegistered: found }, locale);
+    return voiceStatusText({ ...facts, robotId, robotRegistered: found, ...(found && robotNews ? { robotNews: robotNews(robotId) } : {}) }, locale);
   }
 
   // Authenticated, non-actuating relay for a recognised voice turn. The
