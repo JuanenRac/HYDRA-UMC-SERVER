@@ -21,13 +21,13 @@ GPL-3.0-or-later - see LICENSE
   <img src="https://img.shields.io/badge/Language-TypeScript-3178C6.svg" alt="Language">
   <img src="https://img.shields.io/badge/Protocol-WebSocket-lightgrey.svg" alt="Protocol">
   <img src="https://img.shields.io/badge/Tests-996%20passing-2ea44f.svg" alt="Tests">
-  <img src="https://img.shields.io/badge/Version-0.8.2.8-0f6cbd.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.8.2.9-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-0F6CBD.svg" alt="Maturity">
 </p>
 
 ---
 
-> **Honesty check - what actually runs today:** the Express + WebSocket engine, its REST and WebSocket surface (63 operations in 58 paths), JWT sign-in with refresh-token rotation and scrypt, mDNS discovery, robot reservations and revisions, playback, and the relays to CAN-OTA, telemetry, voice, the local AI services and the connector hub are real and tested against a live instance of this same server that the tests start themselves: 993 unit tests plus 29 end-to-end contract scripts, all passing. What is hardware-adjacent and not verified here: the link to a real HYDRA-UMC CM5 with an STM32H745 board, which is real code exercised only through the API and contract layer. TLS, Bluetooth LE, the MQTT bridge and the Prometheus and Grafana stack are real, optional and off by default.
+> **Honesty check - what actually runs today:** the Express + WebSocket engine, its REST and WebSocket surface (63 operations in 58 paths), JWT sign-in with refresh-token rotation and scrypt, mDNS discovery, robot reservations and revisions, playback, and the relays to CAN-OTA, telemetry, voice, the local AI services and the connector hub are real and tested against a live instance of this same server that the tests start themselves: 996 unit tests plus 29 end-to-end contract scripts, all passing. What is hardware-adjacent and not verified here: the link to a real HYDRA-UMC CM5 with an STM32H745 board, which is real code exercised only through the API and contract layer. TLS, Bluetooth LE, the MQTT bridge and the Prometheus and Grafana stack are real, optional and off by default.
 
 ---
 
