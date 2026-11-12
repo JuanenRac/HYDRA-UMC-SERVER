@@ -52,7 +52,7 @@ import { SecurityConfig, certFingerprint, resolveBleMode, resolveTls, securityEn
 import { applyNewInstallTlsDefault } from "./newInstallTls";
 import { resolveMqttMode, type MqttBridge } from "./mqttBridge";
 import { startMqttBridge } from "./mqttStart";
-import { StopState, bridgeFetcher, stopWatchIntervalMs } from "./stopState";
+import { StopState, bridgeFetcher } from "./stopState";
 import { upstreamHeaders } from "./upstreamAuth";
 import { readSecret } from "./mqttBridge";
 import { startBle } from "./ble/start";
@@ -302,7 +302,6 @@ async function startServer() {
     fetchPhysical: bridgeFetcher(SPI_BRIDGE_URL, () => upstreamHeaders("spi-bridge"), SPI_BRIDGE_VERSION_TIMEOUT_MS),
     onChange: (snapshot) => hub.broadcastStopState(snapshot),
   });
-  if (SPI_BRIDGE_URL) stopState.start(stopWatchIntervalMs(process.env));
 
   const playback = createPlayback({ getSettings, queueSettingsWrite, broadcastRobotDelta });
   const {
@@ -405,6 +404,8 @@ async function startServer() {
     jobStopRelayActive: (() => { const r = resolveStopRelay(process.env, (loadServerConfig() as { jobDispatcher?: { stopRelay?: StopRelayFile } }).jobDispatcher?.stopRelay); return r.ok && r.settings.enabled; })(),
     log: industrialLog,
   });
+  // The watch of the physical emergency stop: every safety.estopWatchMs milliseconds (Server Admin or HYDRA_UMC_ESTOP_WATCH_MS; 0, the default, is off). A change applies on restart.
+  if (SPI_BRIDGE_URL) stopState.start(security.estopWatchMs());
   // Whether the history of connections keeps the address and user agent of a client (off unless an administrator turned it on).
   setRecordAddress(() => security.connectionAddressRecorded());
   // The request limiters read the switch and their numbers from the security options on every request, so a change in Server Admin applies at once.
@@ -608,7 +609,7 @@ async function startServer() {
     authenticate, requireAdmin, industrialLog, wsClients, DATALAKE_URL, DATALAKE_TIMEOUT_MS, CONNECTOR_HUB_URL,
     CONNECTOR_HUB_TIMEOUT_MS, SPI_BRIDGE_URL, SPI_BRIDGE_VERSION_TIMEOUT_MS, SPI_BRIDGE_FLASH_TIMEOUT_MS,
     CONNECTOR_HUB_GATE_URL, SEMANTIC_PLANNER_URL, HIL_BRIDGE_URL, SAFETY_ZONES_URL, ATC_URL, requireOperator, audit, opsAgentChannel,
-    atcResetEnabled: () => security.atcResetEnabled(), robotMotion: robotMotionOf(getSettings),
+    atcResetEnabled: () => security.atcResetEnabled(), robotMotion: robotMotionOf(getSettings), framEraseEnabled: () => security.framEraseEnabled(),
   });
 
   registerInfoRoutes(app, {

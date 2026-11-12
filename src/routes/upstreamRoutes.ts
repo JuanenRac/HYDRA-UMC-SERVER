@@ -46,9 +46,19 @@ export interface UpstreamDeps {
   opsAgentChannel?: () => OpsAgentChannel | null;
   /** The audit record: a change of the settings of the decision gate of the hub is written to it. */
   audit?: Pick<AuditLog, "record">;
+  /** Whether the erase and the self-test of the F-RAM of the brain are offered (safety.framErase, off by default: the routes then answer 403 and nothing leaves this server). */
+  framEraseEnabled?: () => boolean;
   SPI_BRIDGE_URL: string;
   SPI_BRIDGE_VERSION_TIMEOUT_MS: number;
   SPI_BRIDGE_FLASH_TIMEOUT_MS: number;
+}
+
+/** The answer of the bridge to a version query with `capabilities.fram_erase` true only when this server offers the operation too (and false when the bridge says nothing). */
+export function withFramCapability(body: unknown, serverOffers: boolean): unknown {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return body;
+  const answer = body as Record<string, unknown>;
+  const bridge = answer.capabilities && typeof answer.capabilities === "object" ? (answer.capabilities as Record<string, unknown>) : {};
+  return { ...answer, capabilities: { ...bridge, fram_erase: serverOffers && bridge.fram_erase === true } };
 }
 
 export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps): void {
@@ -478,11 +488,58 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
       if (!upstream.ok) {
         return res.status(upstream.status).json(body && typeof body === "object" ? body : { error: "spi_bridge rejected the request" });
       }
-      res.json(body);
+      res.json(withFramCapability(body, deps.framEraseEnabled?.() === true));
     } catch (error) {
       const timedOut = error instanceof DOMException && error.name === "TimeoutError";
       res.status(503).json({ error: timedOut ? "spi_bridge timed out" : "spi_bridge is unavailable" });
     }
+  });
+
+  // The F-RAM of the kinematic brain (the FM24CL64B of the main board; HYDRA-UMC docs/FRAM_ERASE.md): the erase and the self-test, relayed to the
+  // spi_bridge of the CM5. An administrator only, and off by default (safety.framErase of Server Admin, or HYDRA_UMC_FRAM_ERASE=1): while it is
+  // off both routes answer 403 and nothing leaves this server. An erase also needs the word ERASE typed (`confirm`). The bridge has its own switch
+  // (--enable-fram-erase) and the firmware another (HYDRA_FRAM_ERASE), so each layer can refuse; `GET /api/hardware/canota/version` says
+  // `capabilities.fram_erase` only when this server and the bridge both offer it. Every attempt and its outcome goes to the audit record.
+  const FRAM_TIMEOUT_MS = 20000;
+  const handleFram = async (operation: "erase" | "selftest", req: express.Request, res: express.Response) => {
+    const user = (req as any).user;
+    const record = (outcome: "ok" | "refused" | "failed", detail: Record<string, unknown>) =>
+      deps.audit?.record({ type: `fram-${operation}`, outcome, userId: user?.id, username: user?.username, ip: req.ip, detail });
+    if (deps.framEraseEnabled?.() !== true) {
+      record("refused", { reason: "the F-RAM operations are switched off on this server" });
+      return res.status(403).json({ error: "The F-RAM operations are switched off on this Server (Server Admin > Security)", code: "FRAM_ERASE_DISABLED" });
+    }
+    if (operation === "erase" && (!req.body || typeof req.body !== "object" || (req.body as any).confirm !== "ERASE")) {
+      record("refused", { reason: "an erase needs the word ERASE as a confirmation" });
+      return res.status(400).json({ error: "An erase needs confirm: \"ERASE\"", code: "CONFIRMATION_REQUIRED" });
+    }
+    if (!SPI_BRIDGE_URL) {
+      record("failed", { reason: "the spi_bridge service is not configured" });
+      return res.status(503).json({ error: "the spi_bridge service is not configured on this Server", available: false });
+    }
+    industrialLog(`[FRAM] ${operation} requested by=${user?.username ?? "unknown"}`);
+    try {
+      const upstream = await fetch(`${SPI_BRIDGE_URL}${operation === "erase" ? "/fram/erase?confirm=ERASE" : "/fram/selftest"}`, {
+        method: "POST",
+        headers: upstreamHeaders("spi-bridge", process.env, undefined, "admin"),
+        redirect: "error",
+        signal: AbortSignal.timeout(FRAM_TIMEOUT_MS),
+      });
+      const answer = await upstream.json().catch(() => null);
+      const body = answer && typeof answer === "object" ? answer : { error: "spi_bridge answered without a JSON body" };
+      record(upstream.ok ? ((body as any).ok === true ? "ok" : "refused") : upstream.status >= 500 ? "failed" : "refused", { bridgeStatus: upstream.status, status: (body as any).status });
+      return res.status(upstream.status).json(body);
+    } catch (error) {
+      const timedOut = error instanceof DOMException && error.name === "TimeoutError";
+      record("failed", { reason: timedOut ? "timeout" : "unreachable" });
+      return res.status(503).json({ error: timedOut ? "spi_bridge timed out" : "spi_bridge is unavailable" });
+    }
+  };
+  app.post("/api/hardware/fram/erase", authenticate, requireAdmin, async (req, res) => {
+    await handleFram("erase", req, res);
+  });
+  app.post("/api/hardware/fram/selftest", authenticate, requireAdmin, async (req, res) => {
+    await handleFram("selftest", req, res);
   });
 
   app.post(

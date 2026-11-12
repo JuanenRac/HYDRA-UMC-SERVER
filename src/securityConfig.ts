@@ -317,6 +317,10 @@ export interface LoggingFile {
 export interface SafetyFile {
   /** Whether a global stop is also announced on the MQTT bridge as a retained SafetyState (default: no). */
   publishGlobalStop?: boolean;
+  /** Whether the erase and the self-test of the F-RAM of the kinematic brain are offered (default: no). Also needs the bridge started with --enable-fram-erase and a firmware built for it. */
+  framErase?: boolean;
+  /** Every how many milliseconds the physical emergency stop is read from the SPI bridge: 0 (off, the default) or 500 to 60000. */
+  estopWatchMs?: number;
 }
 
 /** The job dispatcher: the delivery of its stop requests (src/jobStopRelay.ts) and the options of its replanning (src/dispatcherConfigFile.ts). */
@@ -467,6 +471,8 @@ export interface SecurityEnv {
   trustedNetworks?: string;
   rul?: string;
   safetyPublishStop?: string;
+  framErase?: string;
+  estopWatch?: string;
   cameraAuth?: string;
   wsQueryToken?: string;
   logRedaction?: string;
@@ -516,6 +522,8 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     trustedNetworks: env.HYDRA_UMC_TRUSTED_NETWORKS,
     rul: env.HYDRA_UMC_RUL,
     safetyPublishStop: env.HYDRA_UMC_SAFETY_PUBLISH_STOP,
+    framErase: env.HYDRA_UMC_FRAM_ERASE,
+    estopWatch: env.HYDRA_UMC_ESTOP_WATCH_MS,
     cameraAuth: env.HYDRA_UMC_CAMERA_AUTH,
     wsQueryToken: env.HYDRA_UMC_WS_QUERY_TOKEN,
     logRedaction: env.HYDRA_UMC_LOG_REDACTION,
@@ -801,6 +809,30 @@ export function resolveDispatcherConfigFile(env: string | undefined, file: Secur
   return typeof file.jobDispatcher?.configFile === "string" ? file.jobDispatcher.configFile.trim() : "";
 }
 
+/** The F-RAM erase and self-test of the brain: only the exact word "1" in the environment switches it on; the default is off. */
+export function resolveFramErase(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.safety?.framErase === "boolean") return { value: file.safety.framErase, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** Whether a value is a valid interval of the emergency stop watch: 0 (off) or a whole number of milliseconds from 500 to 60000. */
+export function validEstopWatchMs(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && (value === 0 || (value >= 500 && value <= 60000));
+}
+
+/** The interval of the emergency stop watch in milliseconds: the environment decides and locks it (anything but a valid whole number leaves it off), then the file; the default is 0 (off). */
+export function resolveEstopWatchMs(env: string | undefined, file: SecurityFile): { value: number; source: Source } {
+  if (isSet(env)) {
+    const text = env.trim();
+    const value = /^\d+$/.test(text) ? Number(text) : 0;
+    return { value: validEstopWatchMs(value) ? value : 0, source: "env" };
+  }
+  const stored = file.safety?.estopWatchMs;
+  if (validEstopWatchMs(stored)) return { value: stored, source: "config" };
+  return { value: 0, source: "default" };
+}
+
 /** Announcing a global stop on the MQTT bridge: only the exact word "1" in the environment switches it on; the default is off. */
 export function resolveSafetyPublishStop(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
   if (isSet(env)) return { value: env.trim() === "1", source: "env" };
@@ -1012,7 +1044,7 @@ export interface SecuritySnapshot {
   /** The switch, and what the configuration file says about the rest (read only here: the ranges are edited in the file). */
   trustedNetworks: { enabled: { value: boolean; source: Source }; outside: "operate" | "view"; outsideRequiresSecondFactor: boolean; localRanges: number; vpnRanges: number; invalidEntries: number };
   rul: { enabled: { value: boolean; source: Source } };
-  safety: { publishGlobalStop: { value: boolean; source: Source } };
+  safety: { publishGlobalStop: { value: boolean; source: Source }; framErase: { value: boolean; source: Source }; estopWatchMs: { value: number; source: Source } };
   jobDispatcher: {
     stopRelay: { enabled: { value: boolean; source: Source }; robotMap: Record<string, number>; activeEnabled: boolean; appliesOnRestart: boolean };
     replan: {
@@ -1319,6 +1351,16 @@ export class SecurityConfig {
     return resolveSafetyPublishStop(this.options.env.safetyPublishStop, this.file).value;
   }
 
+  /** Whether the erase and the self-test of the F-RAM of the brain are offered (off unless an administrator turned it on). */
+  framEraseEnabled(): boolean {
+    return resolveFramErase(this.options.env.framErase, this.file).value;
+  }
+
+  /** The interval in milliseconds of the watch of the physical emergency stop (0: off). */
+  estopWatchMs(): number {
+    return resolveEstopWatchMs(this.options.env.estopWatch, this.file).value;
+  }
+
   /** Whether the `enable` command may bring a disabled robot back (off unless an administrator turned it on). */
   robotEnableAllowed(): boolean {
     return resolveRobotAllowEnable(this.options.env.robotAllowEnable, this.file).value;
@@ -1390,7 +1432,11 @@ export class SecurityConfig {
         };
       })(),
       rul: { enabled: resolveRul(this.options.env.rul, this.file) },
-      safety: { publishGlobalStop: resolveSafetyPublishStop(this.options.env.safetyPublishStop, this.file) },
+      safety: {
+        publishGlobalStop: resolveSafetyPublishStop(this.options.env.safetyPublishStop, this.file),
+        framErase: resolveFramErase(this.options.env.framErase, this.file),
+        estopWatchMs: resolveEstopWatchMs(this.options.env.estopWatch, this.file),
+      },
       jobDispatcher: this.jobDispatcherSnapshot(),
       camera: { open: resolveCameraOpen(this.options.env.cameraAuth, this.file), credentialsViaEnv: resolveCameraCredentialsViaEnv(this.options.env.cameraCredentialsViaEnv, this.file) },
       install: { newInstallTls: resolveNewInstallTls(this.options.env.newInstallTls, this.file) },
@@ -1986,8 +2032,21 @@ export class SecurityConfig {
         if (resolveSafetyPublishStop(this.options.env.safetyPublishStop, this.file).source === "env") throw lockedBy("HYDRA_UMC_SAFETY_PUBLISH_STOP");
         merged.publishGlobalStop = safetyPatch.publishGlobalStop;
       }
+      if (safetyPatch.framErase !== undefined) {
+        if (typeof safetyPatch.framErase !== "boolean") throw new SecurityConfigError(400, "safety.framErase must be true or false");
+        if (resolveFramErase(this.options.env.framErase, this.file).source === "env") throw lockedBy("HYDRA_UMC_FRAM_ERASE");
+        if (safetyPatch.framErase === true && patch.safety.confirm !== true) throw new SecurityConfigError(400, "turning the F-RAM erase on needs confirm: true");
+        merged.framErase = safetyPatch.framErase;
+      }
+      if (safetyPatch.estopWatchMs !== undefined) {
+        if (!validEstopWatchMs(safetyPatch.estopWatchMs)) throw new SecurityConfigError(400, "safety.estopWatchMs must be 0 (off) or a whole number of milliseconds from 500 to 60000");
+        if (resolveEstopWatchMs(this.options.env.estopWatch, this.file).source === "env") throw lockedBy("HYDRA_UMC_ESTOP_WATCH_MS");
+        merged.estopWatchMs = safetyPatch.estopWatchMs;
+        appliesOnRestart = true;
+      }
       next.safety = merged;
       if (safetyPatch.publishGlobalStop === true) warnings.push("global_stop_published");
+      if (safetyPatch.framErase === true) warnings.push("fram_erase_on");
     }
 
     let replanWritten = false;
@@ -2239,7 +2298,7 @@ export class SecurityConfig {
       log(`[SECURITY] ${actor} turned the remaining-useful-life relay for operators (POST /api/ai/anomaly-detector/rul) ${snapshot.rul.enabled.value ? "on" : "off"}.`);
     }
     if (patch.safety !== undefined) {
-      log(`[SECURITY] ${actor} ${snapshot.safety.publishGlobalStop.value ? "allowed" : "forbade"} announcing a global stop on the MQTT bridge.`);
+      log(`[SECURITY] ${actor} ${snapshot.safety.publishGlobalStop.value ? "allowed" : "forbade"} announcing a global stop on the MQTT bridge; the F-RAM erase of the brain is ${snapshot.safety.framErase.value ? "on" : "off"}; the emergency stop watch is ${snapshot.safety.estopWatchMs.value ? `every ${snapshot.safety.estopWatchMs.value} ms` : "off"}.`);
     }
     if (patch.jobDispatcher !== undefined) {
       const jd = snapshot.jobDispatcher;

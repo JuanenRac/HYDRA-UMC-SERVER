@@ -715,6 +715,19 @@ process" posture as the Voice UI relay above.
   oldest bootloader that may take the image) in the same way: the flashing service
   refuses a target that is not the board, and a bootloader that is older or whose version
   cannot be read, before it sends a byte. Without them nothing is checked.
+- `POST /api/hardware/fram/erase` and `POST /api/hardware/fram/selftest` - **`admin` only** and **off by default**
+  (`safety.framErase` of Server Admin, or `HYDRA_UMC_FRAM_ERASE=1`, which wins and locks it): while off both
+  answer `403` with `code: "FRAM_ERASE_DISABLED"` and nothing leaves this server. They relay to `spi_bridge`'s
+  `POST /fram/erase?confirm=ERASE` and `POST /fram/selftest`, which write zeros over the F-RAM of the kinematic
+  brain (the FM24CL64B of the main board) and read them back, and test it with two patterns and put the old bytes
+  back. An erase needs the body `{ "confirm": "ERASE" }` (the exact word; `400` with `code: "CONFIRMATION_REQUIRED"`
+  otherwise). The answer is the one of the bridge as it came: `{ "operation", "status", "ok", "board_id", "value" }`
+  with `status` one of `ok`, `disabled`, `no-chip`, `wrong-slot`, `busy`, `chip-error`, `verify-fail`; the bridge may
+  also answer `403` (started without `--enable-fram-erase`), `409` (the link is busy) or `504` (the brain did not
+  answer), and `503` is this server's own (no bridge configured, unreachable, timed out). Every attempt and its outcome
+  is written to the audit record (`fram-erase`, `fram-selftest`). `GET /api/hardware/canota/version` carries
+  `capabilities.fram_erase`, true only when the bridge offers the operation and this server does too, so an app
+  offers the button only then. The F-RAM driver of the firmware has not run on a board.
 
 The Server reads `HYDRA_UMC_SPI_BRIDGE_URL`,
 `HYDRA_UMC_SPI_BRIDGE_TIMEOUT_MS` (version query, default 4000ms) and
@@ -1204,7 +1217,7 @@ values today:
   { "schema": 1, "state": "STOPPED" | "READY" | "UNKNOWN", "physical": "latched" | "ready" | "unknown", "software": "stopped" | "ready", "physicalLinkOk": boolean | null,
   "source": "brain-telemetry" | "none", "changedAt": ms }`. It is sent right after the first `settings` message and again at every change. The physical stop is the frame on identifier `0x001` of the
   stack bus as the kinematic brain holds it, read through the SPI bridge of the CM5 (`GET /estop`) every `HYDRA_UMC_ESTOP_WATCH_MS` milliseconds (500 to 60000; `0` or unset: off, the
-  default, and the physical part stays `unknown`); `software` is the global stop of this server (`POST /api/stop-all`, released by `POST /api/stop-all/release`; kept in memory, so it is
+  default, and the physical part stays `unknown`; Server Admin sets it too, as `safety.estopWatchMs`, and a change applies on restart); `software` is the global stop of this server (`POST /api/stop-all`, released by `POST /api/stop-all/release`; kept in memory, so it is
   `ready` again after a restart). `STOPPED` when either is on, `READY` only when the physical stop is known to be released and the global stop is not on, otherwise `UNKNOWN`. A bridge that
   does not answer is never read as a released stop. The server only reads: the message can not cause or release a stop.
 - `"canota_progress"` - real, live per-page flash progress from `POST

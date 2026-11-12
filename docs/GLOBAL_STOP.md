@@ -25,7 +25,7 @@ last word, and a part that has not adopted this contract is exactly as safe as i
 
 ## One stop state for the apps
 
-The apps show one state for both stops. The server reads the physical emergency stop (the frame on identifier `0x001` of the stack bus, as the kinematic brain holds it) from the SPI bridge of the CM5 (`GET /estop`), joins it with the global stop above and pushes a `stop-state` message on the WebSocket (see `docs/REMOTE_API.md`) at every change and right after a client connects. The watch is off unless `HYDRA_UMC_ESTOP_WATCH_MS` is set; without it the physical part is `unknown` and the state follows the global stop alone. It is read only: it can not cause a stop and it can not release one, and a silent bridge is `unknown`, never `READY`.
+The apps show one state for both stops. The server reads the physical emergency stop (the frame on identifier `0x001` of the stack bus, as the kinematic brain holds it) from the SPI bridge of the CM5 (`GET /estop`), joins it with the global stop above and pushes a `stop-state` message on the WebSocket (see `docs/REMOTE_API.md`) at every change and right after a client connects. The watch is off unless `HYDRA_UMC_ESTOP_WATCH_MS` is set or an administrator sets `safety.estopWatchMs` in Server Admin (a change applies on restart; the environment wins and locks it); without it the physical part is `unknown` and the state follows the global stop alone. It is read only: it can not cause a stop and it can not release one, and a silent bridge is `unknown`, never `READY`.
 
 ## What a bridge or service does to adopt it
 
