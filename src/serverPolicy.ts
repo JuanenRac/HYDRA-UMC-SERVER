@@ -451,7 +451,9 @@ export function viewerMayCall(method: string | undefined, path: string | undefin
 /**
  * The signing part of a firmware flash request: `signature` (the Ed25519 signature of the image, 128 hexadecimal digits)
  * and `downgrade_from` (the version installed now, major.minor.patch, asked for when the image is older). Anything else
- * in those two fields is refused here, before it is put into the address of the request to the flashing service.
+ * in those two fields is refused here, before it is put into the address of the request to the flashing service. The two fields of the update manifest
+ * the caller holds, `target` (the name of the board the image is for) and `min_bootloader` (the oldest bootloader that may take it, major.minor.patch), go the same
+ * way: the flashing service refuses a target that is not the board and a bootloader older than that before it sends a byte, and checks nothing without them.
  */
 export function flashSigningQuery(query: Record<string, unknown>): { ok: true; params: Record<string, string> } | { ok: false; error: string } {
   const params: Record<string, string> = {};
@@ -464,6 +466,16 @@ export function flashSigningQuery(query: Record<string, unknown>): { ok: true; p
   if (downgrade !== undefined) {
     if (typeof downgrade !== "string" || !/^\d{1,5}\.\d{1,5}\.\d{1,5}$/.test(downgrade)) return { ok: false, error: "downgrade_from must be major.minor.patch" };
     params.downgrade_from = downgrade;
+  }
+  const target = query.target;
+  if (target !== undefined) {
+    if (typeof target !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(target)) return { ok: false, error: "target must be a short name of letters, digits, dots, dashes and underscores" };
+    params.target = target;
+  }
+  const minBootloader = query.min_bootloader;
+  if (minBootloader !== undefined) {
+    if (typeof minBootloader !== "string" || !/^\d{1,5}\.\d{1,5}\.\d{1,5}$/.test(minBootloader)) return { ok: false, error: "min_bootloader must be major.minor.patch" };
+    params.min_bootloader = minBootloader;
   }
   const patch = query.version_patch;
   if (patch !== undefined && (typeof patch !== "string" || !/^\d{1,5}$/.test(patch))) return { ok: false, error: "version_patch must be a whole number" };

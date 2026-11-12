@@ -693,7 +693,7 @@ process" posture as the Voice UI relay above.
   "firmware_minor" }`. `relay=1` tunnels through the resolved Tier 0/1
   target to reach Tier 2 (the URTC Tool Head) - see `spi_bridge`'s own
   `relay_tunnel.py`.
-- `POST /api/hardware/canota/flash?tier=&slot=&relay=&hardware_id=&version_major=&version_minor=[&version_patch=][&downgrade_from=x.y.z][&signature=HEX]`
+- `POST /api/hardware/canota/flash?tier=&slot=&relay=&hardware_id=&version_major=&version_minor=[&version_patch=][&downgrade_from=x.y.z][&signature=HEX][&target=NAME][&min_bootloader=x.y.z]`
   - **`admin` only** (unlike the read-only version query above - writing
   firmware is exactly the kind of action every other bridge in this
   ecosystem gates more tightly than a read). Body: raw firmware bytes,
@@ -710,7 +710,11 @@ process" posture as the Voice UI relay above.
   version as `version_patch`, and an older image than the installed one also
   `downgrade_from` (the installed `major.minor.patch`). The server checks the
   shape of the three (`400` `invalid-flash-signature` otherwise) and hands them on; it
-  holds no key.
+  holds no key. A caller that holds the update manifest also passes its `target` (the
+  name of the board the image is for) and `min_bootloader` (`major.minor.patch`, the
+  oldest bootloader that may take the image) in the same way: the flashing service
+  refuses a target that is not the board, and a bootloader that is older or whose version
+  cannot be read, before it sends a byte. Without them nothing is checked.
 
 The Server reads `HYDRA_UMC_SPI_BRIDGE_URL`,
 `HYDRA_UMC_SPI_BRIDGE_TIMEOUT_MS` (version query, default 4000ms) and

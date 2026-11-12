@@ -262,9 +262,17 @@ async function main() {
     const forwarded = stub.seenRequests.filter((line) => line.startsWith("/flash")).pop();
     assert.match(forwarded, /version_patch=3/);
     assert.match(forwarded, /downgrade_from=0\.9\.1/);
+    const manifestResponse = await fetch(
+      `http://127.0.0.1:${serverPortWithBridge}/api/hardware/canota/flash?tier=1&slot=0&hardware_id=1&version_major=0&version_minor=2&target=mcu-main&min_bootloader=1.2.0`,
+      { method: "POST", headers: { "content-type": "application/octet-stream", ...adminAuth }, body: realFirmwareBytes },
+    );
+    assert.equal(manifestResponse.status, 200);
+    const forwardedManifest = stub.seenRequests.filter((line) => line.startsWith("/flash")).pop();
+    assert.match(forwardedManifest, /target=mcu-main/);
+    assert.match(forwardedManifest, /min_bootloader=1\.2\.0/);
     assert.match(forwarded, new RegExp(`signature=${signature}`), "the signature arrives in lower case");
     const flashesBefore = stub.seenRequests.filter((line) => line.startsWith("/flash")).length;
-    for (const bad of ["signature=zz", `signature=${"a".repeat(127)}`, "downgrade_from=1.2", "downgrade_from=1.2.3;rm", "version_patch=-1"]) {
+    for (const bad of ["signature=zz", `signature=${"a".repeat(127)}`, "downgrade_from=1.2", "downgrade_from=1.2.3;rm", "version_patch=-1", "target=a%20b", "min_bootloader=1.2"]) {
       const refused = await fetch(
         `http://127.0.0.1:${serverPortWithBridge}/api/hardware/canota/flash?tier=1&slot=0&${bad}`,
         { method: "POST", headers: { "content-type": "application/octet-stream", ...adminAuth }, body: realFirmwareBytes },

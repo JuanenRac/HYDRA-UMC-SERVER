@@ -343,6 +343,12 @@ test("flashSigningQuery: only a well formed signature, version patch and install
   const signature = "Ab".repeat(64);
   assert.deepEqual(flashSigningQuery({}), { ok: true, params: {} });
   assert.deepEqual(flashSigningQuery({ signature, downgrade_from: "0.9.12", version_patch: "4" }), { ok: true, params: { signature: signature.toLowerCase(), downgrade_from: "0.9.12" } });
+  // the fields of the update manifest: the board the image is for and the oldest bootloader that may take it
+  assert.deepEqual(flashSigningQuery({ target: "hydra-umc-mcu_2", min_bootloader: "1.2.3" }), { ok: true, params: { target: "hydra-umc-mcu_2", min_bootloader: "1.2.3" } });
+  assert.deepEqual(flashSigningQuery({ target: "a", signature, version_patch: "4" }), { ok: true, params: { signature: signature.toLowerCase(), target: "a" } });
+  for (const query of [{ target: "" }, { target: "-x" }, { target: "a b" }, { target: "a/b" }, { target: "a;rm" }, { target: "x".repeat(65) }, { target: ["a"] }, { min_bootloader: "1.2" }, { min_bootloader: "1.2.3 " }, { min_bootloader: "a.b.c" }, { min_bootloader: "1.2.3.4" }, { min_bootloader: 3 }]) {
+    assert.equal(flashSigningQuery(query as any).ok, false, JSON.stringify(query));
+  }
   for (const query of [{ signature: "zz" }, { signature: "a".repeat(127) }, { signature: ["a"] }, { downgrade_from: "1.2" }, { downgrade_from: "1.2.3 " }, { downgrade_from: "a.b.c" }, { version_patch: "-1" }, { version_patch: "1e3" }]) {
     assert.equal(flashSigningQuery(query as any).ok, false, JSON.stringify(query));
   }
