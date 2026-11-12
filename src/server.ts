@@ -370,8 +370,8 @@ async function startServer() {
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
     save: (file) => {
-      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, deviceTokens, updateCheck, discovery, maintenance, atc, detectionHef, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging, rateLimits, bridges } = file;
-      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, infoTickets, deviceTokens, updateCheck, discovery, maintenance, atc, detectionHef, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging, rateLimits, bridges });
+      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, twinRelay, infoTickets, deviceTokens, updateCheck, discovery, maintenance, atc, detectionHef, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging, rateLimits, bridges } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, twinRelay, infoTickets, deviceTokens, updateCheck, discovery, maintenance, atc, detectionHef, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging, rateLimits, bridges });
     },
     bridgeSigningStatus: () => bridgeSettingsSigner.status(BRIDGE_NAMES),
     writeDetectionHefSettings: (value, file) => { const written = writeDetectionHefSettings(dataPath, value, file); industrialLog(`[SECURITY] DETECTION-HEF settings file written: ${written}`); },
@@ -659,7 +659,7 @@ async function startServer() {
   }
 
   attachWebSocketServer(httpServer, {
-    wsClients, getSettings, applySettingsUpdate, WS_QUERY_TOKEN_ALLOWED, twinWsUrl: TWIN_WS_URL,
+    wsClients, getSettings, applySettingsUpdate, WS_QUERY_TOKEN_ALLOWED, twinWsUrl: () => (security.twinRelayEnabled() ? TWIN_WS_URL : ""),
     adminWriteAllowed: (address) => { const networks = security.trustedNetworks(); return !networks.enabled || classifyAddress(address, networks) === "local"; },
   });
 

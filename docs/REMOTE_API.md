@@ -1153,7 +1153,7 @@ The twin pushes the state of the robot over a WebSocket of its own that asks for
 and the panels only speak to this server. So a panel opens `new WebSocket("ws://<host>:3000/api/twin/ws", ["hydra.bearer", "<JWT_TOKEN>"])` (the same subprotocol as `/ws`; a
 token in the address is never accepted here). The server checks the session as `/ws` does, opens the twin's socket (`HYDRA_UMC_TWIN_WS_URL`) with the person's own token in the header
 and passes on every message the twin pushes, text as text. Nothing a panel sends reaches the twin. A missing or invalid token gets `{"error": "..."}` and a close with `1008`; while the
-address is not set (off by default), the twin cannot be reached, or `8` panels already watch, the close is `1013` or `1011`. A session whose account changes closes within 30 seconds, and
+address is not set or the switch `twinRelay.enabled` is off (Server Admin, `PUT /api/admin/server-config` with `{ "twinRelay": { "enabled": true } }`, or `HYDRA_UMC_TWIN_RELAY=1`; off by default, and the environment wins and locks the option with `409`), the twin cannot be reached, or `8` panels already watch, the close is `1013` or `1011`. A session whose account changes closes within 30 seconds, and
 a panel that falls 4 MiB behind is dropped.
 
 ## 3. Live sync: `WebSocket /ws`

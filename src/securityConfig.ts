@@ -149,6 +149,12 @@ export interface LiveActivityFile {
   level?: string;
 }
 
+/** The relay of the live state of the twin (WebSocket /api/twin/ws, src/twinRelay.ts). */
+export interface TwinRelayFile {
+  /** Whether the relay accepts panels (default: no). It also needs the address of the twin (HYDRA_UMC_TWIN_WS_URL). */
+  enabled?: boolean;
+}
+
 /** The health of the ecosystem in one answer (GET /api/ecosystem/health, src/ecosystemHealth.ts). */
 export interface EcosystemHealthFile {
   /** Whether the route answers (default: no; a signed-in client then gets 404). */
@@ -398,6 +404,7 @@ export interface SecurityFile {
   ingest?: IngestFile;
   health?: HealthFile;
   ecosystemHealth?: EcosystemHealthFile;
+  twinRelay?: TwinRelayFile;
   infoTickets?: InfoTicketsFile;
   deviceTokens?: DeviceTokensFile;
   updateCheck?: UpdateCheckFile;
@@ -442,6 +449,7 @@ export interface SecurityEnv {
   /** The ingest switches (INGEST_SWITCH_VARIABLES) and the keys file of the proposals, as written. */
   ingest?: Partial<Record<IngestSwitchKey | "proposalKeysFile", string>>;
   ecosystemHealth?: string;
+  twinRelay?: string;
   infoTickets?: string;
   deviceTokens?: string;
   updateCheck?: string;
@@ -491,6 +499,7 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     productionRdpLevel: env.HYDRA_UMC_PRODUCTION_RDP_LEVEL,
     ingest: { ...Object.fromEntries(INGEST_SWITCH_KEYS.map((key) => [key, env[INGEST_SWITCH_VARIABLES[key]]])), proposalKeysFile: env[PROPOSAL_KEYS_VARIABLE] },
     ecosystemHealth: env.HYDRA_UMC_ECOSYSTEM_HEALTH,
+    twinRelay: env.HYDRA_UMC_TWIN_RELAY,
     infoTickets: env.HYDRA_UMC_INFO_TICKETS,
     deviceTokens: env.HYDRA_UMC_DEVICE_TOKENS,
     updateCheck: env.HYDRA_UMC_UPDATE_CHECK,
@@ -622,6 +631,13 @@ export function resolveHealthOpen(env: string | undefined, file: SecurityFile): 
 export function resolveEcosystemHealth(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
   if (isSet(env)) return { value: env.trim() === "1", source: "env" };
   if (typeof file.ecosystemHealth?.enabled === "boolean") return { value: file.ecosystemHealth.enabled, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** The relay of the live state of the twin (WebSocket /api/twin/ws): only the exact word "1" in the environment switches it on; the default is off. */
+export function resolveTwinRelay(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.twinRelay?.enabled === "boolean") return { value: file.twinRelay.enabled, source: "config" };
   return { value: false, source: "default" };
 }
 
@@ -979,6 +995,7 @@ export interface SecuritySnapshot {
   ingest: Record<IngestSwitchKey, { value: boolean; source: Source }> & { proposalKeysFile: { value: string; source: Source }; appliesOnRestart: boolean };
   health: { open: { value: boolean; source: Source } };
   ecosystemHealth: { enabled: { value: boolean; source: Source } };
+  twinRelay: { enabled: { value: boolean; source: Source } };
   infoTickets: { enabled: { value: boolean; source: Source } };
   deviceTokens: { enabled: { value: boolean; source: Source } };
   updateCheck: { enabled: { value: boolean; source: Source } };
@@ -1225,6 +1242,11 @@ export class SecurityConfig {
     return resolveEcosystemHealth(this.options.env.ecosystemHealth, this.file).value;
   }
 
+  /** Whether the relay of the live state of the twin accepts panels (off unless an administrator turned it on). */
+  twinRelayEnabled(): boolean {
+    return resolveTwinRelay(this.options.env.twinRelay, this.file).value;
+  }
+
   /** Whether an operator may use the remaining-useful-life relay (off unless an administrator turned it on). */
   rulEnabled(): boolean {
     return resolveRul(this.options.env.rul, this.file).value;
@@ -1341,6 +1363,7 @@ export class SecurityConfig {
       },
       health: { open: resolveHealthOpen(this.options.env.healthOpen, this.file) },
       ecosystemHealth: { enabled: resolveEcosystemHealth(this.options.env.ecosystemHealth, this.file) },
+      twinRelay: { enabled: resolveTwinRelay(this.options.env.twinRelay, this.file) },
       infoTickets: { enabled: resolveInfoTickets(this.options.env.infoTickets, this.file) },
       deviceTokens: { enabled: resolveDeviceTokens(this.options.env.deviceTokens, this.file) },
       updateCheck: { enabled: resolveUpdateCheck(this.options.env.updateCheck, this.file) },
@@ -1413,7 +1436,7 @@ export class SecurityConfig {
   /** Applies a change asked for by an administrator; returns the new state and the warnings to show. */
   update(patch: any, actor: string): { snapshot: SecuritySnapshot; warnings: string[]; appliesOnRestart: boolean } {
     const warnings: string[] = [];
-    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, ingest: this.file.ingest ? { ...this.file.ingest } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, infoTickets: this.file.infoTickets ? { ...this.file.infoTickets } : undefined, deviceTokens: this.file.deviceTokens ? { ...this.file.deviceTokens } : undefined, updateCheck: this.file.updateCheck ? { ...this.file.updateCheck } : undefined, discovery: this.file.discovery ? { ...this.file.discovery } : undefined, maintenance: this.file.maintenance ? { ...this.file.maintenance } : undefined, atc: this.file.atc ? { ...this.file.atc } : undefined, detectionHef: this.file.detectionHef ? { ...this.file.detectionHef } : undefined, presence: this.file.presence ? { ...this.file.presence } : undefined, bridgeGateway: this.file.bridgeGateway ? { ...this.file.bridgeGateway } : undefined, push: this.file.push ? { ...this.file.push } : undefined, trustedNetworks: this.file.trustedNetworks ? { ...this.file.trustedNetworks } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
+    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, ingest: this.file.ingest ? { ...this.file.ingest } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, twinRelay: this.file.twinRelay ? { ...this.file.twinRelay } : undefined, infoTickets: this.file.infoTickets ? { ...this.file.infoTickets } : undefined, deviceTokens: this.file.deviceTokens ? { ...this.file.deviceTokens } : undefined, updateCheck: this.file.updateCheck ? { ...this.file.updateCheck } : undefined, discovery: this.file.discovery ? { ...this.file.discovery } : undefined, maintenance: this.file.maintenance ? { ...this.file.maintenance } : undefined, atc: this.file.atc ? { ...this.file.atc } : undefined, detectionHef: this.file.detectionHef ? { ...this.file.detectionHef } : undefined, presence: this.file.presence ? { ...this.file.presence } : undefined, bridgeGateway: this.file.bridgeGateway ? { ...this.file.bridgeGateway } : undefined, push: this.file.push ? { ...this.file.push } : undefined, trustedNetworks: this.file.trustedNetworks ? { ...this.file.trustedNetworks } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
     let appliesOnRestart = false;
     const log = this.options.log ?? (() => undefined);
     const lockedBy = (name: string) => new SecurityConfigError(409, `${name} is set in the environment of this server; remove it there to change it here`);
@@ -1647,6 +1670,18 @@ export class SecurityConfig {
         merged.enabled = ecoPatch.enabled;
       }
       next.ecosystemHealth = merged;
+    }
+
+    if (patch.twinRelay !== undefined) {
+      const relayPatch = patch.twinRelay;
+      if (typeof relayPatch !== "object" || relayPatch === null || Array.isArray(relayPatch)) throw new SecurityConfigError(400, "twinRelay must be an object");
+      const merged: TwinRelayFile = { ...(next.twinRelay ?? {}) };
+      if (relayPatch.enabled !== undefined) {
+        if (typeof relayPatch.enabled !== "boolean") throw new SecurityConfigError(400, "twinRelay.enabled must be true or false");
+        if (resolveTwinRelay(this.options.env.twinRelay, this.file).source === "env") throw lockedBy("HYDRA_UMC_TWIN_RELAY");
+        merged.enabled = relayPatch.enabled;
+      }
+      next.twinRelay = merged;
     }
 
     if (patch.infoTickets !== undefined) {
@@ -2160,6 +2195,9 @@ export class SecurityConfig {
     }
     if (patch.ecosystemHealth !== undefined) {
       log(`[SECURITY] ${actor} turned the health of the ecosystem (GET /api/ecosystem/health) ${snapshot.ecosystemHealth.enabled.value ? "on" : "off"}.`);
+    }
+    if (patch.twinRelay !== undefined) {
+      log(`[SECURITY] ${actor} turned the relay of the live state of the twin (WebSocket /api/twin/ws) ${snapshot.twinRelay.enabled.value ? "on" : "off"}.`);
     }
     if (patch.infoTickets !== undefined) {
       log(`[SECURITY] ${actor} turned the signed tickets of the information routes (POST /api/info/ticket) ${snapshot.infoTickets.enabled.value ? "on" : "off"}.`);
