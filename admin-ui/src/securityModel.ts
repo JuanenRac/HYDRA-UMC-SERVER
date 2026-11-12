@@ -4,7 +4,7 @@
 // GPL-3.0-or-later - see LICENSE
 //
 // What the Security tab shows and sends. It has no dependency on React or the browser, so the server tests (tests/adminUiSecurity.test.ts) check it.
-// The options are those of GET/PUT /api/admin/server-config: nine switches that each start on the conservative value, and the job dispatcher
+// The options are those of GET/PUT /api/admin/server-config: ten switches that each start on the conservative value, and the job dispatcher
 // section (the delivery of its stop requests, the map of robots, and the two options of its replanning).
 // =============================================================================
 
@@ -25,11 +25,14 @@ export interface SwitchDef {
   confirm: string | null;
   /** The warning code the server sends when the risky value is saved. */
   warningCode: string | null;
+  /** The server also wants `confirm: true` next to the risky value (the screen has asked the question by then). */
+  sendsConfirm?: true;
 }
 
 export const SWITCHES: readonly SwitchDef[] = [
   { id: 'health.open', section: 'health', key: 'open', riskyWhen: true, label: 'sw_health_open', warning: 'warn_health_open', confirm: 'confirm_health_open', warningCode: 'health_open' },
   { id: 'safety.publishGlobalStop', section: 'safety', key: 'publishGlobalStop', riskyWhen: null, label: 'sw_publish_stop', warning: null, confirm: null, warningCode: 'global_stop_published' },
+  { id: 'safety.framErase', section: 'safety', key: 'framErase', riskyWhen: true, label: 'sw_fram_erase', warning: 'warn_fram_erase', confirm: 'confirm_fram_erase', warningCode: 'fram_erase_on', sendsConfirm: true },
   { id: 'connections.recordAddress', section: 'connections', key: 'recordAddress', riskyWhen: true, label: 'sw_record_address', warning: 'warn_record_address', confirm: 'confirm_record_address', warningCode: 'connection_address_recorded' },
   { id: 'camera.open', section: 'camera', key: 'open', riskyWhen: true, label: 'sw_camera_open', warning: 'warn_camera_open', confirm: 'confirm_exposure', warningCode: 'camera_open' },
   { id: 'websocket.allowQueryToken', section: 'websocket', key: 'allowQueryToken', riskyWhen: true, label: 'sw_ws_token', warning: 'warn_ws_token', confirm: 'confirm_exposure', warningCode: 'ws_query_token_allowed' },
@@ -69,8 +72,11 @@ export function readSwitches(snapshot: unknown): SwitchState[] {
 export const isLocked = (source: Source): boolean => source === 'env';
 
 /** The request body that changes one switch (nothing else is sent). */
-export function switchPatch(def: SwitchDef, value: boolean): Record<string, Record<string, boolean>> {
-  return { [def.section]: { [def.key]: value } };
+export function switchPatch(def: SwitchDef, value: boolean, confirm = false): Record<string, Record<string, boolean>> {
+  const body: Record<string, boolean> = { [def.key]: value };
+  // a switch the server wants confirmed carries `confirm: true` with its risky value, once the screen has asked
+  if (def.sendsConfirm && confirm && value === def.riskyWhen) body.confirm = true;
+  return { [def.section]: body };
 }
 
 /** The risky value, reached from the other one, asks for a confirmation first. */

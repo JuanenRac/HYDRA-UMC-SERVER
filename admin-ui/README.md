@@ -41,7 +41,7 @@ because it's served from a different URL prefix (`/admin`) than STUDIO
 
 Administrators only. It shows the nine access switches of `GET`/`PUT /api/admin/server-config` (`health.open`, `safety.publishGlobalStop`,
 `connections.recordAddress`, `camera.open`, `websocket.allowQueryToken`, `logging.redactSecrets`, `voice.requireSignature`,
-`camera.credentialsViaEnv`, `install.newInstallTls`) and the job dispatcher options (the delivery of its stop requests with its robot map, and the two
+`camera.credentialsViaEnv`, `install.newInstallTls`, `safety.framErase`) and the job dispatcher options (the delivery of its stop requests with its robot map, and the two
 options of its replanning). Each switch shows where its value comes from; one fixed by the environment of the server is locked; the value that lowers
 the protection asks for a confirmation; only what changed is sent. The logic is in `src/securityModel.ts` and is checked by the server tests.
 

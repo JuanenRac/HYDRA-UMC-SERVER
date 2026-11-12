@@ -1,6 +1,6 @@
 {
-  "schema": 1,
-  "note": "One source for the range of each joint and the home pose of each model, in degrees. The same file is kept in HYDRA-UMC-STUDIO (src/data/kinematicData.json) and HYDRA-UMC-SUITE (assets/kinematic_data.json); each repository checks it against its own kinematics and, when both repositories sit side by side, against the other copy. A model that is not listed uses the generic range of -180 to 180.",
+  "schema_version": "1.0",
+  "note": "One source for the joint ranges, the home pose and, where it is known, the chain of each robot model. Angles of limits and home are in degrees; a chain is a list of joints as a URDF states them (the offset in meters from the parent, the rotation in radians, the axis), with the numbers it was built from. A model that is not listed uses the generic range of -180 to 180.",
   "models": {
     "Parol6 (6-DOF)": {
       "limits": {
@@ -792,6 +792,123 @@
         "j4": -90,
         "j5": 0,
         "j6": 0
+      },
+      "chain": {
+        "convention": "urdf",
+        "joints": [
+          {
+            "pos": [
+              0,
+              0,
+              0.1519
+            ],
+            "rpy": [
+              0,
+              0,
+              0
+            ],
+            "axis": [
+              0,
+              0,
+              1
+            ]
+          },
+          {
+            "pos": [
+              0,
+              0.1198,
+              0
+            ],
+            "rpy": [
+              0,
+              1.570796327,
+              0
+            ],
+            "axis": [
+              0,
+              1,
+              0
+            ]
+          },
+          {
+            "pos": [
+              0,
+              -0.0925,
+              0.24365
+            ],
+            "rpy": [
+              0,
+              0,
+              0
+            ],
+            "axis": [
+              0,
+              1,
+              0
+            ]
+          },
+          {
+            "pos": [
+              0,
+              0,
+              0.21325
+            ],
+            "rpy": [
+              0,
+              1.570796327,
+              0
+            ],
+            "axis": [
+              0,
+              1,
+              0
+            ]
+          },
+          {
+            "pos": [
+              0,
+              0.08505,
+              0
+            ],
+            "rpy": [
+              0,
+              0,
+              0
+            ],
+            "axis": [
+              0,
+              0,
+              1
+            ]
+          },
+          {
+            "pos": [
+              0,
+              0,
+              0.08535
+            ],
+            "rpy": [
+              0,
+              0,
+              0
+            ],
+            "axis": [
+              0,
+              1,
+              0
+            ]
+          }
+        ],
+        "parameters": {
+          "d1": 0.1519,
+          "a2": -0.24365,
+          "a3": -0.21325,
+          "d4": 0.11235,
+          "d5": 0.08535,
+          "d6": 0.0819,
+          "shoulderOffset": 0.1198,
+          "elbowOffset": -0.0925
+        }
       }
     },
     "UR5 (6-DOF)": {
@@ -828,6 +945,123 @@
         "j4": -90,
         "j5": 0,
         "j6": 0
+      },
+      "chain": {
+        "convention": "urdf",
+        "joints": [
+          {
+            "pos": [
+              0,
+              0,
+              0.089159
+            ],
+            "rpy": [
+              0,
+              0,
+              0
+            ],
+            "axis": [
+              0,
+              0,
+              1
+            ]
+          },
+          {
+            "pos": [
+              0,
+              0.13585,
+              0
+            ],
+            "rpy": [
+              0,
+              1.570796327,
+              0
+            ],
+            "axis": [
+              0,
+              1,
+              0
+            ]
+          },
+          {
+            "pos": [
+              0,
+              -0.1197,
+              0.425
+            ],
+            "rpy": [
+              0,
+              0,
+              0
+            ],
+            "axis": [
+              0,
+              1,
+              0
+            ]
+          },
+          {
+            "pos": [
+              0,
+              0,
+              0.39225
+            ],
+            "rpy": [
+              0,
+              1.570796327,
+              0
+            ],
+            "axis": [
+              0,
+              1,
+              0
+            ]
+          },
+          {
+            "pos": [
+              0,
+              0.093,
+              0
+            ],
+            "rpy": [
+              0,
+              0,
+              0
+            ],
+            "axis": [
+              0,
+              0,
+              1
+            ]
+          },
+          {
+            "pos": [
+              0,
+              0,
+              0.09465
+            ],
+            "rpy": [
+              0,
+              0,
+              0
+            ],
+            "axis": [
+              0,
+              1,
+              0
+            ]
+          }
+        ],
+        "parameters": {
+          "d1": 0.089159,
+          "a2": -0.425,
+          "a3": -0.39225,
+          "d4": 0.10915,
+          "d5": 0.09465,
+          "d6": 0.0823,
+          "shoulderOffset": 0.13585,
+          "elbowOffset": -0.1197
+        }
       }
     },
     "UR10 (6-DOF)": {
@@ -864,6 +1098,123 @@
         "j4": -90,
         "j5": 0,
         "j6": 0
+      },
+      "chain": {
+        "convention": "urdf",
+        "joints": [
+          {
+            "pos": [
+              0,
+              0,
+              0.1273
+            ],
+            "rpy": [
+              0,
+              0,
+              0
+            ],
+            "axis": [
+              0,
+              0,
+              1
+            ]
+          },
+          {
+            "pos": [
+              0,
+              0.220941,
+              0
+            ],
+            "rpy": [
+              0,
+              1.570796327,
+              0
+            ],
+            "axis": [
+              0,
+              1,
+              0
+            ]
+          },
+          {
+            "pos": [
+              0,
+              -0.1719,
+              0.612
+            ],
+            "rpy": [
+              0,
+              0,
+              0
+            ],
+            "axis": [
+              0,
+              1,
+              0
+            ]
+          },
+          {
+            "pos": [
+              0,
+              0,
+              0.5723
+            ],
+            "rpy": [
+              0,
+              1.570796327,
+              0
+            ],
+            "axis": [
+              0,
+              1,
+              0
+            ]
+          },
+          {
+            "pos": [
+              0,
+              0.1149,
+              0
+            ],
+            "rpy": [
+              0,
+              0,
+              0
+            ],
+            "axis": [
+              0,
+              0,
+              1
+            ]
+          },
+          {
+            "pos": [
+              0,
+              0,
+              0.1157
+            ],
+            "rpy": [
+              0,
+              0,
+              0
+            ],
+            "axis": [
+              0,
+              1,
+              0
+            ]
+          }
+        ],
+        "parameters": {
+          "d1": 0.1273,
+          "a2": -0.612,
+          "a3": -0.5723,
+          "d4": 0.163941,
+          "d5": 0.1157,
+          "d6": 0.0922,
+          "shoulderOffset": 0.220941,
+          "elbowOffset": -0.1719
+        }
       }
     }
   }

@@ -124,7 +124,7 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
 
   const toggle = (state: SwitchState, next: boolean) => {
     if (needsConfirmation(state.def, state.value, next) && state.def.confirm && !window.confirm(t(state.def.confirm))) return;
-    void send(switchPatch(state.def, next));
+    void send(switchPatch(state.def, next, true));
   };
 
   const saveLimits = () => {

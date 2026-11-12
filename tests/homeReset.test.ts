@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import { registerCommandRoutes } from "../src/routes/commandRoutes.ts";
 import { JogArming, defaultSafetyConfig } from "../src/safetyLimits.ts";
 import { GENERIC_HOME, homeFor, jointOutOfRange, resolveHome } from "../src/modelHome.ts";
@@ -77,6 +78,18 @@ test("the table is the one the STUDIO and SUITE repositories keep, when they sit
     const url = new URL(other, import.meta.url);
     if (!fs.existsSync(url)) continue;
     assert.deepEqual(JSON.parse(fs.readFileSync(url, "utf-8")), JSON.parse(mine), other);
+  }
+});
+
+test("the table is the document of the SDK the continuous integration is pinned to, when that checkout is there", () => {
+  const mine = fs.readFileSync(new URL("../src/data/kinematicData.json", import.meta.url), "utf-8");
+  const candidates = [process.env.HYDRA_UMC_SDK_DIR, fileURLToPath(new URL("../.hydra-umc-sdk-contract", import.meta.url)), fileURLToPath(new URL("../../HYDRA-UMC-SDK", import.meta.url))];
+  for (const dir of candidates) {
+    if (!dir) continue;
+    const file = `${dir}/contracts/kinematics.json`;
+    if (!fs.existsSync(file)) continue;
+    assert.deepEqual(JSON.parse(mine), JSON.parse(fs.readFileSync(file, "utf-8")), file);
+    return;
   }
 });
 
