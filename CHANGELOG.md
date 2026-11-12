@@ -1,8 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
 All notable changes to this project are documented here.
 
-## [Unreleased]
+## [0.8.2.8] - Tests for the playback engine, the part of the server with the least coverage: one point per tick, the wrist values a point does not carry, cartesian and compact points, the table axes that only a robot with a table moves, the speed that sets the interval (nev
 
 - **Tests for the playback engine, the part of the server with the least coverage:** one point per tick, the wrist values a point does not carry, cartesian and compact points, the table axes that only a robot with a table moves, the speed that sets the interval (never below 50 ms), pause, stop request, repeat, the natural end that tells the phones once, an id used by two robots that names none, and the helpers of the reservation (active until it expires, a history of the last twenty entries).
 

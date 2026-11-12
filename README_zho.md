@@ -39,7 +39,7 @@ GPL-3.0-or-later - see LICENSE
 
 | | |
 |---|---|
-| 版本 | `0.8.2.7` |
+| 版本 | `0.8.2.8` |
 | 成熟度 | 可用 |
 | 测试 | 816 (`npm run test:unit`) |
 | 技术栈 | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
