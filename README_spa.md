@@ -119,7 +119,7 @@ directamente a la misma app Express). Ese proceso se ha dividido en dos:
 
 ## 🧩 Papel en HYDRA-UMC
 
-**HYDRA-UMC-SERVER** es el motor de la celda: un backend Node.js y Express sin interfaz que guarda el estado de los robots, lo persiste en disco, exige un rol a cada escritura y envía actualizaciones en vivo a todos los clientes por un único WebSocket. Todos los clientes (STUDIO, SUITE, las aplicaciones de móvil, la pantalla táctil, el reloj, la herramienta de línea de órdenes) pasan por él, y solo él decide quién puede mover qué robot y hasta dónde.
+**HYDRA-UMC-SERVER** es el motor de la celda: un backend Node.js y Express sin interfaz que guarda el estado de los robots, lo persiste en disco, exige un rol a cada escritura y envía actualizaciones en vivo a todos los clientes por un único WebSocket. Todos los clientes (STUDIO, SUITE, las aplicaciones de móvil, la pantalla táctil, el reloj, la herramienta de línea de órdenes) pasan por él, y solo él decide quién puede mover qué robot y hasta dónde. Hoy se ejecuta en el banco piloto con la CM5; el host objetivo de HYDRA-UMC es una NVIDIA Jetson Orin NX de 16 GB (JetPack o Debian), un diseño que no se ha construido ni probado, donde se prevé que el servidor funcione del mismo modo.
 
 ## 🏛️ Arquitectura
 

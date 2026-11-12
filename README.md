@@ -114,7 +114,7 @@ process has been split in two:
 
 ## 🧩 Role in HYDRA-UMC
 
-**HYDRA-UMC-SERVER** is the engine of the cell: a headless Node.js and Express backend that owns the robot state, saves it to disk, signs every write in with a role, and pushes live updates to every client over one WebSocket. All clients (STUDIO, SUITE, the phone apps, the touch screen, the watch, the command-line tool) go through it, and it alone decides who may move which robot and how far.
+**HYDRA-UMC-SERVER** is the engine of the cell: a headless Node.js and Express backend that owns the robot state, saves it to disk, signs every write in with a role, and pushes live updates to every client over one WebSocket. All clients (STUDIO, SUITE, the phone apps, the touch screen, the watch, the command-line tool) go through it, and it alone decides who may move which robot and how far. It runs on the CM5 pilot bench today; the target host of HYDRA-UMC is an NVIDIA Jetson Orin NX 16 GB (JetPack or Debian), a design that has not been built or tested, where the server is meant to run in the same way.
 
 ## 🏛️ Architecture
 

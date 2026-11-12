@@ -85,7 +85,7 @@ Este projeto fazia parte do **[HYDRA-UMC STUDIO](https://github.com/JuanenRac/HY
 
 ## 🧩 Papel no HYDRA-UMC
 
-O **HYDRA-UMC-SERVER** é o motor da célula: um backend Node.js e Express sem interface que guarda o estado dos robôs, o grava em disco, exige um papel em cada escrita e envia atualizações em direto a todos os clientes por um único WebSocket. Todos os clientes (STUDIO, SUITE, as aplicações de telemóvel, o ecrã tátil, o relógio, a ferramenta de linha de comandos) passam por ele, e só ele decide quem pode mover que robô e até onde.
+O **HYDRA-UMC-SERVER** é o motor da célula: um backend Node.js e Express sem interface que guarda o estado dos robôs, o grava em disco, exige um papel em cada escrita e envia atualizações em direto a todos os clientes por um único WebSocket. Todos os clientes (STUDIO, SUITE, as aplicações de telemóvel, o ecrã tátil, o relógio, a ferramenta de linha de comandos) passam por ele, e só ele decide quem pode mover que robô e até onde. Hoje corre no banco piloto com a CM5; o anfitrião objetivo do HYDRA-UMC é uma NVIDIA Jetson Orin NX de 16 GB (JetPack ou Debian), um desenho que não foi construído nem testado, onde o servidor deverá correr da mesma maneira.
 
 ## 🏛️ Arquitetura
 

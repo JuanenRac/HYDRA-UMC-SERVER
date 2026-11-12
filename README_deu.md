@@ -121,7 +121,7 @@ Dieser Prozess wurde in zwei Teile aufgespalten:
 
 ## 🧩 Rolle in HYDRA-UMC
 
-**HYDRA-UMC-SERVER** ist der Motor der Zelle: ein Node.js- und Express-Backend ohne Oberfläche, das den Roboterzustand hält, auf Platte speichert, jeden Schreibzugriff mit einer Rolle verlangt und Live-Updates über einen einzigen WebSocket an alle Clients schickt. Alle Clients (STUDIO, SUITE, die Handy-Apps, der Touchscreen, die Uhr, das Kommandozeilenwerkzeug) laufen über ihn, und er allein entscheidet, wer welchen Roboter wie weit bewegen darf.
+**HYDRA-UMC-SERVER** ist der Motor der Zelle: ein Node.js- und Express-Backend ohne Oberfläche, das den Roboterzustand hält, auf Platte speichert, jeden Schreibzugriff mit einer Rolle verlangt und Live-Updates über einen einzigen WebSocket an alle Clients schickt. Alle Clients (STUDIO, SUITE, die Handy-Apps, der Touchscreen, die Uhr, das Kommandozeilenwerkzeug) laufen über ihn, und er allein entscheidet, wer welchen Roboter wie weit bewegen darf. Heute läuft er auf dem CM5-Pilotprüfstand; der Ziel-Host von HYDRA-UMC ist ein NVIDIA Jetson Orin NX 16 GB (JetPack oder Debian), ein Entwurf, der weder gebaut noch getestet wurde und auf dem der Server auf dieselbe Weise laufen soll.
 
 ## 🏛️ Architektur
 

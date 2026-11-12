@@ -85,7 +85,7 @@ HYDRA-UMC SERVER 是驱动 HYDRA-UMC 多机器人微工厂单元的独立后端�
 
 ## 🧩 在 HYDRA-UMC 中的角色
 
-**HYDRA-UMC-SERVER** 是单元的引擎：一个无界面的 Node.js 和 Express 后端，保存机器人状态并写入磁盘，要求每次写入带有角色，并通过一个 WebSocket 向所有客户端推送实时更新。所有客户端（STUDIO、SUITE、手机应用、触摸屏、手表、命令行工具）都经过它，只有它决定谁能移动哪个机器人以及移动多远。
+**HYDRA-UMC-SERVER** 是单元的引擎：一个无界面的 Node.js 和 Express 后端，保存机器人状态并写入磁盘，要求每次写入带有角色，并通过一个 WebSocket 向所有客户端推送实时更新。所有客户端（STUDIO、SUITE、手机应用、触摸屏、手表、命令行工具）都经过它，只有它决定谁能移动哪个机器人以及移动多远。目前它运行在 CM5 试验台上；HYDRA-UMC 的目标主机是 NVIDIA Jetson Orin NX 16 GB（JetPack 或 Debian），这是尚未制造或测试的设计，服务器计划以同样方式在其上运行。
 
 ## 🏛️ 架构
 
