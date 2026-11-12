@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.8.2.9] - More tests for the live connection hub, the Bluetooth calls and the administration routes: the WebSocket hub is checked for what each kind of client hears (the credentials of the cameras only for an administrator, the small patch only for a client that declare
+
 All notable changes to this project are documented here.
 
 - **More tests for the live connection hub, the Bluetooth calls and the administration routes:** the WebSocket hub is checked for what each kind of client hears (the credentials of the cameras only for an administrator, the small patch only for a client that declared schema 2, a fault in the telemetry or phone callbacks never reaching the write), and its endpoint for a missing, malformed, foreign, expired or revoked token, the first push, the admin-only settings message, a demotion that takes effect on the next message, a duplicated robot id and the heartbeat that drops dead and revoked sockets; the `bluetoothctl` wrapper is run against a stand-in program (pairing order, a vanished device, each step failing, the address as one argument); and the account and administration routes get both middlewares, the last-administrator guard, the log tail limits, the port bounds, the refused options written to the audit record and the restart that answers before it exits. Line coverage of `ws.ts` goes from 47 % to 100 %, `bluetooth.ts` from 52 % to 100 % and `adminRoutes.ts` from 76 % to 93 %; the whole unit run now measures 97.3 % of lines.

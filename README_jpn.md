@@ -39,7 +39,7 @@ GPL-3.0-or-later - see LICENSE
 
 | | |
 |---|---|
-| バージョン | `0.8.2.8` |
+| バージョン | `0.8.2.9` |
 | 成熟度 | 機能する |
 | テスト | 996 (`npm run test:unit`) |
 | 技術 | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |

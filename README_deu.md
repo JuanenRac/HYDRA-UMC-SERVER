@@ -39,7 +39,7 @@ GPL-3.0-or-later - see LICENSE
 
 | | |
 |---|---|
-| Version | `0.8.2.8` |
+| Version | `0.8.2.9` |
 | Reifegrad | Funktionsfähig |
 | Tests | 996 (`npm run test:unit`) |
 | Technik | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |

@@ -39,7 +39,7 @@ GPL-3.0-or-later - see LICENSE
 
 | | |
 |---|---|
-| Versão | `0.8.2.8` |
+| Versão | `0.8.2.9` |
 | Maturidade | Funcional |
 | Testes | 996 (`npm run test:unit`) |
 | Tecnologia | Node.js 20+ / Express / WebSocket (ws) / REST/OpenAPI |
