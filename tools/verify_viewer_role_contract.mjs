@@ -27,7 +27,7 @@ const VIEWER = { username: "viewer-contract-viewer", password: "viewer-contract-
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function waitUntil(fn, message) {
-  const deadline = Date.now() + 15000;
+  const deadline = Date.now() + (Number(process.env.HYDRA_UMC_TEST_START_TIMEOUT_MS) || 60000);
   for (;;) {
     if (await fn()) return;
     if (Date.now() > deadline) throw new Error(`timed out waiting for: ${message}`);

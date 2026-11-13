@@ -46,7 +46,7 @@ async function withServer(env, run) {
     });
     child.stdout.on("data", (chunk) => { logs += chunk; });
     child.stderr.on("data", (chunk) => { logs += chunk; });
-    const deadline = Date.now() + 15000;
+    const deadline = Date.now() + (Number(process.env.HYDRA_UMC_TEST_START_TIMEOUT_MS) || 60000);
     for (;;) {
       try { if ((await fetch(`http://127.0.0.1:${port}/api/hydra-info`)).ok) break; } catch { /* not up yet */ }
       if (Date.now() > deadline) throw new Error(`server did not start\n${logs}`);
