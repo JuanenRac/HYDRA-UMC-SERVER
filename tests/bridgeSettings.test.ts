@@ -71,7 +71,7 @@ test("the message of a bridge is signed and carries only its own switches, with 
   const signer = makeSigner();
   const uav = JSON.parse(settingsMessage("uav", file, signer)!);
   assert.equal(uav.schema, 2);
-  assert.deepEqual(uav.settings, { missionUploadEnabled: true });
+  assert.deepEqual(uav.settings, { missionUploadEnabled: true, envelopeRequired: true, confirmationRequired: true, chainInFlight: false, uploadGeofence: false });
   assert.match(uav.signature, /^[0-9a-f]{64}$/);
   assert.deepEqual(JSON.parse(settingsMessage("amr", file, signer)!).settings, { publishState: true, publishOpcua: false, zoneInterlock: false, zoneUnknown: "pause" });
   assert.deepEqual(allSettingsMessages(undefined, signer).map((m) => m.name), ["droids", "uav", "amr", "openpnp"]);
@@ -117,4 +117,17 @@ test("saving the switches asks the gateway to announce them, and the delivery sa
   config.update({ bridges: { amr: { publishState: true } } }, "root");
   config.update({ aiAccess: "admin" }, "root");
   assert.equal(announced, 1);
+});
+
+test("the flight policy switches are conservative by default and the risky values ask for a confirmation", () => {
+  const s = resolveBridgeSettings(undefined);
+  assert.equal(s.uav.envelopeRequired.value, true);
+  assert.equal(s.uav.confirmationRequired.value, true);
+  assert.equal(s.uav.chainInFlight.value, false);
+  assert.equal(s.uav.uploadGeofence.value, false);
+  assert.equal(s.droids.confirmationRequired.value, true);
+  assert.equal(s.droids.returnHomeAlways.value, true);
+  assert.deepEqual(applyBridgesPatch(undefined, { uav: { envelopeRequired: false, chainInFlight: true } }).warnings, ["bridge_uav_envelopeRequired", "bridge_uav_chainInFlight"]);
+  assert.deepEqual(applyBridgesPatch(undefined, { droids: { confirmationRequired: false } }).warnings, ["bridge_droids_confirmationRequired"]);
+  assert.deepEqual(applyBridgesPatch(undefined, { uav: { envelopeRequired: true }, droids: { returnHomeAlways: false } }).warnings, []);
 });
