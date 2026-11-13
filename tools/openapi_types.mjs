@@ -24,7 +24,59 @@ export function loadShapes(file = SHAPES_FILE) {
   return document.shapes;
 }
 
-export const SCHEMAS = loadShapes();
+// The shapes of the routes of the update from Studio are named here until the SDK adopts them (they are not in the byte copy above).
+const nullableString = { type: ["string", "null"] };
+const STEPS = ["checking", "downloading", "verifying", "applying", "restarting", "done", "failed"];
+export const LOCAL_SHAPES = {
+  SelfUpdateJob: {
+    type: "object",
+    required: ["id", "action", "component", "state", "fromVersion", "targetVersion", "startedAt", "updatedAt", "error", "detail", "log", "by"],
+    description: "One update (or way back) of a program of this machine, step by step. It lives in a file, so it can be read again after the server restarts.",
+    properties: {
+      id: str,
+      action: { type: "string", enum: ["apply", "rollback"] },
+      component: { type: "string", enum: ["server", "studio", "os-agent"] },
+      state: { type: "string", enum: STEPS },
+      fromVersion: nullableString,
+      targetVersion: nullableString,
+      startedAt: str,
+      updatedAt: str,
+      error: { type: ["string", "null"], enum: ["no_release", "already_current", "no_signed_package", "download_failed", "package_too_large", "signature_invalid", "no_earlier_release", "start_failed", "rolled_back", "deploy_failed", "timeout", "interrupted", null] },
+      detail: str,
+      packageName: str,
+      log: { type: "array", items: { type: "object", required: ["at", "step", "text"], properties: { at: str, step: { type: "string", enum: STEPS }, text: str } } },
+      by: str,
+    },
+  },
+  SelfUpdateItem: {
+    type: "object",
+    required: ["id", "repo", "installed", "previous", "latest", "state", "signedPackage"],
+    properties: {
+      id: { type: "string", enum: ["server", "studio", "os-agent"] },
+      repo: str,
+      installed: nullableString,
+      previous: nullableString,
+      latest: nullableString,
+      state: { type: "string", enum: ["current", "behind", "ahead", "unknown"] },
+      signedPackage: { type: "boolean", description: "Whether the newest release carries the package, its hash and its signature." },
+    },
+  },
+  SelfUpdateStatus: {
+    type: "object",
+    required: ["checkedAt", "owner", "rateLimited", "items", "applyEnabled", "job"],
+    description: "The programs of this machine set against the newest signed release of each, whether applying is switched on, and the job that is going on or the last one.",
+    properties: {
+      checkedAt: nullableString,
+      owner: str,
+      rateLimited: bool,
+      items: { type: "array", items: { $ref: "#/components/schemas/SelfUpdateItem" } },
+      applyEnabled: bool,
+      job: { anyOf: [{ $ref: "#/components/schemas/SelfUpdateJob" }, { type: "null" }] },
+    },
+  },
+};
+
+export const SCHEMAS = { ...loadShapes(), ...LOCAL_SHAPES };
 
 const ref = (name) => ({ $ref: `#/components/schemas/${name}` });
 
@@ -68,6 +120,10 @@ export const RESPONSES = {
   "DELETE /api/admin/device-tokens/{id}": ref("DeviceTokenRevoked"),
   "POST /api/device/login": ref("LoginResult"),
   "GET /api/admin/updates": ref("UpdateReport"),
+  "GET /api/admin/self-update": ref("SelfUpdateStatus"),
+  "GET /api/admin/self-update/jobs/{id}": ref("SelfUpdateJob"),
+  "POST /api/admin/self-update/apply": ref("SelfUpdateJob"),
+  "POST /api/admin/self-update/rollback": ref("SelfUpdateJob"),
   "GET /api/admin/maintenance/status": ref("MaintenanceOutcome"),
   "GET /api/tool-arms": ref("ToolArmsReport"),
   "POST /api/tool-arms/reset": ref("ToolArmResetResult"),
@@ -165,6 +221,8 @@ export const REQUESTS = {
   "POST /api/tool-arms/reset": { required: ["robot", "toolId", "confirm"], fields: { robot: str, toolId: num, confirm: str } },
   "POST /api/admin/maintenance/install": { required: ["package", "confirm"], fields: { package: str, allowDowngrade: bool, confirm: bool } },
   "POST /api/admin/maintenance/rollback": { required: ["component", "confirm"], fields: { component: str, confirm: bool } },
+  "POST /api/admin/self-update/apply": { required: ["component", "confirm"], fields: { component: { type: "string", enum: ["server", "studio", "os-agent"] }, confirm: { type: "boolean", enum: [true] } } },
+  "POST /api/admin/self-update/rollback": { required: ["component", "confirm"], fields: { component: { type: "string", enum: ["server", "studio", "os-agent"] }, confirm: { type: "boolean", enum: [true] } } },
   "POST /api/admin/maintenance/prune": { required: ["component", "confirm"], fields: { component: str, keep: num, confirm: bool } },
   "POST /api/admin/device-tokens": { required: ["name", "username", "confirm"], fields: { name: str, username: str, ttlDays: num, confirm: bool } },
   "POST /api/logout": { required: [], fields: { refreshToken: str } },
@@ -216,6 +274,11 @@ export const EXTRA_STATUSES = {
   "GET /api/admin/device-tokens": [404],
   // 404 while updateCheck.enabled is off.
   "GET /api/admin/updates": [404],
+  // 404 while updateCheck.enabled is off (the look) or maintenance.enabled is off (apply and rollback); 409 for a second job or no earlier release.
+  "GET /api/admin/self-update": [404, 503],
+  "GET /api/admin/self-update/jobs/{id}": [404, 503],
+  "POST /api/admin/self-update/apply": [400, 404, 409],
+  "POST /api/admin/self-update/rollback": [400, 404, 409],
   // 404 while maintenance.enabled is off (as if the routes did not exist); 400 for a request the checks refuse or that lacks confirm; 409 while another run is going on; 502 when the deploy tool ran and failed.
   "GET /api/admin/maintenance/status": [400, 404, 502],
   // 503 until the safety zones service has an address (or when it is down), 404 when it runs without --tool-arms, 502 when it answers something that is not JSON.
