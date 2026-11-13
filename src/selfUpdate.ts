@@ -241,6 +241,9 @@ export function launcherWith(prefix: string[], job: string): Launcher {
   };
 }
 
+/** GitHub is not a service of the family: this call never carries the identity of the server. */
+const github: { fetch: FetchLike } = { fetch: (url, init) => fetch(url, init) as unknown as Promise<FetchResponse> };
+
 const clip = (text: string) => (Buffer.byteLength(text) > OUTPUT_LIMIT ? text.slice(0, OUTPUT_LIMIT) : text);
 
 export class SelfUpdate {
@@ -319,7 +322,7 @@ export class SelfUpdate {
   async report(force = false): Promise<SelfUpdateReport> {
     const owner = this.deps.settings().owner;
     if (this.cached && this.cached.report.owner === owner && this.now() - this.cached.at < SELF_UPDATE_CACHE_MINUTES * 60_000 && (!force || this.now() - this.cached.at < 60_000)) return this.cached.report;
-    const fetchFn: FetchLike = this.deps.fetch ?? ((url, init) => fetch(url, init) as unknown as Promise<FetchResponse>);
+    const fetchFn: FetchLike = this.deps.fetch ?? github.fetch;
     let rateLimited = false;
     const items: SelfUpdateItem[] = [];
     for (const id of Object.keys(SELF_UPDATE_COMPONENTS) as SelfUpdateComponent[]) {
@@ -404,7 +407,7 @@ export class SelfUpdate {
     const job = this.job as SelfUpdateJob;
     const settings = this.deps.settings();
     const maintenance = this.deps.maintenance();
-    const fetchFn: FetchLike = this.deps.fetch ?? ((url, init) => fetch(url, init) as unknown as Promise<FetchResponse>);
+    const fetchFn: FetchLike = this.deps.fetch ?? github.fetch;
     // 1. the newest release and its three files
     let latest: LatestRelease | null = null;
     try {

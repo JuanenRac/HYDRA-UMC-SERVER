@@ -2193,236 +2193,6 @@
             "type": "boolean"
           }
         }
-      },
-      "SelfUpdateJob": {
-        "type": "object",
-        "required": [
-          "id",
-          "action",
-          "component",
-          "state",
-          "fromVersion",
-          "targetVersion",
-          "startedAt",
-          "updatedAt",
-          "error",
-          "detail",
-          "log",
-          "by"
-        ],
-        "description": "One update (or way back) of a program of this machine, step by step. It lives in a file, so it can be read again after the server restarts.",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "action": {
-            "type": "string",
-            "enum": [
-              "apply",
-              "rollback"
-            ]
-          },
-          "component": {
-            "type": "string",
-            "enum": [
-              "server",
-              "studio",
-              "os-agent"
-            ]
-          },
-          "state": {
-            "type": "string",
-            "enum": [
-              "checking",
-              "downloading",
-              "verifying",
-              "applying",
-              "restarting",
-              "done",
-              "failed"
-            ]
-          },
-          "fromVersion": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "targetVersion": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "startedAt": {
-            "type": "string"
-          },
-          "updatedAt": {
-            "type": "string"
-          },
-          "error": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "enum": [
-              "no_release",
-              "already_current",
-              "no_signed_package",
-              "download_failed",
-              "package_too_large",
-              "signature_invalid",
-              "no_earlier_release",
-              "start_failed",
-              "rolled_back",
-              "deploy_failed",
-              "timeout",
-              "interrupted",
-              null
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "packageName": {
-            "type": "string"
-          },
-          "log": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": [
-                "at",
-                "step",
-                "text"
-              ],
-              "properties": {
-                "at": {
-                  "type": "string"
-                },
-                "step": {
-                  "type": "string",
-                  "enum": [
-                    "checking",
-                    "downloading",
-                    "verifying",
-                    "applying",
-                    "restarting",
-                    "done",
-                    "failed"
-                  ]
-                },
-                "text": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "by": {
-            "type": "string"
-          }
-        }
-      },
-      "SelfUpdateItem": {
-        "type": "object",
-        "required": [
-          "id",
-          "repo",
-          "installed",
-          "previous",
-          "latest",
-          "state",
-          "signedPackage"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "enum": [
-              "server",
-              "studio",
-              "os-agent"
-            ]
-          },
-          "repo": {
-            "type": "string"
-          },
-          "installed": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "previous": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "latest": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "state": {
-            "type": "string",
-            "enum": [
-              "current",
-              "behind",
-              "ahead",
-              "unknown"
-            ]
-          },
-          "signedPackage": {
-            "type": "boolean",
-            "description": "Whether the newest release carries the package, its hash and its signature."
-          }
-        }
-      },
-      "SelfUpdateStatus": {
-        "type": "object",
-        "required": [
-          "checkedAt",
-          "owner",
-          "rateLimited",
-          "items",
-          "applyEnabled",
-          "job"
-        ],
-        "description": "The programs of this machine set against the newest signed release of each, whether applying is switched on, and the job that is going on or the last one.",
-        "properties": {
-          "checkedAt": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "owner": {
-            "type": "string"
-          },
-          "rateLimited": {
-            "type": "boolean"
-          },
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SelfUpdateItem"
-            }
-          },
-          "applyEnabled": {
-            "type": "boolean"
-          },
-          "job": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/SelfUpdateJob"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        }
       }
     }
   },
@@ -3365,14 +3135,7 @@
         "x-access": "admin",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SelfUpdateStatus"
-                }
-              }
-            }
+            "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "404": {
             "description": "Not found. The body is documented in docs/REMOTE_API.md.",
@@ -3423,14 +3186,7 @@
         "x-access": "admin",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SelfUpdateJob"
-                }
-              }
-            }
+            "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "400": {
             "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
@@ -3511,14 +3267,7 @@
         "x-access": "admin",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SelfUpdateJob"
-                }
-              }
-            }
+            "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "404": {
             "description": "Not found. The body is documented in docs/REMOTE_API.md.",
@@ -3569,14 +3318,7 @@
         "x-access": "admin",
         "responses": {
           "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SelfUpdateJob"
-                }
-              }
-            }
+            "description": "Success. The body is documented in docs/REMOTE_API.md."
           },
           "400": {
             "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
