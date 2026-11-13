@@ -15,6 +15,7 @@ import { JWT_SECRET } from "./auth";
 import { verifyAccessToken } from "./jwtKeys";
 import { setupDiscovery } from "./runtime";
 import { TWIN_RELAY_PATH, handleTwinRelay, type SessionCheck } from "./twinRelay";
+import { READ_ONLY_REFUSAL, readOnlyEnabled } from "./readOnlyMode";
 
 export function createWsHub(deps: {
   setSettings: (payload: any) => void;
@@ -318,6 +319,11 @@ export function attachWebSocketServer(
             const liveUser = findUser(decoded?.username || "");
             if (!liveUser || liveUser.role !== "admin") {
               ws.send(JSON.stringify({ error: "Access denied: admin privileges required" }));
+              return;
+            }
+            // Read-only mode (off by default) refuses this write as it refuses the REST one.
+            if (readOnlyEnabled()) {
+              ws.send(JSON.stringify(READ_ONLY_REFUSAL));
               return;
             }
             // The trusted networks (off by default) refuse to be administered from outside the house and the VPN: the same rule as the REST route.

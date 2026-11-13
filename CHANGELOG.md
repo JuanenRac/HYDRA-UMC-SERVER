@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- **A read-only mode of the server (`HYDRA_UMC_READ_ONLY`, off by default):** with `1` the server shows its robots and data and changes nothing, for every account and app: a request that writes is answered with `423` and the code `server-read-only` before it reaches a route (and the settings write of the WebSocket the same), while reading, the sign-in and sign-out, STOP, the global stop and the safe-mode disable go on. Read on every request. `src/readOnlyMode.ts`, `.env.example`, `docs/REMOTE_API.md`, `tests/readOnlyMode.test.ts`.
+
 ## [0.8.3.0] - The F-RAM erase and self-test of the kinematic brain, one stop state for the apps and the stop watch interval as an option
 
 - **README: the platform statement:** the description says what this project serves today (the CM5 pilot bench) and that the target platform of HYDRA-UMC, an NVIDIA Jetson Orin NX 16 GB, is a design that has not been built or tested.

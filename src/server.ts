@@ -74,6 +74,7 @@ import type { UpdateCheckSettings } from "./updateCheck";
 import { jwtKeyStore, setJwtPolicyProvider, setKeyOverlapProvider } from "./jwtKeys";
 import { setServiceIdentitySwitch, identityHeader } from "./serviceIdentity";
 import { classify as classifyAddress, makeTrustedNetworksGate } from "./trustedNetworks";
+import { makeReadOnlyGate } from "./readOnlyMode";
 import { registerConnectionRoutes } from "./routes/connectionRoutes";
 import { registerLivenessRoutes } from "./routes/livenessRoutes";
 import { makeBridgeGatewayGate, registerBridgeRoutes } from "./routes/bridgeRoutes";
@@ -207,6 +208,9 @@ async function startServer() {
   // Trusted networks (off unless an administrator turned them on, see src/trustedNetworks.ts): from outside the house and its VPN the
   // server refuses to be administered. The settings and the audit log are read when a request arrives, so a change applies at once.
   app.use(makeTrustedNetworksGate(() => security.trustedNetworks(), { record: (entry) => { audit.record(entry as any); } }));
+
+  // Read-only mode (off unless HYDRA_UMC_READ_ONLY is on, see src/readOnlyMode.ts): the server shows everything and changes nothing, except STOP and the safe-mode disable. The variable is read on every request.
+  app.use(makeReadOnlyGate());
 
   // Create data directory if it doesn't exist
   const dataPath = path.join(process.cwd(), "data");
