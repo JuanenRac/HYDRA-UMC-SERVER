@@ -165,6 +165,8 @@ export const REQUESTS = {
   "POST /api/tool-arms/reset": { required: ["robot", "toolId", "confirm"], fields: { robot: str, toolId: num, confirm: str } },
   "POST /api/admin/maintenance/install": { required: ["package", "confirm"], fields: { package: str, allowDowngrade: bool, confirm: bool } },
   "POST /api/admin/maintenance/rollback": { required: ["component", "confirm"], fields: { component: str, confirm: bool } },
+  "POST /api/admin/self-update/apply": { required: ["component", "confirm"], fields: { component: { type: "string", enum: ["server", "studio", "os-agent"] }, confirm: { type: "boolean", enum: [true] } } },
+  "POST /api/admin/self-update/rollback": { required: ["component", "confirm"], fields: { component: { type: "string", enum: ["server", "studio", "os-agent"] }, confirm: { type: "boolean", enum: [true] } } },
   "POST /api/admin/maintenance/prune": { required: ["component", "confirm"], fields: { component: str, keep: num, confirm: bool } },
   "POST /api/admin/device-tokens": { required: ["name", "username", "confirm"], fields: { name: str, username: str, ttlDays: num, confirm: bool } },
   "POST /api/logout": { required: [], fields: { refreshToken: str } },
@@ -216,6 +218,11 @@ export const EXTRA_STATUSES = {
   "GET /api/admin/device-tokens": [404],
   // 404 while updateCheck.enabled is off.
   "GET /api/admin/updates": [404],
+  // 404 while updateCheck.enabled is off (the look) or maintenance.enabled is off (apply and rollback); 409 for a second job or no earlier release.
+  "GET /api/admin/self-update": [404, 503],
+  "GET /api/admin/self-update/jobs/{id}": [404, 503],
+  "POST /api/admin/self-update/apply": [400, 404, 409],
+  "POST /api/admin/self-update/rollback": [400, 404, 409],
   // 404 while maintenance.enabled is off (as if the routes did not exist); 400 for a request the checks refuse or that lacks confirm; 409 while another run is going on; 502 when the deploy tool ran and failed.
   "GET /api/admin/maintenance/status": [400, 404, 502],
   // 503 until the safety zones service has an address (or when it is down), 404 when it runs without --tool-arms, 502 when it answers something that is not JSON.

@@ -69,6 +69,8 @@ import { registerUpdateRoutes } from "./routes/updateRoutes";
 import { robotMotionOf } from "./atcReset";
 import { registerMaintenanceRoutes } from "./routes/maintenanceRoutes";
 import { Maintenance, maintenanceSettings } from "./maintenance";
+import { registerSelfUpdateRoutes } from "./routes/selfUpdateRoutes";
+import { SelfUpdate, installedReader, selfUpdateSettings, type SelfUpdateFile } from "./selfUpdate";
 import { writeDetectionHefSettings } from "./detectionHefSettings";
 import type { MaintenanceFile } from "./securityConfig";
 import { advertisedAddresses } from "./advertisedAddresses";
@@ -638,6 +640,15 @@ async function startServer() {
 
   // Install, go back and prune the releases of the programs installed here, behind a switch of Server Admin (maintenance.enabled, off by default: 404).
   registerMaintenanceRoutes(app, { authenticate, requireAdmin, enabled: () => security.maintenanceEnabled(), audit, maintenance: new Maintenance({ settings: () => maintenanceSettings((loadServerConfig() as { maintenance?: MaintenanceFile }).maintenance, dataPath) }) });
+
+  // Update the programs of this machine from Studio, step by step: the newest signed release of each (the look is updateCheck.enabled, applying is maintenance.enabled; both off by default: 404).
+  // The package is checked by the family's own check and installed by the deploy tool above, which keeps the earlier release, restarts only that program and goes back when it does not hold.
+  const maintenanceNow = () => maintenanceSettings((loadServerConfig() as { maintenance?: MaintenanceFile }).maintenance, dataPath);
+  const runningVersion = (): string | null => { try { return JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf-8")).version ?? null; } catch { return null; } };
+  registerSelfUpdateRoutes(app, {
+    authenticate, requireAdmin, audit, lookEnabled: () => security.updateCheckEnabled(), applyEnabled: () => security.maintenanceEnabled(),
+    selfUpdate: new SelfUpdate({ settings: () => selfUpdateSettings((loadServerConfig() as { selfUpdate?: SelfUpdateFile }).selfUpdate), maintenance: maintenanceNow, dataPath, installed: installedReader(maintenanceNow, runningVersion) }),
+  });
 
   registerPowerRoutes(app, { audit });
 
