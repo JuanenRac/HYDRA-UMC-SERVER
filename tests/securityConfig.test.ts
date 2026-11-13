@@ -396,3 +396,39 @@ test("an administrator can choose the read-out protection level; it is logged an
   const fixed = makeConfig({ productionRdpLevel: "1" }).config;
   assert.throws(() => fixed.update({ production: { rdpLevel: 0 } }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 409 && /PRODUCTION_RDP_LEVEL/.test(e.message));
 });
+
+test("read-only mode of the server is off by default and a plain yes in the environment switches it on", () => {
+  const { config } = makeConfig();
+  assert.equal(config.readOnlyOn(), false);
+  assert.deepEqual(config.snapshot().robots.readOnly, { value: false, source: "default" });
+  for (const word of ["1", "true", "on", "yes", " ON "]) assert.equal(makeConfig({ readOnly: word }).config.readOnlyOn(), true, word);
+  for (const word of ["0", "off", "no", "2", "enable"]) {
+    const fixed = makeConfig({ readOnly: word }).config;
+    assert.equal(fixed.readOnlyOn(), false, word);
+    assert.equal(fixed.snapshot().robots.readOnly.source, "env", word);
+  }
+});
+
+test("an administrator can switch read-only mode; it warns, is logged, is saved and does not touch the enable option", () => {
+  const { config, logs, stored } = makeConfig({}, { robots: { allowEnable: true } });
+  const result = config.update({ robots: { readOnly: true } }, "root");
+  assert.deepEqual(result.warnings, ["server_read_only_on"]);
+  assert.equal(result.appliesOnRestart, false);
+  assert.equal(config.readOnlyOn(), true);
+  assert.deepEqual(stored().robots, { allowEnable: true, readOnly: true });
+  assert.equal(config.robotEnableAllowed(), true);
+  assert.match(logs.at(-1)!, /read-only mode of the server ON/);
+  const off = config.update({ robots: { readOnly: false } }, "root");
+  assert.deepEqual(off.warnings, []);
+  assert.equal(config.readOnlyOn(), false);
+  assert.match(logs.at(-1)!, /read-only mode of the server off/);
+});
+
+test("the read-only option refuses a value that is not true or false and one fixed by the environment", () => {
+  const { config } = makeConfig();
+  for (const bad of [{ readOnly: "yes" }, { readOnly: 1 }, { readOnly: null }]) {
+    assert.throws(() => config.update({ robots: bad }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 400);
+  }
+  const fixed = makeConfig({ readOnly: "1" }).config;
+  assert.throws(() => fixed.update({ robots: { readOnly: false } }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 409 && /READ_ONLY/.test(e.message));
+});

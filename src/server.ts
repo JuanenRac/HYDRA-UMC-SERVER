@@ -210,7 +210,7 @@ async function startServer() {
   app.use(makeTrustedNetworksGate(() => security.trustedNetworks(), { record: (entry) => { audit.record(entry as any); } }));
 
   // Read-only mode (off unless HYDRA_UMC_READ_ONLY is on, see src/readOnlyMode.ts): the server shows everything and changes nothing, except STOP and the safe-mode disable. The variable is read on every request.
-  app.use(makeReadOnlyGate());
+  app.use(makeReadOnlyGate(() => security.readOnlyOn()));
 
   // Create data directory if it doesn't exist
   const dataPath = path.join(process.cwd(), "data");
@@ -675,6 +675,7 @@ async function startServer() {
 
   attachWebSocketServer(httpServer, {
     wsClients, getSettings, applySettingsUpdate, WS_QUERY_TOKEN_ALLOWED, twinWsUrl: () => (security.twinRelayEnabled() ? TWIN_WS_URL : ""), getStopState: () => stopState.snapshot(),
+    readOnlyOn: () => security.readOnlyOn(),
     adminWriteAllowed: (address) => { const networks = security.trustedNetworks(); return !networks.enabled || classifyAddress(address, networks) === "local"; },
   });
 

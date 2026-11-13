@@ -183,6 +183,8 @@ export function attachWebSocketServer(
     WS_QUERY_TOKEN_ALLOWED: boolean | (() => boolean);
     /** Whether a connection from this address may overwrite the settings (false: the trusted networks keep that for the house and the VPN). Optional: without it every administrator may. */
     adminWriteAllowed?: (address: string | undefined) => boolean;
+    /** Whether the server is in read-only mode (settings are not written from a connection then). Optional: without it the environment variable decides. */
+    readOnlyOn?: () => boolean;
     /** The ws:// address of the push route of the twin, or a function that reads it. Empty or absent: `/api/twin/ws` answers that the twin is not configured. */
     twinWsUrl?: string | (() => string);
     /** The one stop state for a connection that declared schema 2: it is sent right after the first settings push, so the app does not wait for a change. */
@@ -322,7 +324,7 @@ export function attachWebSocketServer(
               return;
             }
             // Read-only mode (off by default) refuses this write as it refuses the REST one.
-            if (readOnlyEnabled()) {
+            if (deps.readOnlyOn ? deps.readOnlyOn() : readOnlyEnabled()) {
               ws.send(JSON.stringify(READ_ONLY_REFUSAL));
               return;
             }
