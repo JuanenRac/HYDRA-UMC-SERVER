@@ -37,7 +37,15 @@ export type BridgeName = (typeof BRIDGE_NAMES)[number];
 export const BRIDGE_SWITCHES: readonly BridgeSwitch[] = [
   { bridge: "droids", key: "globalStop", kind: "boolean", def: false, risky: [], localName: "HYDRA_UMC_DROIDS_GLOBAL_STOP" },
   { bridge: "droids", key: "cutOnGlobalStop", kind: "boolean", def: true, risky: [false], localName: "config/spot_session.json: cut_on_global_stop" },
+  { bridge: "droids", key: "confirmationRequired", kind: "boolean", def: true, risky: [false], localName: "config/bridge.json: policy.confirmation_required" },
+  { bridge: "droids", key: "returnHomeAlways", kind: "boolean", def: true, risky: [], localName: "config/bridge.json: policy.return_home_always" },
   { bridge: "uav", key: "missionUploadEnabled", kind: "boolean", def: false, risky: [true], localName: "config/uav.json: mission.upload_enabled" },
+  // The flight policy of the UAV bridge. The bridge applies these in the tightening direction only: the server can require the envelope and the confirmation and can switch
+  // chaining in flight and the geofence upload off, but a value that would relax the bridge's own file is ignored there.
+  { bridge: "uav", key: "envelopeRequired", kind: "boolean", def: true, risky: [false], localName: "config/uav.json: envelope.required" },
+  { bridge: "uav", key: "confirmationRequired", kind: "boolean", def: true, risky: [false], localName: "config/uav.json: confirmation.required" },
+  { bridge: "uav", key: "chainInFlight", kind: "boolean", def: false, risky: [true], localName: "config/uav.json: phases.chain_in_flight" },
+  { bridge: "uav", key: "uploadGeofence", kind: "boolean", def: false, risky: [true], localName: "config/uav.json: envelope.upload_geofence" },
   { bridge: "amr", key: "publishState", kind: "boolean", def: false, risky: [], localName: "HYDRA_UMC_AMR_PUBLISH_STATE" },
   { bridge: "amr", key: "publishOpcua", kind: "boolean", def: false, risky: [], localName: "HYDRA_UMC_AMR_PUBLISH_OPCUA" },
   { bridge: "amr", key: "zoneInterlock", kind: "boolean", def: false, risky: [], localName: "HYDRA_UMC_AMR_ZONE_INTERLOCK" },
