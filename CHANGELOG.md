@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- **Read-only mode can be switched in Server Admin (`robots.readOnly`, off by default):** besides `HYDRA_UMC_READ_ONLY`, an administrator can switch the mode with `PUT /api/admin/server-config` (`{ "robots": { "readOnly": true } }`); the answer warns with `server_read_only_on`, the change is logged and applies at once, and the variable, when set, wins and locks the option (409). The WebSocket settings write follows the same switch. Tests in `tests/securityConfig.test.ts`.
 - **A read-only mode of the server (`HYDRA_UMC_READ_ONLY`, off by default):** with `1` the server shows its robots and data and changes nothing, for every account and app: a request that writes is answered with `423` and the code `server-read-only` before it reaches a route (and the settings write of the WebSocket the same), while reading, the sign-in and sign-out, STOP, the global stop and the safe-mode disable go on. Read on every request. `src/readOnlyMode.ts`, `.env.example`, `docs/REMOTE_API.md`, `tests/readOnlyMode.test.ts`.
 
 ## [0.8.3.0] - The F-RAM erase and self-test of the kinematic brain, one stop state for the apps and the stop watch interval as an option

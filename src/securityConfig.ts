@@ -11,6 +11,7 @@
 // the server always had: AI relay open to any signed-in user, host information open, plain HTTP, no
 // Bluetooth).
 import { DEFAULT_LIVE_ACTIVITY_LEVEL, LIVE_ACTIVITY_LEVELS, MAX_LIVE_ACTIVITY_LEVEL, isLevel as isLiveLevel, raisesExposure, type LiveActivityLevel } from "./liveActivity";
+import { readOnlyEnabled } from "./readOnlyMode";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -68,6 +69,8 @@ export interface MavlinkFile {
 export interface RobotsFile {
   /** Whether a disabled robot may be enabled again by the `enable` command (default: no; only the administrator can then do it from the settings). */
   allowEnable?: boolean;
+  /** Whether this server is read-only: it shows everything and changes nothing except STOP and the safe-mode disable (default: no). The variable HYDRA_UMC_READ_ONLY wins. */
+  readOnly?: boolean;
 }
 
 /** The settings of a production flash (the controller boards of HYDRA-UMC). */
@@ -447,6 +450,7 @@ export interface SecurityEnv {
   mavlinkKeyFile?: string;
   mavlinkAllowUnsigned?: string;
   robotAllowEnable?: string;
+  readOnly?: string;
   connectionRecordAddress?: string;
   healthOpen?: string;
   productionRdpLevel?: string;
@@ -500,6 +504,7 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     mavlinkKeyFile: env.HYDRA_UMC_BRIDGE_UAV_SIGNING_KEY_FILE,
     mavlinkAllowUnsigned: env.HYDRA_UMC_BRIDGE_UAV_SIGNING_ALLOW_UNSIGNED,
     robotAllowEnable: env.HYDRA_UMC_ROBOT_ALLOW_ENABLE,
+    readOnly: env.HYDRA_UMC_READ_ONLY,
     connectionRecordAddress: env.HYDRA_UMC_CONNECTION_RECORD_ADDRESS,
     healthOpen: env.HYDRA_UMC_HEALTH_OPEN,
     productionRdpLevel: env.HYDRA_UMC_PRODUCTION_RDP_LEVEL,
@@ -589,6 +594,13 @@ export function resolveVoiceMinConfidence(env: string | undefined, file: Securit
   }
   if (validConfidence(file.voice?.minConfidence)) return { value: file.voice.minConfidence, source: "config" };
   return { value: DEFAULT_VOICE_MIN_CONFIDENCE, source: "default" };
+}
+
+/** Read-only mode of the server: a plain yes in the environment (1, true, on, yes) switches it on, any other value in it switches it off; then the option of Server Admin; the default is off. */
+export function resolveReadOnly(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: readOnlyEnabled(env), source: "env" };
+  if (typeof file.robots?.readOnly === "boolean") return { value: file.robots.readOnly, source: "config" };
+  return { value: false, source: "default" };
 }
 
 /** Enabling a disabled robot from a client: only the exact word "1" in the environment switches it on; the default is off. */
@@ -1021,7 +1033,7 @@ export interface SecuritySnapshot {
   ble: { mode: { value: BleMode; source: Source }; requireEncryption: { value: boolean; source: Source }; activeMode: BleMode; appliesOnRestart: boolean };
   mqtt: { mode: { value: MqttMode; source: Source }; url: string; prefix: string; username: string | null; commandUser: string | null; activeMode: MqttMode; appliesOnRestart: boolean; homeAssistant: { enabled: { value: boolean; source: Source }; discoveryPrefix: string } };
   voice: { includeHeardText: { value: boolean; source: Source }; minConfidence: { value: number; source: Source }; requireSignature: { value: boolean; source: Source } };
-  robots: { allowEnable: { value: boolean; source: Source } };
+  robots: { allowEnable: { value: boolean; source: Source }; readOnly: { value: boolean; source: Source } };
   connections: { recordAddress: { value: boolean; source: Source } };
   production: { rdpLevel: { value: 0 | 1; source: Source } };
   ingest: Record<IngestSwitchKey, { value: boolean; source: Source }> & { proposalKeysFile: { value: string; source: Source }; appliesOnRestart: boolean };
@@ -1361,6 +1373,11 @@ export class SecurityConfig {
     return resolveEstopWatchMs(this.options.env.estopWatch, this.file).value;
   }
 
+  /** Whether the server is in read-only mode (off unless the environment or an administrator turned it on); read on every request. */
+  readOnlyOn(): boolean {
+    return resolveReadOnly(this.options.env.readOnly, this.file).value;
+  }
+
   /** Whether the `enable` command may bring a disabled robot back (off unless an administrator turned it on). */
   robotEnableAllowed(): boolean {
     return resolveRobotAllowEnable(this.options.env.robotAllowEnable, this.file).value;
@@ -1394,7 +1411,7 @@ export class SecurityConfig {
         activeMode: this.options.bleActiveMode ?? "off",
         appliesOnRestart: resolveBleMode(this.options.env.bleGatt, this.file).value !== (this.options.bleActiveMode ?? "off"),
       },
-      robots: { allowEnable: resolveRobotAllowEnable(this.options.env.robotAllowEnable, this.file) },
+      robots: { allowEnable: resolveRobotAllowEnable(this.options.env.robotAllowEnable, this.file), readOnly: resolveReadOnly(this.options.env.readOnly, this.file) },
       connections: { recordAddress: resolveConnectionRecordAddress(this.options.env.connectionRecordAddress, this.file) },
       production: { rdpLevel: resolveProductionRdpLevel(this.options.env.productionRdpLevel, this.file) },
       ingest: {
@@ -1632,8 +1649,14 @@ export class SecurityConfig {
         if (resolveRobotAllowEnable(this.options.env.robotAllowEnable, this.file).source === "env") throw lockedBy("HYDRA_UMC_ROBOT_ALLOW_ENABLE");
         merged.allowEnable = robotsPatch.allowEnable;
       }
+      if (robotsPatch.readOnly !== undefined) {
+        if (typeof robotsPatch.readOnly !== "boolean") throw new SecurityConfigError(400, "robots.readOnly must be true or false");
+        if (resolveReadOnly(this.options.env.readOnly, this.file).source === "env") throw lockedBy("HYDRA_UMC_READ_ONLY");
+        merged.readOnly = robotsPatch.readOnly;
+      }
       next.robots = merged;
       if (robotsPatch.allowEnable === true) warnings.push("robot_enable_allowed");
+      if (robotsPatch.readOnly === true) warnings.push("server_read_only_on");
     }
 
     if (patch.production !== undefined) {
@@ -2211,7 +2234,8 @@ export class SecurityConfig {
       log(`[SECURITY] ${actor} set the voice options: transcript in replies ${snapshot.voice.includeHeardText.value ? "ON" : "off"}, minimum confidence ${snapshot.voice.minConfidence.value}, signature of a confirmed request ${snapshot.voice.requireSignature.value ? "required" : "not required"}.`);
     }
     if (patch.robots !== undefined) {
-      log(`[SECURITY] ${actor} ${snapshot.robots.allowEnable.value ? "allowed" : "forbade"} bringing a disabled robot back with the enable command (an administrator only).`);
+      if (patch.robots.allowEnable !== undefined) log(`[SECURITY] ${actor} ${snapshot.robots.allowEnable.value ? "allowed" : "forbade"} bringing a disabled robot back with the enable command (an administrator only).`);
+      if (patch.robots.readOnly !== undefined) log(`[SECURITY] ${actor} switched the read-only mode of the server ${snapshot.robots.readOnly.value ? "ON (nothing is changed except STOP and the safe-mode disable)" : "off"}.`);
     }
     if (patch.production !== undefined) {
       log(`[SECURITY] ${actor} set the read-out protection level of a production flash to ${snapshot.production.rdpLevel.value} (${snapshot.production.rdpLevel.value === 1 ? "on" : "off"}).`);
