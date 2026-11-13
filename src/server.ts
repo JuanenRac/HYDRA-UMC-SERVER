@@ -71,6 +71,8 @@ import { registerMaintenanceRoutes } from "./routes/maintenanceRoutes";
 import { Maintenance, maintenanceSettings } from "./maintenance";
 import { registerSelfUpdateRoutes } from "./routes/selfUpdateRoutes";
 import { SelfUpdate, installedReader, selfUpdateSettings, type SelfUpdateFile } from "./selfUpdate";
+import { registerFleetUpdateRoutes } from "./routes/fleetUpdateRoutes";
+import { FleetUpdate, fleetSettings, type FleetFile } from "./fleetUpdate";
 import { writeDetectionHefSettings } from "./detectionHefSettings";
 import type { MaintenanceFile } from "./securityConfig";
 import { advertisedAddresses } from "./advertisedAddresses";
@@ -648,6 +650,12 @@ async function startServer() {
   registerSelfUpdateRoutes(app, {
     authenticate, requireAdmin, audit, lookEnabled: () => security.updateCheckEnabled(), applyEnabled: () => security.maintenanceEnabled(),
     selfUpdate: new SelfUpdate({ settings: () => selfUpdateSettings((loadServerConfig() as { selfUpdate?: SelfUpdateFile }).selfUpdate), maintenance: maintenanceNow, dataPath, installed: installedReader(maintenanceNow, runningVersion) }),
+  });
+
+  // Every program installed on the device, updated from Studio one after the other by tools/fleet_update.py of HYDRA-UMC-OS (the look is updateCheck.enabled, applying is maintenance.enabled; both off by default: 404).
+  registerFleetUpdateRoutes(app, {
+    authenticate, requireAdmin, audit, lookEnabled: () => security.updateCheckEnabled(), applyEnabled: () => security.maintenanceEnabled(),
+    fleet: new FleetUpdate({ settings: () => fleetSettings((loadServerConfig() as { fleetUpdate?: FleetFile }).fleetUpdate, dataPath), runnerPrefix: () => selfUpdateSettings((loadServerConfig() as { selfUpdate?: SelfUpdateFile }).selfUpdate).runnerPrefix, dataPath }),
   });
 
   registerPowerRoutes(app, { audit });

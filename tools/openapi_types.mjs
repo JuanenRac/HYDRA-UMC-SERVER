@@ -167,6 +167,8 @@ export const REQUESTS = {
   "POST /api/admin/maintenance/rollback": { required: ["component", "confirm"], fields: { component: str, confirm: bool } },
   "POST /api/admin/self-update/apply": { required: ["component", "confirm"], fields: { component: { type: "string", enum: ["server", "studio", "os-agent"] }, confirm: { type: "boolean", enum: [true] } } },
   "POST /api/admin/self-update/rollback": { required: ["component", "confirm"], fields: { component: { type: "string", enum: ["server", "studio", "os-agent"] }, confirm: { type: "boolean", enum: [true] } } },
+  "POST /api/admin/fleet-update/apply": { required: ["confirm"], fields: { services: { type: "array", items: str, maxItems: 60 }, confirm: { type: "boolean", enum: [true] } } },
+  "POST /api/admin/fleet-update/resume": { required: ["service", "confirm"], fields: { service: str, confirm: { type: "boolean", enum: [true] } } },
   "POST /api/admin/maintenance/prune": { required: ["component", "confirm"], fields: { component: str, keep: num, confirm: bool } },
   "POST /api/admin/device-tokens": { required: ["name", "username", "confirm"], fields: { name: str, username: str, ttlDays: num, confirm: bool } },
   "POST /api/logout": { required: [], fields: { refreshToken: str } },
@@ -219,6 +221,11 @@ export const EXTRA_STATUSES = {
   // 404 while updateCheck.enabled is off.
   "GET /api/admin/updates": [404],
   // 404 while updateCheck.enabled is off (the look) or maintenance.enabled is off (apply and rollback); 409 for a second job or no earlier release.
+  // 404 while updateCheck.enabled is off (the look) or maintenance.enabled is off (apply and resume); 409 for a run or a look already going on, no plan, an old plan or nothing to take up; 502 when the tool fails.
+  "GET /api/admin/fleet-update": [404],
+  "POST /api/admin/fleet-update/plan": [404, 409, 502],
+  "POST /api/admin/fleet-update/apply": [400, 404, 409, 502],
+  "POST /api/admin/fleet-update/resume": [400, 404, 409, 502],
   "GET /api/admin/self-update": [404, 503],
   "GET /api/admin/self-update/jobs/{id}": [404, 503],
   "POST /api/admin/self-update/apply": [400, 404, 409],
