@@ -125,6 +125,19 @@ export const RESPONSES = {
   "POST /api/hardware/fram/erase": ref("Passthrough"),
   "POST /api/hardware/fram/selftest": ref("Passthrough"),
   // Local to this server (the SDK has no shape for it): the robot ids that more than one robot uses.
+  // Local to this server: the one-use confirmation token of a person (src/humanConfirmation.ts).
+  "POST /api/operator/confirmations": {
+    type: "object",
+    required: ["token", "action", "job_id", "expires_at", "ttl_seconds", "single_use"],
+    properties: {
+      token: { type: "string", description: "A JWT (HS256) valid once, for this action and this job only. Never stored or logged by the server." },
+      action: { type: "string" },
+      job_id: { type: "string" },
+      expires_at: { type: "integer", description: "Unix seconds." },
+      ttl_seconds: { type: "integer" },
+      single_use: { type: "boolean", enum: [true] },
+    },
+  },
   "GET /api/admin/robot-ids": {
     type: "object",
     required: ["ok", "ambiguousCount", "ambiguous"],
@@ -142,6 +155,7 @@ export const RESPONSES = {
 
 // "METHOD /path" -> { required: [...], fields: { name: schema } } for the request body.
 export const REQUESTS = {
+  "POST /api/operator/confirmations": { required: ["action", "job_id", "confirm"], fields: { action: str, job_id: str, confirm: { type: "boolean", enum: [true] }, ttl_seconds: int } },
   "POST /api/login": { required: ["username", "password"], fields: { username: str, password: str, totp: str } },
   "POST /api/totp/begin": { required: ["password"], fields: { password: str } },
   "POST /api/totp/confirm": { required: ["code"], fields: { code: str } },
@@ -219,6 +233,8 @@ export const EXTRA_STATUSES = {
   // 404 while presence.enabled is off (as if the routes did not exist), 403 for a viewer.
   "POST /api/operator/presence": [403, 404],
   "GET /api/operator/presence": [403, 404],
+  // 404 while HYDRA_UMC_HUMAN_CONFIRMATION is off, 403 for a viewer, 503 with no usable key.
+  "POST /api/operator/confirmations": [400, 403, 404, 503],
   // 404 while bridgeGateway.enabled is off (as if the routes did not exist), 403 for a viewer on the command.
   "GET /api/bridges": [404],
   "GET /api/bridges/{name}/state": [404, 503],
@@ -234,6 +250,7 @@ export const EMPTY_BODY_STATUSES = {
   "DELETE /api/push/live-activities/{token}": [404],
   "POST /api/operator/presence": [404],
   "GET /api/operator/presence": [404],
+  "POST /api/operator/confirmations": [404],
   "GET /api/bridges": [404],
   "GET /api/bridges/{name}/state": [],
   "POST /api/bridges/{name}/cmd/{verb}": [],
