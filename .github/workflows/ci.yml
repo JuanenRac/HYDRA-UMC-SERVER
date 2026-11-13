@@ -77,9 +77,8 @@ jobs:
           echo "VOICE_RELAY_PYTHON=$PYTHON"
           PYTHON="$PYTHON" npm test --if-present
           npm run lint --if-present
-      - name: Measure the coverage of the unit tests (report only, no floor yet)
+      - name: Measure the coverage of the unit tests and keep the floor
         if: ${{ hashFiles('package.json') != '' }}
-        continue-on-error: true
         env:
           HYDRA_UMC_SDK_ROOT: ${{ github.workspace }}/.hydra-umc-sdk-contract
           HYDRA_UMC_VOICE_UI_ROOT: ${{ github.workspace }}/.hydra-umc-voice-ui-contract
@@ -94,6 +93,11 @@ jobs:
             grep -E "^# (tests|pass|fail)|all files" "$RUNNER_TEMP/coverage.txt"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+          # The floor is the measured value, rounded down: it may rise, never fall.
+          LINE=$(grep -E "all files" "$RUNNER_TEMP/coverage.txt" | awk -F'|' '{gsub(/ /,"",$2); gsub(/ /,"",$3); gsub(/ /,"",$4); print $2" "$3" "$4}')
+          echo "lines/branches/functions: $LINE"
+          test -n "$LINE"
+          echo "$LINE" | awk '{ if ($1 < 94 || $2 < 92 || $3 < 93) { print "coverage is under the floor (94 lines, 92 branches, 93 functions)"; exit 1 } }'
       - name: Validate HYDRA-UMC-SERVER admin UI
         if: ${{ hashFiles('admin-ui/package.json') != '' }}
         working-directory: admin-ui
