@@ -149,6 +149,40 @@ test("a program that was cut or failed is taken up alone, from the start", async
   } finally { done(); }
 });
 
+test("the server restarting in the middle of its own update: a new object over the same files reads the run, tells it is going on, then interrupted if it stops, and takes the program up", async () => {
+  const { dir, done } = scratch();
+  try {
+    const m = machine(dir);
+    await m.fleet.plan();
+    await m.fleet.apply(["datalake", "server"]);
+    // the tool writes its progress while it works: datalake done, the server in its installer, a heartbeat that is fresh
+    m.write(file("running", [row("datalake", { state: "done", step: "done" }), row("server", { state: "running", step: "installing", detail: "compiling", elapsedS: 120 })], { mode: "run" }));
+    m.beat(1);
+    assert.equal(m.fleet.read()!.state, "running");
+    // the unit of the server is restarted by the installer: the process that asked is gone, a new one starts over the same files and the same clock
+    const restarted = new FleetUpdate({ ...(m as any).fleet.deps });
+    const seen = restarted.read()!;
+    assert.equal(seen.state, "running");
+    assert.deepEqual(seen.services.map((r) => [r.name, r.state]), [["datalake", "done"], ["server", "running"]]);
+    assert.equal(restarted.busy, true);
+    await assert.rejects(restarted.apply(["datalake"]), (e: unknown) => e instanceof FleetUpdateError && e.status === 409);
+    // the tool ends well and the new server answers with the final file
+    m.write(file("done", [row("datalake", { state: "done", step: "done" }), row("server", { state: "done", step: "done" })], { mode: "run" }));
+    assert.equal(restarted.read()!.state, "done");
+    assert.equal(restarted.busy, false);
+    // another run is cut: the tool died with the unit, the heartbeat stops, and the new server reports it interrupted and lets the program be taken up
+    m.write(file("running", [row("server", { state: "running", step: "installing" })], { mode: "run" }));
+    m.beat(300);
+    const again = new FleetUpdate({ ...(m as any).fleet.deps });
+    assert.equal(again.read()!.state, "interrupted");
+    assert.equal(again.read()!.services[0].state, "interrupted");
+    assert.equal(again.busy, false);
+    m.clock.now += 20_000;
+    await again.resume("server");
+    assert.deepEqual(m.launches.at(-1)!.args.slice(-3), ["--yes", "--only", "server"]);
+  } finally { done(); }
+});
+
 type Handler = (req: any, res: any, next?: any) => Promise<unknown> | unknown;
 
 function routesWith(look: () => boolean, apply: () => boolean, role = "admin") {
