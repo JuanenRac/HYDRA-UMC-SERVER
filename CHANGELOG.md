@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.8.3.0] - The F-RAM erase and self-test of the kinematic brain, one stop state for the apps and the stop watch interval as an option
 
 - **README: the platform statement:** the description says what this project serves today (the CM5 pilot bench) and that the target platform of HYDRA-UMC, an NVIDIA Jetson Orin NX 16 GB, is a design that has not been built or tested.
 - **The F-RAM erase is a switch of the Security tab of the web administration, and the kinematic table is the document of the SDK:** the tab lists `safety.framErase` with its label, its warning and its question in the eight languages, and `switchPatch` sends `confirm: true` next to the risky value once the question has been answered (the server refuses to turn the erase on without it); the tests count fifteen switches. `src/data/kinematicData.json` is now byte for byte `contracts/kinematics.json` of the SDK (a test compares both wherever the SDK checkout is next to this repository or in `HYDRA_UMC_SDK_DIR`), and the continuous integration is pinned to the SDK tag that carries the F-RAM routes and that document.
