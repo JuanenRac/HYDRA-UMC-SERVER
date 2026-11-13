@@ -490,6 +490,10 @@ as the user has that value on screen, not just do a one-shot GET at open
 time, to keep the odds of stomping a concurrent edit as low as they
 already are for two browser tabs open to the same server.
 
+### Read-only mode of the server (`HYDRA_UMC_READ_ONLY`)
+
+Off by default. With `HYDRA_UMC_READ_ONLY=1` (also `true`, `on`, `yes`; read on every request) the server shows its robots and data and changes nothing, for every account and every app. A request that writes (any method but `GET`, `HEAD` and `OPTIONS`) is answered before it reaches a route with `423` and `{"error": "...", "code": "server-read-only"}`, and the WebSocket message that overwrites the settings gets the same body. These go on: reading, the sign-in, the renewal and the sign-out (`/api/login`, `/api/refresh`, `/api/logout`), the tickets of the cameras and of the information routes, `POST /api/stop-all`, and a robot command that is `stop` or `disable`. Nothing is lost: the apps tell the person why the order was not sent, and the stop is never held back.
+
 ## 2d. Model submissions: `/api/models*` (server side of HYDRA-UMC-EDITOR-URDF)
 
 The server-side counterpart to [HYDRA-UMC-EDITOR-URDF](https://github.com/JuanenRac/HYDRA-UMC-EDITOR-URDF)'s
