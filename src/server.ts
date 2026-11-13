@@ -23,6 +23,7 @@
 import express from "express";
 import cors from "cors";
 import path from "path";
+import os from "os";
 import fs from "fs";
 import http from "http";
 import https from "https";
@@ -44,6 +45,8 @@ import { pruneExpiredRefreshTokens } from "./refresh_tokens";
 import { SafetyLimits, JogArming } from "./safetyLimits";
 import { registerSafetyRoutes } from "./routes/safetyRoutes";
 import { makePresenceGate, registerPresenceRoutes } from "./routes/presenceRoutes";
+import { registerConfirmationRoutes } from "./routes/confirmationRoutes";
+import { confirmationEnabled, loadConfirmationKey } from "./humanConfirmation";
 import { OperatorPresence, presenceSettings } from "./operatorPresence";
 import { listClaims } from "./claimPolicy";
 import { RobotIdDuplicatedError, ambiguousRobotLogLines, newRobotIdConflicts } from "./robotIds";
@@ -519,6 +522,14 @@ async function startServer() {
     warn: (robotNames) => emitPush("presence-lost", { robotName: robotNames.join(", ") }),
   });
   registerPresenceRoutes(app, { authenticate, requireOperator, presenceGate: makePresenceGate(() => security.presenceEnabled()), presence: operatorPresence });
+  // The one-use confirmation of a person for a flight or walking request (POST /api/operator/confirmations), off unless HYDRA_UMC_HUMAN_CONFIRMATION is a plain yes; the key is
+  // a file (HYDRA_UMC_HUMAN_CONFIRMATION_KEY_FILE, by default ~/.hydra-umc-keys/human-confirmation.key) and is read for every request, so a new key applies at once.
+  registerConfirmationRoutes(app, {
+    authenticate, requireOperator,
+    enabled: () => confirmationEnabled(),
+    key: () => loadConfirmationKey(process.env.HYDRA_UMC_HUMAN_CONFIRMATION_KEY_FILE || path.join(os.homedir(), ".hydra-umc-keys", "human-confirmation.key")),
+    audit,
+  });
   setInterval(() => { try { operatorPresence.tick(); } catch (error) { industrialLog(`[PRESENCE] the check failed (${error instanceof Error ? error.message : "unknown error"}).`); } }, 1000).unref();
 
   // The live pictures and the saved photos and recordings ask for a ticket (POST /api/camera/ticket) or a signed-in client unless the installation opts out with
