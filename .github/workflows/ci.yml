@@ -77,6 +77,23 @@ jobs:
           echo "VOICE_RELAY_PYTHON=$PYTHON"
           PYTHON="$PYTHON" npm test --if-present
           npm run lint --if-present
+      - name: Measure the coverage of the unit tests (report only, no floor yet)
+        if: ${{ hashFiles('package.json') != '' }}
+        continue-on-error: true
+        env:
+          HYDRA_UMC_SDK_ROOT: ${{ github.workspace }}/.hydra-umc-sdk-contract
+          HYDRA_UMC_VOICE_UI_ROOT: ${{ github.workspace }}/.hydra-umc-voice-ui-contract
+          HYDRA_UMC_CONNECTOR_HUB_ROOT: ${{ github.workspace }}/.hydra-umc-connector-hub-contract
+        run: |
+          FILES="$(node -e "console.log(require('./package.json').scripts['test:unit'].split(' ').filter(a => a.startsWith('tests/')).join(' '))")"
+          npx tsx --test --experimental-test-coverage $FILES > "$RUNNER_TEMP/coverage.txt" 2>&1 || true
+          grep -E "^# (tests|pass|fail)|all files|^# (file|---)|\.ts +\|" "$RUNNER_TEMP/coverage.txt" | grep -v "tests/" | head -400
+          {
+            echo "### Unit test coverage (report only)"
+            echo '```'
+            grep -E "^# (tests|pass|fail)|all files" "$RUNNER_TEMP/coverage.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Validate HYDRA-UMC-SERVER admin UI
         if: ${{ hashFiles('admin-ui/package.json') != '' }}
         working-directory: admin-ui
