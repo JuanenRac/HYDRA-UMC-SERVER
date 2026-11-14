@@ -94,6 +94,8 @@ export function warningKeys(warnings: unknown): string[] {
   if (warnings.includes('jwt_eddsa_on')) keys.push('warn_jwt_eddsa');
   if (warnings.includes('job_stop_relay_on')) keys.push('jd_warning_relay');
   if (warnings.includes('replan_unconfirmed_allowed')) keys.push('jd_warning_replan');
+  if (warnings.includes('job_executor_on')) keys.push('jd_warning_exec');
+  if (warnings.includes('job_executor_live')) keys.push('jd_warning_exec_live');
   return keys;
 }
 
@@ -111,6 +113,8 @@ export interface JobDispatcherState {
   timeoutSeconds: number;
   /** The server was told the configuration file of the dispatcher; without it the replanning options cannot be changed. */
   replanEditable: boolean;
+  /** Absent when the server predates the executor of the assigned jobs. `live` false is a dry run. */
+  executor?: { enabled: boolean; enabledSource: Source; live: boolean; liveSource: Source; appliesOnRestart: boolean };
 }
 
 export function readJobDispatcher(snapshot: unknown): JobDispatcherState | null {
@@ -122,7 +126,12 @@ export function readJobDispatcher(snapshot: unknown): JobDispatcherState | null 
   if (typeof replan.allowUnconfirmed.value !== 'boolean' || typeof replan.stopAckTimeoutSeconds.value !== 'number') return null;
   const robotMap: Record<string, number> = {};
   if (isObject(relay.robotMap)) for (const [id, n] of Object.entries(relay.robotMap)) if (typeof n === 'number' && Number.isInteger(n)) robotMap[id] = n;
+  const ex = snapshot.jobDispatcher.executor;
+  const executor = isObject(ex) && isObject(ex.enabled) && isObject(ex.live) && typeof ex.enabled.value === 'boolean' && isSource(ex.enabled.source) && typeof ex.live.value === 'boolean' && isSource(ex.live.source)
+    ? { enabled: ex.enabled.value, enabledSource: ex.enabled.source, live: ex.live.value, liveSource: ex.live.source, appliesOnRestart: ex.appliesOnRestart === true }
+    : undefined;
   return {
+    ...(executor ? { executor } : {}),
     relayEnabled: relay.enabled.value,
     relaySource: relay.enabled.source,
     relayAppliesOnRestart: relay.appliesOnRestart === true,
@@ -153,14 +162,25 @@ export function parseRobotMapText(text: string): Record<string, number> | null {
 }
 
 export type JobDispatcherPatch = {
-  jobDispatcher: { stopRelay: { enabled: boolean; robotMap: Record<string, number> }; replan?: { allowUnconfirmed: boolean; stopAckTimeoutSeconds: number } };
+  jobDispatcher: {
+    stopRelay: { enabled: boolean; robotMap: Record<string, number> };
+    replan?: { allowUnconfirmed: boolean; stopAckTimeoutSeconds: number };
+    /** Only the switches that the environment does not lock; `live: false` is the dry run. */
+    executor?: { enabled?: boolean; live?: boolean };
+  };
 };
 
 /** The request body for the job dispatcher; null when the map or the wait is not valid. The replanning part is left out when the server cannot write the file of the dispatcher. */
-export function jobDispatcherPatch(input: { relayEnabled: boolean; robotMapText: string; replanEditable: boolean; allowUnconfirmed: boolean; timeoutText: string }): JobDispatcherPatch | null {
+export function jobDispatcherPatch(input: { relayEnabled: boolean; robotMapText: string; replanEditable: boolean; allowUnconfirmed: boolean; timeoutText: string; executorEnabled?: boolean; executorLive?: boolean }): JobDispatcherPatch | null {
   const robotMap = parseRobotMapText(input.robotMapText);
   if (robotMap === null) return null;
   const body: JobDispatcherPatch = { jobDispatcher: { stopRelay: { enabled: input.relayEnabled, robotMap } } };
+  if (input.executorEnabled !== undefined || input.executorLive !== undefined) {
+    body.jobDispatcher.executor = {
+      ...(input.executorEnabled !== undefined ? { enabled: input.executorEnabled } : {}),
+      ...(input.executorLive !== undefined ? { live: input.executorLive } : {}),
+    };
+  }
   if (input.replanEditable) {
     const text = input.timeoutText.trim().replace(',', '.');
     if (text === '' || !/^\d*\.?\d+$|^\d+\.$/.test(text)) return null;
@@ -174,7 +194,12 @@ export function jobDispatcherPatch(input: { relayEnabled: boolean; robotMapText:
 export function jobDispatcherNeedsConfirmation(current: JobDispatcherState, next: JobDispatcherPatch): boolean {
   const relayOn = !current.relayEnabled && next.jobDispatcher.stopRelay.enabled;
   const unconfirmed = next.jobDispatcher.replan !== undefined && !current.allowUnconfirmed && next.jobDispatcher.replan.allowUnconfirmed;
-  return relayOn || unconfirmed;
+  return relayOn || unconfirmed || jobExecutorGoesLive(current, next);
+}
+
+/** Letting the executor move the robots by itself (it was off or a dry run) asks first, with its own words. */
+export function jobExecutorGoesLive(current: JobDispatcherState, next: JobDispatcherPatch): boolean {
+  return next.jobDispatcher.executor?.live === true && !(current.executor?.live ?? false);
 }
 
 // ------------------------------------------------------------------ the action of the dead-man of the presence
