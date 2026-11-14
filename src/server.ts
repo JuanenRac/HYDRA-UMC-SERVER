@@ -91,6 +91,8 @@ import { BridgeGateway, resolveGatewaySettings } from "./bridgeGateway";
 import { allSettingsMessages, BRIDGE_NAMES, type BridgesFile } from "./bridgeSettings";
 import { BridgeSettingsSigner } from "./bridgeSettingsSigning";
 import { makeEcosystemHealthGate, registerEcosystemHealthRoutes } from "./routes/ecosystemHealthRoutes";
+import { makeNodeHealthGate, registerNodeHealthRoutes } from "./routes/nodeHealthRoutes";
+import { bridgeNodeHealthFetcher } from "./nodeHealth";
 import { makePushGate, registerPushRoutes } from "./routes/pushRoutes";
 import { PushDevices, PushService, emitPush } from "./pushNotifications";
 import { LiveActivities, LiveActivityService, liveBus, snapshotFromRobot, emitRobotSnapshot, type RobotSnapshot } from "./liveActivity";
@@ -393,8 +395,8 @@ async function startServer() {
     env: securityEnvFrom(process.env),
     load: loadServerConfig,
     save: (file) => {
-      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, twinRelay, infoTickets, deviceTokens, updateCheck, discovery, maintenance, atc, detectionHef, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging, rateLimits, bridges } = file;
-      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, twinRelay, infoTickets, deviceTokens, updateCheck, discovery, maintenance, atc, detectionHef, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging, rateLimits, bridges });
+      const { aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, nodeHealth, twinRelay, infoTickets, deviceTokens, updateCheck, discovery, maintenance, atc, detectionHef, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging, rateLimits, bridges } = file;
+      saveServerConfig({ ...loadServerConfig(), aiAccess, infoAuth, tls, ble, mqtt, voice, mavlink, robots, connections, health, ecosystemHealth, nodeHealth, twinRelay, infoTickets, deviceTokens, updateCheck, discovery, maintenance, atc, detectionHef, auth, presence, bridgeGateway, push, trustedNetworks, rul, safety, jobDispatcher, camera, install, websocket, logging, rateLimits, bridges });
     },
     bridgeSigningStatus: () => bridgeSettingsSigner.status(BRIDGE_NAMES),
     writeDetectionHefSettings: (value, file) => { const written = writeDetectionHefSettings(dataPath, value, file); industrialLog(`[SECURITY] DETECTION-HEF settings file written: ${written}`); },
@@ -609,6 +611,11 @@ async function startServer() {
     authenticate, requireAdmin, pushGate: makePushGate(() => security.pushEnabled()), devices: pushDevices,
     status: () => ({ ...pushService.status(), liveActivity: { enabled: security.liveActivityEnabled(), level: security.liveActivityLevel(), activities: liveActivities.count() } }),
     audit, liveActivities, liveActivityGate: makePushGate(() => security.liveActivityEnabled()),
+  });
+  registerNodeHealthRoutes(app, {
+    authenticate, requireOperator,
+    nodeHealthGate: makeNodeHealthGate(() => security.nodeHealthEnabled()),
+    fetchSlot: bridgeNodeHealthFetcher(SPI_BRIDGE_URL, () => upstreamHeaders("spi-bridge"), SPI_BRIDGE_VERSION_TIMEOUT_MS),
   });
   registerEcosystemHealthRoutes(app, {
     authenticate, requireOperator,
