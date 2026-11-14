@@ -5732,6 +5732,37 @@
         ]
       }
     },
+    "/api/dev-server/status": {
+      "get": {
+        "tags": [
+          "dev-server"
+        ],
+        "summary": "GET /api/dev-server/status",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md."
+          }
+        },
+        "parameters": [
+          {
+            "name": "verify",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-rate-limited": true
+      }
+    },
     "/api/developer-node/status": {
       "get": {
         "tags": [
@@ -6490,6 +6521,42 @@
             "bearerAuth": []
           }
         ]
+      }
+    },
+    "/api/ingest/dev-server/status": {
+      "post": {
+        "tags": [
+          "ingest"
+        ],
+        "summary": "POST /api/ingest/dev-server/status",
+        "description": "No authentication required by the route itself.",
+        "x-access": "public",
+        "responses": {
+          "201": {
+            "description": "Created. The body is documented in docs/REMOTE_API.md."
+          },
+          "400": {
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-rate-limited": true
       }
     },
     "/api/ingest/developer-node/status": {

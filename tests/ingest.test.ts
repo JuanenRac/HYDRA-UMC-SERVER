@@ -206,6 +206,23 @@ test("developer node: needs its own token over HTTPS, and the latest status of e
   assert.equal(read.body.chain.ok, true);
 });
 
+test("developer node: the dev-server names of the SDK answer like the developer-node ones", () => {
+  const dir = tmp();
+  const tokens = path.join(dir, "t.json");
+  fs.writeFileSync(tokens, JSON.stringify({ nodes: { "dev-1": hashToken("tok-dev-1-secret") } }));
+  const t = setup({ HYDRA_UMC_INGEST_DEVELOPER_NODE: "1", HYDRA_UMC_DEVELOPER_NODE_TOKENS_FILE: tokens });
+  const status = { contract: "developer-node-status/1", version: "0.0.3", generated_at: 1, switches: {}, queue: {}, journal: [], health: {} };
+  const headers = { authorization: "Bearer tok-dev-1-secret" };
+  const socket = { remoteAddress: "127.0.0.1" };
+  assert.equal(t.call("POST /api/ingest/dev-server/status", { headers: {}, body: status, socket }).statusCode, 401);
+  assert.equal(t.call("POST /api/ingest/dev-server/status", { headers, body: { ...status, contract: "x" }, socket }).statusCode, 400);
+  assert.equal(t.call("POST /api/ingest/dev-server/status", { headers, body: status, socket }).statusCode, 201);
+  const fresh = t.call("GET /api/dev-server/status", { query: { verify: "1" } });
+  const old = t.call("GET /api/developer-node/status", { query: { verify: "1" } });
+  assert.equal((fresh.body.nodes["dev-1"].status as any).version, "0.0.3");
+  assert.deepEqual(fresh.body, old.body);
+});
+
 test("developer node: while its switch is off even a good token gets 401", () => {
   const dir = tmp();
   const tokens = path.join(dir, "t.json");

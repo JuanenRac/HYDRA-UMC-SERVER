@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **The routes of the status feed of the dev server have the names of the SDK (`/api/ingest/dev-server/status`, `/api/dev-server/status`):** they answer exactly like the `developer-node` routes, which stay as deprecated aliases for one version, and a test compares both. `docs/openapi.json` lists the four routes.
+
 - **The SDK is pinned to its newest release, and the answers of the update routes use its shapes:** the pin of the workflow moves to `v0.6.4`, the byte copy of the shapes of the SDK (`tools/sdk/server.shapes.json`) is refreshed, and the self-update and fleet-update routes name `SelfUpdateStatus`, `SelfUpdateJob` and `FleetUpdateStatus` as their answers, so `docs/openapi.json` shows them.
 
 - **The ports of the local AI services can be read from the registry of the SDK (`HYDRA_UMC_AI_PORTS_FROM_REGISTRY=1`, off by default), and a check finds a port that moved:** the relay `/api/ai/<service>/...` sent visual servoing to the voice service once because the port of one had moved and the built-in table had not. The table stays the default; with the variable on, a service that the table knows and the registry (`contracts/ports.yaml` of the SDK next to this server) names with a valid port takes the registry's port (read again after a minute), and the registry can never add a service. A test lists the services whose built-in port differs from the registry when the SDK is at hand, so the next move is found by the CI instead of by a user. `LOCAL_AI_SERVICE_PORTS` is now exported from `localAiRoutes.ts`. Tests of the names, the default, the correction, what the registry cannot do and the drift.
