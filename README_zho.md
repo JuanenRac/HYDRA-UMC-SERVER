@@ -293,7 +293,7 @@ npm test                    # unit tests, the OpenAPI check and the contract scr
 npm run build && npm start  # one bundled file (build.sh and build.bat make a versioned release build)
 ```
 
-服务器监听 `0.0.0.0:3000`；它的全部状态都在 `data/` 中。本仓库有意不提供 Dockerfile：由 HYDRA-UMC-OS 在 CM5 上安装它（`provisioning/install_server.sh`）。运行中的版本可从 `GET /api/hydra-info`（`appVersion`）读取；只有根目录的 `build*.sh` 和 `build*.bat` 会生成带版本的发布构建，`npm run build` 只编译。
+服务器监听 `0.0.0.0:3000`；它的全部状态都在 `data/` 中。它的 Dockerfile（`scripts/Dockerfile`）只用于 HYDRA-UMC-DEV-SERVER 的容器测试台（用户 `node`、健康检查、内部没有机密）；服务器仍由 HYDRA-UMC-OS 安装在 CM5 上（`provisioning/install_server.sh`），那里没有任何变化。运行中的版本可从 `GET /api/hydra-info`（`appVersion`）读取；只有根目录的 `build*.sh` 和 `build*.bat` 会生成带版本的发布构建，`npm run build` 只编译。
 
 ## 🧪 测试
 

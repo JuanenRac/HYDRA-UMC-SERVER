@@ -293,7 +293,7 @@ npm test                    # unit tests, the OpenAPI check and the contract scr
 npm run build && npm start  # one bundled file (build.sh and build.bat make a versioned release build)
 ```
 
-サーバーは `0.0.0.0:3000` で待ち受け、状態はすべて `data/` に置かれます。このリポジトリには意図的に Dockerfile がありません。HYDRA-UMC-OS が CM5 にインストールします（`provisioning/install_server.sh`）。実行中のバージョンは `GET /api/hydra-info`（`appVersion`）で読めます。バージョン付きリリースビルドを作るのはルートの `build*.sh` / `build*.bat` だけで、`npm run build` はコンパイルのみです。
+サーバーは `0.0.0.0:3000` で待ち受け、状態はすべて `data/` に置かれます。Dockerfile（`scripts/Dockerfile`）は HYDRA-UMC-DEV-SERVER のコンテナベンチ専用です（ユーザー `node`、ヘルスチェック、内部に秘密情報なし）。サーバーは HYDRA-UMC-OS が CM5 にインストールし（`provisioning/install_server.sh`）、そこは何も変わりません。実行中のバージョンは `GET /api/hydra-info`（`appVersion`）で読めます。バージョン付きリリースビルドを作るのはルートの `build*.sh` / `build*.bat` だけで、`npm run build` はコンパイルのみです。
 
 ## 🧪 テスト
 
