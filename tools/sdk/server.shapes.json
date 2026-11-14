@@ -2193,6 +2193,490 @@
         }
       }
     },
+    "SelfUpdateItem": {
+      "type": "object",
+      "required": [
+        "id",
+        "repo",
+        "installed",
+        "previous",
+        "latest",
+        "state",
+        "signedPackage"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "enum": [
+            "server",
+            "studio",
+            "os-agent"
+          ]
+        },
+        "repo": {
+          "type": "string"
+        },
+        "installed": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "previous": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "latest": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "current",
+            "behind",
+            "ahead",
+            "unknown"
+          ]
+        },
+        "signedPackage": {
+          "type": "boolean",
+          "description": "Whether the newest release carries the package, its hash and its signature."
+        }
+      }
+    },
+    "SelfUpdateJob": {
+      "type": "object",
+      "required": [
+        "id",
+        "action",
+        "component",
+        "state",
+        "fromVersion",
+        "targetVersion",
+        "startedAt",
+        "updatedAt",
+        "error",
+        "detail",
+        "log",
+        "by"
+      ],
+      "description": "One update (or way back) of a program of this machine, step by step. It lives in a file, so it can be read again after the server restarts.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "apply",
+            "rollback"
+          ]
+        },
+        "component": {
+          "type": "string",
+          "enum": [
+            "server",
+            "studio",
+            "os-agent"
+          ]
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "checking",
+            "downloading",
+            "verifying",
+            "applying",
+            "restarting",
+            "done",
+            "failed"
+          ]
+        },
+        "fromVersion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "targetVersion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "startedAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "no_release",
+            "already_current",
+            "no_signed_package",
+            "download_failed",
+            "package_too_large",
+            "signature_invalid",
+            "no_earlier_release",
+            "start_failed",
+            "rolled_back",
+            "deploy_failed",
+            "timeout",
+            "interrupted",
+            null
+          ]
+        },
+        "detail": {
+          "type": "string"
+        },
+        "packageName": {
+          "type": "string"
+        },
+        "log": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "at",
+              "step",
+              "text"
+            ],
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "step": {
+                "type": "string",
+                "enum": [
+                  "checking",
+                  "downloading",
+                  "verifying",
+                  "applying",
+                  "restarting",
+                  "done",
+                  "failed"
+                ]
+              },
+              "text": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "by": {
+          "type": "string"
+        }
+      }
+    },
+    "SelfUpdateStatus": {
+      "type": "object",
+      "required": [
+        "checkedAt",
+        "owner",
+        "rateLimited",
+        "items",
+        "applyEnabled",
+        "job"
+      ],
+      "description": "The programs of this machine set against the newest signed release of each, whether applying is switched on, and the job that is going on or the last one.",
+      "properties": {
+        "checkedAt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "owner": {
+          "type": "string"
+        },
+        "rateLimited": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/SelfUpdateItem"
+          }
+        },
+        "applyEnabled": {
+          "type": "boolean"
+        },
+        "job": {
+          "anyOf": [
+            {
+              "$ref": "#/components/schemas/SelfUpdateJob"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "FleetUpdateRow": {
+      "type": "object",
+      "required": [
+        "name",
+        "kind",
+        "repo",
+        "installed",
+        "latest",
+        "action",
+        "reason",
+        "state",
+        "step",
+        "detail",
+        "error",
+        "order",
+        "log"
+      ],
+      "description": "One program of the device in the update of everything installed: its versions, what the plan does with it and where its steps are.",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "repo",
+            "svc",
+            "frontend"
+          ]
+        },
+        "repo": {
+          "type": "string"
+        },
+        "installed": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "latest": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "update",
+            "current",
+            "skip",
+            "review"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "waiting",
+            "running",
+            "done",
+            "failed",
+            "rolled_back",
+            "interrupted",
+            "skipped",
+            "blocked"
+          ]
+        },
+        "step": {
+          "type": "string",
+          "enum": [
+            "",
+            "disk",
+            "fetching",
+            "backup",
+            "building",
+            "installing",
+            "verifying",
+            "done"
+          ]
+        },
+        "substep": {
+          "type": "string"
+        },
+        "substeps": {
+          "type": "integer"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "order": {
+          "type": "integer"
+        },
+        "elapsedS": {
+          "type": "integer"
+        },
+        "freeMb": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "needMb": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "unitRestored": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "log": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "at",
+              "text"
+            ],
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "FleetUpdateReport": {
+      "type": "object",
+      "required": [
+        "schema",
+        "id",
+        "mode",
+        "state",
+        "startedAt",
+        "updatedAt",
+        "error",
+        "stoppedAt",
+        "requireSignedTags",
+        "disk",
+        "services"
+      ],
+      "description": "The progress file of tools/fleet_update.py (hydra-fleet-update/1). A run whose heartbeat stopped is reported as interrupted.",
+      "properties": {
+        "schema": {
+          "type": "string",
+          "enum": [
+            "hydra-fleet-update/1"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "plan",
+            "run"
+          ]
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "planned",
+            "running",
+            "done",
+            "failed",
+            "blocked",
+            "interrupted"
+          ]
+        },
+        "startedAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "stoppedAt": {
+          "type": "string"
+        },
+        "requireSignedTags": {
+          "type": "boolean"
+        },
+        "disk": {
+          "type": "object",
+          "required": [
+            "rootFreeMb",
+            "workspaceFreeMb"
+          ],
+          "properties": {
+            "rootFreeMb": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "workspaceFreeMb": {
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          }
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/FleetUpdateRow"
+          }
+        }
+      }
+    },
+    "FleetUpdateStatus": {
+      "type": "object",
+      "required": [
+        "applyEnabled",
+        "busy",
+        "report"
+      ],
+      "description": "Whether applying is switched on, whether a look or a run is going on, and the progress file (null before the first look).",
+      "properties": {
+        "applyEnabled": {
+          "type": "boolean"
+        },
+        "busy": {
+          "type": "boolean"
+        },
+        "report": {
+          "anyOf": [
+            {
+              "$ref": "#/components/schemas/FleetUpdateReport"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
     "NodeHealth": {
       "type": "object",
       "required": [

@@ -80,6 +80,29 @@ export function registerIngestRoutes(app: express.Express, deps: IngestDeps): vo
     res.json({ items, chain: req.query.verify === "1" ? store.verify() : undefined });
   });
 
+  // The SDK names this feed after the dev server (dev-server); the developer-node routes below are kept as deprecated aliases that answer the same body.
+  // The routes stay written out (not one handler for two paths) because tools/generate_openapi.mjs reads the handler that follows each registration.
+  app.post("/api/ingest/dev-server/status", apiRateLimiter, nodeToken, developerOn, (req: any, res) => {
+    const problem = tooBig(req.body) ? "the body is too large" : developerNodeStatusProblem(req.body);
+    if (problem) return res.status(400).json({ error: problem });
+    try {
+      const record = ingest().developerNode.append("developer-node-status", { node_id: req.nodeId, status: req.body });
+      return res.status(201).json({ node_id: req.nodeId, seq: record.seq });
+    } catch (error) {
+      return res.status(503).json({ error: "the record is not available: the signing key of this server is not usable" });
+    }
+  });
+
+  app.get("/api/dev-server/status", apiRateLimiter, authenticate, developerOn, (req: any, res) => {
+    const store = ingest().developerNode;
+    const latest = new Map<string, { at: number; seq: number; status: unknown }>();
+    for (const r of store.list(Number.MAX_SAFE_INTEGER, "developer-node-status")) {
+      const p = r.payload as { node_id: string; status: unknown };
+      if (!latest.has(p.node_id)) latest.set(p.node_id, { at: r.at, seq: r.seq, status: p.status });
+    }
+    res.json({ nodes: Object.fromEntries(latest), chain: req.query.verify === "1" ? store.verify() : undefined });
+  });
+
   app.post("/api/ingest/developer-node/status", apiRateLimiter, nodeToken, developerOn, (req: any, res) => {
     const problem = tooBig(req.body) ? "the body is too large" : developerNodeStatusProblem(req.body);
     if (problem) return res.status(400).json({ error: problem });

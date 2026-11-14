@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- **The routes of the status feed of the dev server have the names of the SDK (`/api/ingest/dev-server/status`, `/api/dev-server/status`):** they answer exactly like the `developer-node` routes, which stay as deprecated aliases for one version, and a test compares both. `docs/openapi.json` lists the four routes.
+
+- **The SDK is pinned to its newest release, and the answers of the update routes use its shapes:** the pin of the workflow moves to `v0.6.4`, the byte copy of the shapes of the SDK (`tools/sdk/server.shapes.json`) is refreshed, and the self-update and fleet-update routes name `SelfUpdateStatus`, `SelfUpdateJob` and `FleetUpdateStatus` as their answers, so `docs/openapi.json` shows them.
 - **The comments of the source say what the code does and why, not what it did before:** 35 comments in the source and the verify scripts that told the history of a change ("used to ...", "ported from", "no longer") now describe the present behavior and the reason for it. Comments only: no behavior changes.
 - **An update from Studio is no longer reported as done when the server that answers still runs the old version, and an update tool that never started is told as such:** a signed package whose deploy tool ends well but whose unit does not start from the release in use now ends as failed (`deploy_failed`, with the version in place and the one that runs) instead of done, and a run of the fleet update whose tool left no trace within twenty seconds (the interpreter or the tool is not where the settings say) is read as interrupted with the last line the process printed, instead of staying as planned for ever; the update can then be asked again. Tests of both cases.
 
