@@ -15,7 +15,7 @@ import { PairingCard } from './PairingCard';
 import { readTlsFingerprint } from '../pairingModel';
 import { detectLanguage, translate, type Language } from '../i18n';
 import {
-  JWT_ALGORITHMS, PRESENCE_ACTIONS, isLocked, jwtAlgorithmPatch, readJwtAlgorithm, readJwtKeys, type JwtAlgorithm, type JwtAlgorithmState, type JwtKeyRow, jobDispatcherNeedsConfirmation, jobDispatcherPatch, needsConfirmation, parseRobotMapText, presenceActionPatch, readJobDispatcher,
+  JWT_ALGORITHMS, PRESENCE_ACTIONS, isLocked, jwtAlgorithmPatch, readJwtAlgorithm, readJwtKeys, type JwtAlgorithm, type JwtAlgorithmState, type JwtKeyRow, jobDispatcherNeedsConfirmation, jobExecutorGoesLive, jobDispatcherPatch, needsConfirmation, parseRobotMapText, presenceActionPatch, readJobDispatcher,
   RATE_LIMIT_FIELDS, rateLimitsPatch, readRateLimits, type RateLimitKey, type RateLimitsState,
   readPresenceAction, readSwitches, robotMapToText, switchPatch, warningKeys, type JobDispatcherState, type PresenceAction, type PresenceActionState, type SwitchState,
 } from '../securityModel';
@@ -41,6 +41,8 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
   const [limitTexts, setLimitTexts] = useState<Record<RateLimitKey, string> | null>(null);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
   const [relay, setRelay] = useState(false);
+  const [execEnabled, setExecEnabled] = useState(false);
+  const [execLive, setExecLive] = useState(false);
   const [mapText, setMapText] = useState('');
   const [allow, setAllow] = useState(false);
   const [timeoutText, setTimeoutText] = useState('30');
@@ -63,6 +65,8 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
     else setJwtKeys([]);
     if (jd) {
       setRelay(jd.relayEnabled);
+      setExecEnabled(jd.executor?.enabled ?? false);
+      setExecLive(jd.executor?.live ?? false);
       setMapText(robotMapToText(jd.robotMap));
       setAllow(jd.allowUnconfirmed);
       setTimeoutText(String(jd.timeoutSeconds));
@@ -141,13 +145,15 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
 
   const saveDispatcher = () => {
     if (!dispatcher) return;
-    const patch = jobDispatcherPatch({ relayEnabled: relay, robotMapText: mapText, replanEditable: dispatcher.replanEditable, allowUnconfirmed: allow, timeoutText });
+    const patch = jobDispatcherPatch({ relayEnabled: relay, robotMapText: mapText, replanEditable: dispatcher.replanEditable, allowUnconfirmed: allow, timeoutText,
+      executorEnabled: dispatcher.executor && !isLocked(dispatcher.executor.enabledSource) ? execEnabled : undefined,
+      executorLive: dispatcher.executor && !isLocked(dispatcher.executor.liveSource) ? execLive : undefined });
     if (!patch) {
       setMessage('');
       setError(parseRobotMapText(mapText) === null ? t('jd_map_invalid') : t('jd_timeout_invalid'));
       return;
     }
-    if (jobDispatcherNeedsConfirmation(dispatcher, patch) && !window.confirm(t('jd_confirm'))) return;
+    if (jobDispatcherNeedsConfirmation(dispatcher, patch) && !window.confirm(t(jobExecutorGoesLive(dispatcher, patch) ? 'jd_exec_confirm' : 'jd_confirm'))) return;
     void send(patch);
   };
 
@@ -245,6 +251,25 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
           <label className="text-xs font-bold text-slate-200" htmlFor="jd-map">{t('jd_map_label')}</label>
           <textarea id="jd-map" data-testid="jd-map" rows={4} value={mapText} placeholder={t('jd_map_placeholder')} disabled={busy} onChange={e => setMapText(e.target.value)} className={`${input} font-mono`} />
           <p className="text-[10px] text-slate-500">{t('jd_map_help')}</p>
+          {dispatcher.executor && (
+            <>
+              <h4 className="text-xs font-bold text-slate-200">{t('jd_exec_title')}</h4>
+              <label className="flex items-start gap-2 text-xs font-bold text-slate-200">
+                <input type="checkbox" data-testid="jd-exec-enabled" checked={execEnabled} disabled={busy || isLocked(dispatcher.executor.enabledSource)} onChange={e => setExecEnabled(e.target.checked)} className="mt-0.5" />
+                <span>{t('jd_exec_enabled_label')}</span>
+                {isLocked(dispatcher.executor.enabledSource) && <Lock size={12} className="text-amber-400 mt-0.5" />}
+              </label>
+              <span className="text-[10px] text-slate-500 pl-6">{t(`source_${dispatcher.executor.enabledSource}`)}</span>
+              <p className="text-[10px] text-slate-500">{t('jd_exec_enabled_help')}</p>
+              <label className="flex items-start gap-2 text-xs font-bold text-slate-200">
+                <input type="checkbox" data-testid="jd-exec-live" checked={execLive} disabled={busy || isLocked(dispatcher.executor.liveSource)} onChange={e => setExecLive(e.target.checked)} className="mt-0.5" />
+                <span>{t('jd_exec_live_label')}</span>
+                {isLocked(dispatcher.executor.liveSource) && <Lock size={12} className="text-amber-400 mt-0.5" />}
+              </label>
+              <span className="text-[10px] text-slate-500 pl-6">{t(`source_${dispatcher.executor.liveSource}`)}</span>
+              <p className="text-[10px] text-slate-500">{t('jd_exec_live_help')}</p>
+            </>
+          )}
           <h4 className="text-xs font-bold text-slate-200">{t('jd_replan_title')}</h4>
           <label className="flex items-start gap-2 text-xs font-bold text-slate-200">
             <input type="checkbox" data-testid="jd-allow" checked={allow} disabled={busy || !dispatcher.replanEditable} onChange={e => setAllow(e.target.checked)} className="mt-0.5" />

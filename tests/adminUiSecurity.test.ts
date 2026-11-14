@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { SecurityConfig, type SecurityFile } from "../src/securityConfig.ts";
 import { LANGUAGES, MESSAGES, detectLanguage, translate } from "../admin-ui/src/i18n.ts";
 import {
-  SWITCHES, PRESENCE_ACTIONS, JWT_ALGORITHMS, isLocked, jwtAlgorithmPatch, readJwtAlgorithm, readJwtKeys, jobDispatcherNeedsConfirmation, jobDispatcherPatch, needsConfirmation, parseRobotMapText, presenceActionPatch, readJobDispatcher, readPresenceAction, readSwitches,
+  SWITCHES, PRESENCE_ACTIONS, JWT_ALGORITHMS, isLocked, jwtAlgorithmPatch, readJwtAlgorithm, readJwtKeys, jobDispatcherNeedsConfirmation, jobExecutorGoesLive, jobDispatcherPatch, needsConfirmation, parseRobotMapText, presenceActionPatch, readJobDispatcher, readPresenceAction, readSwitches,
   robotMapToText, switchPatch, warningKeys, RATE_LIMIT_FIELDS, parseRateLimitText, rateLimitsPatch, readRateLimits,
 } from "../admin-ui/src/securityModel.ts";
 
@@ -191,4 +191,46 @@ test("the request limits: the tab reads the numbers, sends only what changed and
   assert.deepEqual([answer.snapshot.rateLimits.loginMax.value, answer.snapshot.rateLimits.stopAllMax.value], [8, 90]);
   assert.deepEqual(warningKeys(config.update({ rateLimits: { enabled: false } }, "root").warnings), ["warn_rate_limits_off"]);
   assert.deepEqual(warningKeys(["rate_limits_loose"]), ["warn_rate_limits_loose"]);
+});
+
+test("the executor switches are read with their source and sent only when the environment does not lock them", () => {
+  const { config } = makeConfig();
+  const off = readJobDispatcher(config.snapshot())!;
+  assert.deepEqual(off.executor, { enabled: false, enabledSource: "default", live: false, liveSource: "default", appliesOnRestart: false });
+  const base = { relayEnabled: false, robotMapText: "", replanEditable: false, allowUnconfirmed: false, timeoutText: "30" };
+  assert.deepEqual(jobDispatcherPatch(base), { jobDispatcher: { stopRelay: { enabled: false, robotMap: {} } } });
+  const dry = jobDispatcherPatch({ ...base, executorEnabled: true, executorLive: false })!;
+  assert.deepEqual(dry.jobDispatcher.executor, { enabled: true, live: false });
+  // what the tab sends, the server accepts and reads back
+  config.update(dry, "root");
+  const after = readJobDispatcher(config.snapshot())!;
+  assert.deepEqual([after.executor?.enabled, after.executor?.live, after.executor?.enabledSource, after.executor?.appliesOnRestart], [true, false, "config", true]);
+  const live = jobDispatcherPatch({ ...base, executorEnabled: true, executorLive: true })!;
+  assert.equal(jobExecutorGoesLive(after, live), true);
+  assert.equal(jobDispatcherNeedsConfirmation(after, live), true);
+  assert.equal(jobExecutorGoesLive(after, dry), false);
+  assert.equal(jobDispatcherNeedsConfirmation(after, dry), false);
+  const locked = makeConfig({ jobExecutor: "1", jobExecutorLive: "1" });
+  const lockedState = readJobDispatcher(locked.config.snapshot())!;
+  assert.equal(isLocked(lockedState.executor!.enabledSource), true);
+  assert.equal(isLocked(lockedState.executor!.liveSource), true);
+  assert.equal(jobExecutorGoesLive(lockedState, live), false, "it already runs live");
+});
+
+test("a server without the executor, or with a damaged one, shows no executor switches", () => {
+  const snapshot = makeConfig().config.snapshot() as any;
+  const without = { ...snapshot, jobDispatcher: { ...snapshot.jobDispatcher, executor: undefined } };
+  assert.equal(readJobDispatcher(without)!.executor, undefined);
+  for (const bad of [null, 5, { enabled: { value: "no", source: "default" }, live: { value: false, source: "default" } }, { enabled: { value: true, source: "nowhere" }, live: { value: false, source: "default" } }]) {
+    assert.equal(readJobDispatcher({ ...snapshot, jobDispatcher: { ...snapshot.jobDispatcher, executor: bad } })!.executor, undefined, JSON.stringify(bad));
+  }
+});
+
+test("the two warnings of the executor have their sentence in every language", () => {
+  assert.deepEqual(warningKeys(["job_executor_on", "job_executor_live"]), ["jd_warning_exec", "jd_warning_exec_live"]);
+  for (const code of LANGUAGES) {
+    for (const key of ["jd_exec_title", "jd_exec_enabled_label", "jd_exec_enabled_help", "jd_exec_live_label", "jd_exec_live_help", "jd_exec_confirm", "jd_warning_exec", "jd_warning_exec_live"]) {
+      assert.notEqual(translate(code, key), key, `${String(code)} ${key}`);
+    }
+  }
 });
