@@ -158,7 +158,7 @@ export interface TwinRelayFile {
   enabled?: boolean;
 }
 
-/** The last health frame of a controller board as the brain heard it (GET /api/node-health, src/nodeHealth.ts). */
+/** The last health frame of a controller board as the brain heard it (GET /api/ecosystem/node-health, src/nodeHealth.ts). */
 export interface NodeHealthFile {
   /** Whether the route answers (default: no; a signed-in client then gets 404). */
   enabled?: boolean;
@@ -666,7 +666,7 @@ export function resolveHealthOpen(env: string | undefined, file: SecurityFile): 
   return { value: false, source: "default" };
 }
 
-/** The health of the controller boards (GET /api/node-health): only the exact word "1" in the environment switches it on; the default is off. */
+/** The health of the controller boards (GET /api/ecosystem/node-health): only the exact word "1" in the environment switches it on; the default is off. */
 export function resolveNodeHealth(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
   if (isSet(env)) return { value: env.trim() === "1", source: "env" };
   if (typeof file.nodeHealth?.enabled === "boolean") return { value: file.nodeHealth.enabled, source: "config" };
@@ -1327,7 +1327,7 @@ export class SecurityConfig {
     return resolvePresenceAction(this.options.env.presenceAction, this.file).value;
   }
 
-  /** Whether GET /api/node-health answers (off unless an administrator turned it on). */
+  /** Whether GET /api/ecosystem/node-health answers (off unless an administrator turned it on). */
   nodeHealthEnabled(): boolean {
     return resolveNodeHealth(this.options.env.nodeHealth, this.file).value;
   }
@@ -2373,7 +2373,7 @@ export class SecurityConfig {
       if (patch.push.liveActivity !== undefined) log(`[SECURITY] ${actor} set the Live Activity on the lock screen to ${snapshot.push.liveActivity.enabled.value ? "on" : "off"}, showing ${snapshot.push.liveActivity.level.value}.`);
     }
     if (patch.nodeHealth !== undefined) {
-      log(`[SECURITY] ${actor} turned the health of the controller boards (GET /api/node-health) ${snapshot.nodeHealth.enabled.value ? "on" : "off"}.`);
+      log(`[SECURITY] ${actor} turned the health of the controller boards (GET /api/ecosystem/node-health) ${snapshot.nodeHealth.enabled.value ? "on" : "off"}.`);
     }
     if (patch.ecosystemHealth !== undefined) {
       log(`[SECURITY] ${actor} turned the health of the ecosystem (GET /api/ecosystem/health) ${snapshot.ecosystemHealth.enabled.value ? "on" : "off"}.`);

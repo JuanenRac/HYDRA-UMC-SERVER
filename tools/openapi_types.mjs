@@ -82,7 +82,7 @@ export const RESPONSES = {
   "POST /api/admin/jwt-keys/rotate": ref("JwtKeyRotated"),
   "GET /api/robots/liveness": ref("RobotLiveness"),
   "GET /api/ecosystem/health": ref("EcosystemHealth"),
-  "GET /api/node-health": ref("NodeHealth"),
+  "GET /api/ecosystem/node-health": ref("NodeHealth"),
   "GET /api/admin/service-identity": ref("ServiceIdentityStatus"),
   "POST /api/push/devices": ref("PushDeviceRegistered"),
   "DELETE /api/push/devices/{token}": ref("PushDeviceRemoved"),
@@ -217,7 +217,7 @@ export const EXTRA_STATUSES = {
   // 404 while ecosystemHealth.enabled is off (as if the route did not exist), 403 for a viewer.
   "GET /api/ecosystem/health": [403, 404],
   // 404 while nodeHealth.enabled is off (as if the route did not exist), 400 for a slot that is not 0 to 7, 403 for a viewer, 503 when the bridge is not configured or silent.
-  "GET /api/node-health": [400, 403, 404, 503],
+  "GET /api/ecosystem/node-health": [400, 403, 404, 503],
   // 404 while deviceTokens.enabled is off (as if the routes did not exist); 409 when there are already as many active tokens as allowed.
   "POST /api/admin/device-tokens": [409],
   "GET /api/admin/device-tokens": [404],
@@ -261,6 +261,7 @@ export const EXTRA_STATUSES = {
 // "METHOD /path" -> status codes whose answer has no body at all (a switch that is off answers a bare 404).
 export const EMPTY_BODY_STATUSES = {
   "GET /api/ecosystem/health": [404],
+  "GET /api/ecosystem/node-health": [404],
   "POST /api/push/devices": [404],
   "DELETE /api/push/devices/{token}": [404],
   "POST /api/push/live-activities": [404],
