@@ -165,7 +165,7 @@ test("the admin route carries the options, writes the file, answers the warnings
   assert.deepEqual(readReplanOptions(file), { allowUnconfirmed: true, stopAckTimeoutSeconds: 60 });
   assert.equal(call("GET /api/admin/server-config", undefined).payload.jobDispatcher.replan.stopAckTimeoutSeconds.value, 60);
   assert.deepEqual(events.map((e) => [e.type, e.outcome, e.username]), [["job-dispatcher-options", "ok", "root"]]);
-  assert.deepEqual(events[0].detail, { stopRelayEnabled: true, robotsMapped: 1, allowUnconfirmed: true, stopAckTimeoutSeconds: 60 });
+  assert.deepEqual(events[0].detail, { stopRelayEnabled: true, robotsMapped: 1, executorEnabled: false, executorLive: false, allowUnconfirmed: true, stopAckTimeoutSeconds: 60 });
   const bad = call("PUT /api/admin/server-config", { jobDispatcher: { replan: { stopAckTimeoutSeconds: 0 } } });
   assert.equal(bad.status, 400);
   assert.deepEqual(events.map((e) => e.outcome), ["ok", "refused"]);
