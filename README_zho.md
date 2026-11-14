@@ -240,6 +240,8 @@ CORS 通过一个可配置的白名单（`CORS_ALLOWED_ORIGINS`，见下文“�
 
 - `HYDRA_UMC_HEALTH_OPEN=1`（`health.open`）- `GET /health` 无需登录即可返回精简的健康报告（不含版本、主机或计数）；关闭时返回 `404`。
 - `HYDRA_UMC_ECOSYSTEM_HEALTH=1`（`ecosystemHealth.enabled`）- `GET /api/ecosystem/health` 返回生态系统各服务的健康状况；关闭时返回 `404`。
+- `HYDRA_UMC_NODE_HEALTH=1`（`nodeHealth.enabled`）- `GET /api/ecosystem/node-health?slot=N` 返回大脑从该插槽的控制器板收到的最后一帧健康信息（从 CM5 的 SPI 桥读取）；关闭时返回 `404`。
+- `HYDRA_UMC_JOB_EXECUTOR=1`（`jobDispatcher.executor.enabled`）- 回放调度器所分配作业对应机器人的已录制轨迹，并在结束时把作业报告为完成；即使开启，在 `HYDRA_UMC_JOB_EXECUTOR_LIVE=1`（`jobDispatcher.executor.dryRun: false`）允许它移动机器人之前，也只审计将要启动的内容（试运行）。
 - `HYDRA_UMC_TWIN_RELAY=1`（`twinRelay.enabled`）- `WebSocket /api/twin/ws` 将孪生体的实时状态（`HYDRA_UMC_TWIN_WS_URL`）转发给面板；关闭时套接字以 `1013` 关闭。
 - `HYDRA_UMC_ESTOP_WATCH_MS=2000`（500 到 60000；`0` 或未设置：关闭）- 服务器通过 CM5 的 SPI 桥（`GET /estop`）读取运动学大脑的急停状态，并通过 `/ws` 推送一条 `stop-state` 消息（物理急停与全局停止合并）；只读，桥无响应时为 `UNKNOWN`，绝不会是 `READY`。
 - `HYDRA_UMC_SERVICE_IDENTITY=1`（`auth.serviceIdentity.enabled`） - 此服务器对各服务的调用（健康探测、中继、停止中继、接管）会带上它自己签发的短期令牌（使用 `JWT_SECRET` 的 HS256，有效期六十秒），已开启身份密钥的服务会要求它；有自己令牌的服务仍收到原令牌，`JWT_SECRET` 未设置、为示例值或过短时不会签发任何令牌；关闭时不会向任何调用添加内容。开启需要确认，并且必须在向任何服务提供身份密钥之前开启。
@@ -264,6 +266,7 @@ CORS 通过一个可配置的白名单（`CORS_ALLOWED_ORIGINS`，见下文“�
 - **谁在连接：** `GET /api/connections/clients` 和 `GET /api/connections/events` 以 HYDRA-UMC-SDK 的封闭契约 `ConnectionClient` 和 `ConnectionEvent` 作答（首次见到、成功或失败的登录、第二因素、登出、已结束的会话）。管理员能看到全部条目，其他账号只能看到自己的；不保存密码、令牌或机密。
 - **生存信号：** `GET /api/robots/liveness` 说明服务器是否收到名册中每个机器人的消息（`live`、`stale` 或 `unknown`，并带最后一条消息的时长），而不是重复只记录操作员所开关内容的 `online` 标志；`data/server-config.json` 的 `liveness.staleAfterS` 设定上限（默认 30 秒）。
 - **生态系统健康：** `GET /api/ecosystem/health`（操作员或管理员；在管理员开启 `ecosystemHealth.enabled` 之前返回 `404`）会把声明了端口或 systemd 单元的服务列为 `ok`、`degraded`、`down` 或 `unknown`，并给出原因代码、各服务上报的版本与其清单版本的对比（偏差）、服务器最后一次收到其响应的时间、服务器自身 TLS 证书的剩余天数以及警告列表。每个服务都以较短的超时且无副作用地查询，因此一个宕机的服务不会遮住其他服务，只有管理员能看到端口、健康路径和单元。`data/server-config.json` 中的 `ecosystemHealth.certWarnDays` 与 `ecosystemHealth.probeTimeoutMs` 设置警告窗口（30 天）和每个服务的等待时间（1500 毫秒）。每个服务的最后一次联系时间保存在 `data/ecosystem-health-last-seen.json` 中（原子写入，并由 `ecosystemHealth.lastSeenMaxEntries` 和 `ecosystemHealth.lastSeenSaveIntervalS` 设定上限），因此重启后仍然保留。
+- **控制器板健康状态：** `GET /api/ecosystem/node-health?slot=N`（操作员或管理员；在管理员开启 `nodeHealth.enabled` 之前返回 `404`）给出大脑从插槽 N（0 到 7）的板子收到的最后一帧健康信息：其时长、序号、标志、CAN 错误计数、停顿次数和运行时间；没有可说的内容时为 `heard: false` / `online: false`。只读：不会向板子发送任何内容，桥返回的损坏应答也不会转发。
 - `HYDRA_UMC_SERVER_PORT` - 监听端口；优先于共享的 `PORT`。`HYDRA_UMC_PORTS_REGISTRY` 以及 `HYDRA_UMC_SDK_DIR` / `HYDRA_UMC_REQUIRE_SDK=1` 在同一张表中说明。
 
 以下访问开关就是 STUDIO 和 SUITE 的 Server Admin 画面所编辑的那些。每一项都按相同顺序决定：先是部署环境变量（画面中显示为锁定），然后是管理员保存在 `data/server-config.json` 中的值，最后是保守的默认值。其余一切由上面列出的变量涵盖。
