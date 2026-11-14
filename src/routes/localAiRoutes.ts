@@ -117,7 +117,22 @@ export function isForwardable(service: string, method: string, upstreamPath: str
   return (method === "GET" || method === "HEAD") && allowed.includes(upstreamPath);
 }
 
-export function registerLocalAiRoutes(app: express.Express, deps: { authenticate: Middleware; requireAdmin?: Middleware; requireOperator?: Middleware; adminOnly?: boolean | (() => boolean); rul?: () => RulSettings; env?: NodeJS.ProcessEnv }): void {
+/** The ports of the local AI services this server relays to, on 127.0.0.1. The registry of the SDK can correct them (HYDRA_UMC_AI_PORTS_FROM_REGISTRY=1, src/portsRegistry.ts). */
+export const LOCAL_AI_SERVICE_PORTS: Record<string, number> = {
+  "cognitive-node": 8096,
+  "detection-hef": 8093,
+  "visual-servoing-api": 8116,
+  "vla-engine": 8098,
+  "vision-node": 8094,
+  "anomaly-detector": 8097,
+  // the data lake behind the dashboard of the AI summaries: reads only (see READ_ONLY_SERVICE_PATHS)
+  datalake: 8095,
+  // the dry run of a plan (off in the planner until its own switch is on) and the estimates of the dispatcher (off until its own -eta): only the exact requests of EXACT_SERVICE_REQUESTS
+  "semantic-planner": 8109,
+  "job-dispatcher": 8090,
+};
+
+export function registerLocalAiRoutes(app: express.Express, deps: { authenticate: Middleware; requireAdmin?: Middleware; requireOperator?: Middleware; adminOnly?: boolean | (() => boolean); rul?: () => RulSettings; env?: NodeJS.ProcessEnv; aiPorts?: (defaults: Record<string, number>) => Record<string, number> }): void {
   const { authenticate, requireAdmin, requireOperator } = deps;
   const isAdminOnly = () => (typeof deps.adminOnly === "function" ? deps.adminOnly() : deps.adminOnly === true);
   // HYDRA_UMC_AI_ACCESS=admin: only administrators may use the relay (it reaches services that can move robots or run models).
@@ -145,25 +160,13 @@ export function registerLocalAiRoutes(app: express.Express, deps: { authenticate
   // "not ready" for real inference until a Hailo module and a loaded
   // model exist - this only carries that answer through the network,
   // it doesn't change it.
-  const LOCAL_AI_SERVICE_PORTS: Record<string, number> = {
-    "cognitive-node": 8096,
-    "detection-hef": 8093,
-    "visual-servoing-api": 8116,
-    "vla-engine": 8098,
-    "vision-node": 8094,
-    "anomaly-detector": 8097,
-    // the data lake behind the dashboard of the AI summaries: reads only (see READ_ONLY_SERVICE_PATHS)
-    datalake: 8095,
-    // the dry run of a plan (off in the planner until its own switch is on) and the estimates of the dispatcher (off until its own -eta): only the exact requests of EXACT_SERVICE_REQUESTS
-    "semantic-planner": 8109,
-    "job-dispatcher": 8090,
-  };
 
   app.all("/api/ai/:service/*rest", authenticate, aiAccess, async (req, res) => {
-    const port = LOCAL_AI_SERVICE_PORTS[req.params.service];
+    const ports = deps.aiPorts ? deps.aiPorts(LOCAL_AI_SERVICE_PORTS) : LOCAL_AI_SERVICE_PORTS;
+    const port = ports[req.params.service];
     if (port === undefined) {
       return res.status(404).json({
-        error: `Unknown local AI service '${req.params.service}' - known services: ${Object.keys(LOCAL_AI_SERVICE_PORTS).join(", ")}`,
+        error: `Unknown local AI service '${req.params.service}' - known services: ${Object.keys(ports).join(", ")}`,
       });
     }
     const restSegments = req.params.rest;

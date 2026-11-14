@@ -78,7 +78,7 @@ import { FleetUpdate, fleetSettings, type FleetFile } from "./fleetUpdate";
 import { writeDetectionHefSettings } from "./detectionHefSettings";
 import type { MaintenanceFile } from "./securityConfig";
 import { advertisedAddresses } from "./advertisedAddresses";
-import { getEcosystemStatus } from "./ecosystemStatus";
+import { ecosystemRoot, getEcosystemStatus } from "./ecosystemStatus";
 import type { UpdateCheckSettings } from "./updateCheck";
 import { jwtKeyStore, setJwtPolicyProvider, setKeyOverlapProvider } from "./jwtKeys";
 import { setServiceIdentitySwitch, identityHeader } from "./serviceIdentity";
@@ -105,6 +105,7 @@ import { registerSettingsRoutes } from "./routes/settings";
 import { registerStaticRoutes } from "./routes/staticRoutes";
 import { registerAssistantRoutes } from "./routes/assistantRoutes";
 import { registerLocalAiRoutes, registerRulConfigRoute, rulSettings } from "./routes/localAiRoutes";
+import { effectiveAiPorts, loadPortsRegistry } from "./portsRegistry";
 import { registerInfoRoutes } from "./routes/infoRoutes";
 import { registerPowerRoutes } from "./routes/powerRoutes";
 import { registerIngestRoutes } from "./routes/ingestRoutes";
@@ -583,7 +584,16 @@ async function startServer() {
 
   if (security.aiAdminOnly()) console.log("[SECURITY] The local AI relay (/api/ai/*) answers administrators only.");
   const rulNow = () => rulSettings(security.rulEnabled(), (loadServerConfig() as { rul?: unknown }).rul);
-  registerLocalAiRoutes(app, { authenticate, requireAdmin, requireOperator, adminOnly: () => security.aiAdminOnly(), rul: rulNow });
+  // the ports of the AI services: the built-in table, corrected by the registry of the SDK only when HYDRA_UMC_AI_PORTS_FROM_REGISTRY=1 (the registry is read again after a minute)
+  let aiRegistry: { at: number; value: ReturnType<typeof loadPortsRegistry> } | null = null;
+  registerLocalAiRoutes(app, {
+    authenticate, requireAdmin, requireOperator, adminOnly: () => security.aiAdminOnly(), rul: rulNow,
+    aiPorts: (defaults) => {
+      if (process.env.HYDRA_UMC_AI_PORTS_FROM_REGISTRY !== "1") return defaults;
+      if (!aiRegistry || Date.now() - aiRegistry.at > 60_000) aiRegistry = { at: Date.now(), value: loadPortsRegistry(ecosystemRoot()) };
+      return effectiveAiPorts(defaults, aiRegistry.value, true);
+    },
+  });
   // What the dashboard of the AI summaries reads to know whether to show its remaining-useful-life card: any signed-in account, read only.
   registerRulConfigRoute(app, { authenticate, rul: rulNow });
 
