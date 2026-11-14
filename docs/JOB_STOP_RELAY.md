@@ -59,3 +59,13 @@ An administrator edits the switch (`jobDispatcher.stopRelay.enabled`, applied on
 - The stop is the stop of the server (the playback of the robot and its arming). It is as real as the stop button of the control apps; the controller and the actuator keep the last word.
 - The ids of the dispatcher and of this server are different spaces, hence the explicit map.
 - If the acknowledgement is lost after the stop, the next pass stops the robot again (harmless) and retries it.
+
+## Registering the robots in the dispatcher
+
+The dispatcher only assigns jobs to robots it knows (`POST /robots`). This server owns the roster (`controllers[].robots`) and the authentication, so it can register the robots there (`src/dispatcherRegistrar.ts`):
+
+- **Off by default.** `jobDispatcher.registrar.enabled` in `data/server-config.json`, or `HYDRA_UMC_JOB_ROBOT_REGISTRAR=1` (the environment wins). The address and the token are those of the stop relay (`HYDRA_UMC_JOB_DISPATCHER_URL`, `HYDRA_UMC_JOB_DISPATCHER_TOKEN`, or `jobDispatcher.registrar.url` / `jobDispatcher.stopRelay.url`).
+- **Which robots.** Those of the roster that have an entry in the robot map (dispatcher id -> robot id of this server, the same map as the stop relay). With `jobDispatcher.registrar.registerUnmapped: true` the others are registered too, with their id here (as text) as their id there. A robot id used by more than one robot is never registered.
+- **What it does.** Every `pollSeconds` (30 by default) it reads `GET /robots` and registers, with `{"id": ..., "available": true}`, only the robots the dispatcher does not know. A robot the dispatcher already knows is never touched: its tool, location, availability and load are the dispatcher's own, so a registration cannot overwrite a robot that is working on a job.
+- **Limits** (all in the file): `pollSeconds` 1 to 86400, `requestTimeoutMs` 100 to 60000, `maxFailureBackoffSeconds` 1 to 86400 (the pause doubles after each failure up to it). A wrong value stops the registrar from starting and says why in the log; every registration is written to the audit chain (`job-robot-registrar`).
+- The dispatcher lists a robot with the names of its own structure (`ID`, `Tool`) and, with its camelCase aliases on, also `id`, `tool`; the reader accepts both.
