@@ -17,6 +17,7 @@ import type { AuditLog } from "../auditLog";
 import { JogSequence, parseSequence } from "../jogSequence";
 import { resolveHome } from "../modelHome";
 import { ifMatchAgrees, robotRevision } from "../serverPolicy";
+import { unknownToolLogLine } from "../urtcTools";
 import { applyTableMove, planTableMove, type TablePlan } from "../tableCommand";
 import { EDIT_COMMANDS, cleanPoints, editAffectedIds, planRobotEdit } from "../robotEdit";
 import { emitPush } from "../pushNotifications";
@@ -692,6 +693,9 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
               break;
             case "tool":
               if (params?.tool) {
+                // a tool that is not one of the URTC family is applied all the same; the log says it
+                const unknownTool = unknownToolLogLine(robot.id, params.tool);
+                if (unknownTool) industrialLog(unknownTool);
                 robot.tool = params.tool;
                 patch = { tool: robot.tool };
               }
