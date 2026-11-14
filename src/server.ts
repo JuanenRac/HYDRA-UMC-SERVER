@@ -36,6 +36,7 @@ import { registerRobotRoutes } from "./routes/robotRoutes";
 import { registerCommandRoutes, ROBOT_COMMANDS, stoppedPlaybackState } from "./routes/commandRoutes";
 import { JobStopRelay, resolveStopRelay, type StopRelayFile } from "./jobStopRelay";
 import { DispatcherRegistrar, resolveRegistrar, type RegistrarFile } from "./dispatcherRegistrar";
+import { DispatcherExecutor, resolveExecutor, type ExecutorFile } from "./dispatcherExecutor";
 import { OrchestratorTakeover, resolveTakeover, type TakeoverFile } from "./orchestratorTakeover";
 import { reloadDispatcher, resolveReload, type ReloadFile } from "./dispatcherReload";
 import { registerUpstreamRoutes } from "./routes/upstreamRoutes";
@@ -296,6 +297,7 @@ async function startServer() {
   let mqttBridge: MqttBridge | null = null;
   let jobStopRelay: JobStopRelay | null = null;
   let dispatcherRegistrar: DispatcherRegistrar | null = null;
+  let dispatcherExecutor: DispatcherExecutor | null = null;
   let orchestratorTakeover: OrchestratorTakeover | null = null;
   const livenessTracker = new RobotLivenessTracker();
   const hub = createWsHub({
@@ -798,6 +800,68 @@ async function startServer() {
       dispatcherRegistrar.start({ set: (fn, ms) => setTimeout(fn, ms), clear: (handle) => clearTimeout(handle as NodeJS.Timeout) });
       industrialLog(`[robot-registrar] ON: registering the robots of the roster in ${registrarResolution.settings.url} every ${registrarResolution.settings.pollSeconds} s`);
     }
+    // The execution of the jobs the dispatcher assigns to a robot of this server (off unless jobDispatcher.executor.enabled or HYDRA_UMC_JOB_EXECUTOR=1, and then a dry run
+    // until jobDispatcher.executor.dryRun is false or HYDRA_UMC_JOB_EXECUTOR_LIVE=1): see src/dispatcherExecutor.ts.
+    const executorFile = (loadServerConfig() as { jobDispatcher?: { executor?: ExecutorFile; stopRelay?: { url?: unknown } } }).jobDispatcher;
+    const executorResolution = resolveExecutor(process.env, executorFile?.executor, executorFile?.stopRelay?.url);
+    if (!executorResolution.ok) {
+      industrialLog(`[job-executor] NOT STARTED: ${executorResolution.error}`);
+    } else if (executorResolution.settings.enabled) {
+      const findRobot = (robotId: number): { controllerId: string; robot: any } | null => {
+        for (const controller of getSettings()?.controllers ?? []) {
+          const robot = controller.robots?.find((r: any) => r.id === robotId);
+          if (robot) return { controllerId: controller.id, robot };
+        }
+        return null;
+      };
+      dispatcherExecutor = new DispatcherExecutor({
+        settings: executorResolution.settings,
+        fetch: (url, init) => fetch(url, init),
+        getSettings: () => getSettings(),
+        robotMap: () => security.jobStopRobotMap(),
+        now: () => Date.now(),
+        // The same things that hold back a person: the read-only mode and a stop (the global one or the physical one the brain reports).
+        gate: () => (security.readOnlyOn() ? "the server is in read-only mode" : stopState.snapshot().state === "STOPPED" ? "the server is stopped" : null),
+        robotState: (robotId) => {
+          const found = findRobot(robotId);
+          if (!found) return null;
+          const playback = found.robot.playbackState ?? {};
+          return {
+            enabled: found.robot.enabled !== false,
+            reserved: isReservationActive(found.robot.reservation),
+            hasTrajectory: Array.isArray(found.robot.recordedPoints) && found.robot.recordedPoints.length > 0,
+            playing: playback.isPlaying === true,
+            finished: playback.isFinished === true,
+          };
+        },
+        // The same "play" as the command of a person: the server playback of the robot's own recorded points.
+        startRobot: (robotId) => {
+          const found = findRobot(robotId);
+          if (!found) return false;
+          found.robot.playbackState = { ...found.robot.playbackState, isPlaying: true, playing: true, activeStep: 0, isPaused: false, paused: false, requestPause: false, requestStop: false, isFinished: false, finished: false };
+          broadcastRobotDelta([{ controllerId: found.controllerId, robotId, patch: { playbackState: found.robot.playbackState } }], getSettings());
+          startServerPlayback(robotId);
+          void queueSettingsWrite(getSettings()).catch(() => undefined);
+          return true;
+        },
+        // The same "stop" as the command of a person.
+        stopRobot: (robotId) => {
+          const found = findRobot(robotId);
+          if (!found) return false;
+          found.robot.playbackState = stoppedPlaybackState(found.robot.playbackState);
+          arming.disarm(robotId);
+          stopServerPlayback(robotId);
+          broadcastRobotDelta([{ controllerId: found.controllerId, robotId, patch: { playbackState: found.robot.playbackState } }], getSettings());
+          void queueSettingsWrite(getSettings()).catch(() => undefined);
+          onClaimsChanged();
+          return true;
+        },
+        log: industrialLog,
+        audit: (event) => audit.record({ type: event.type, outcome: event.outcome, robotId: event.robotId, detail: event.detail }),
+      });
+      dispatcherExecutor.start({ set: (fn, ms) => setTimeout(fn, ms), clear: (handle) => clearTimeout(handle as NodeJS.Timeout) });
+      industrialLog(`[job-executor] ON (${executorResolution.settings.dryRun ? "DRY RUN: it decides and audits, it moves nothing" : "LIVE: it plays the trajectory of the robot of an assigned job"}): reading the assigned jobs of ${executorResolution.settings.url} every ${executorResolution.settings.pollSeconds} s`);
+    }
     mqttBridge = startMqttBridge({
       settings: security.mqtt(),
       env: securityEnvFrom(process.env).mqtt ?? {},
@@ -876,6 +940,7 @@ async function startServer() {
     void bridgeGateway.stop().catch(() => undefined);
     jobStopRelay?.stop();
     dispatcherRegistrar?.stop();
+    dispatcherExecutor?.stop();
     orchestratorTakeover?.stop();
     try { connectionTracker().flush(); } catch { /* best-effort */ }
     closeLog();
