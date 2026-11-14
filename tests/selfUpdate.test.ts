@@ -362,6 +362,38 @@ test("a tool that finished but left another release in use is a failure", async 
   } finally { done(); }
 });
 
+test("a release put in place that the answering server is not running is not an update that is done", async () => {
+  const { dir, done } = scratch();
+  try {
+    // the deploy tool says PASS and the status shows the new release, but the unit still runs from somewhere else: the process that answers is the old version
+    const stale = machine(dir, { current: "0.8.1.0", previous: null }, { running: (component) => (component === "server" ? "0.8.1.0" : null) }, "hang");
+    const update = new SelfUpdate(stale.deps);
+    await update.start("apply", "server", "admin");
+    await update.idle();
+    stale.state.server = { current: "0.9.0", previous: "0.8.1.0" };
+    fs.writeFileSync((await update.current())!.outFile, "DEPLOY=PASS\n");
+    const job = await update.current();
+    assert.equal(job?.state, "failed");
+    assert.equal(job?.error, "deploy_failed");
+    assert.match(job!.detail, /0\.9\.0 is in place but this server still runs 0\.8\.1\.0/);
+    // the same case with the new process answering is done; a program the server does not run itself is judged by the status of the tool alone
+    const fresh = machine(dir, { current: "0.8.1.0", previous: null }, { running: (component) => (component === "server" ? "0.9.0" : null), newId: () => "job2" }, "hang");
+    const second = new SelfUpdate(fresh.deps);
+    await second.start("apply", "server", "admin");
+    await second.idle();
+    fresh.state.server = { current: "0.9.0", previous: "0.8.1.0" };
+    fs.writeFileSync((await second.current())!.outFile, "DEPLOY=PASS\n");
+    assert.equal((await second.current())?.state, "done");
+    const studio = machine(dir, { current: "0.8.1.0", previous: null }, { running: () => null, newId: () => "job3" }, "hang");
+    const third = new SelfUpdate(studio.deps);
+    await third.start("apply", "studio", "admin");
+    await third.idle();
+    studio.state.studio = { current: "0.9.0", previous: "0.8.1.0" };
+    fs.writeFileSync((await third.current())!.outFile, "DEPLOY=PASS\n");
+    assert.equal((await third.current())?.state, "done");
+  } finally { done(); }
+});
+
 test("a tool that never reports an end times out", async () => {
   const { dir, done } = scratch();
   try {
