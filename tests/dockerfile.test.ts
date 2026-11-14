@@ -7,7 +7,7 @@ import { test } from "node:test";
 // copies in nothing of the local data folder.
 
 const root = process.cwd();
-const dockerfile = fs.readFileSync(path.join(root, "Dockerfile"), "utf8").replace(/\r\n/g, "\n");
+const dockerfile = fs.readFileSync(path.join(root, "scripts", "Dockerfile"), "utf8").replace(/\r\n/g, "\n");
 const instructions = dockerfile.split("\n").filter((line) => line.trim() !== "" && !line.trim().startsWith("#"));
 const ignored = fs.readFileSync(path.join(root, ".dockerignore"), "utf8").split(/\r?\n/).map((line) => line.trim());
 
