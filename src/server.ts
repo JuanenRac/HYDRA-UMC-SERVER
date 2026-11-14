@@ -3,10 +3,9 @@
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
 // GPL-3.0 - see LICENSE
 //
-// The API/WebSocket engine that used to live inside HYDRA-UMC-STUDIO's own
-// server.ts, split out into its own project so the robot-control backend
-// (this file) and the browser UI (HYDRA-UMC-STUDIO, now a pure Vite/React
-// client) can run, restart, scale, and be hosted independently - see this
+// The API/WebSocket engine of the robot-control backend, a project of its
+// own apart from the browser UI (HYDRA-UMC-STUDIO, a pure Vite/React
+// client) so that both can run, restart, scale, and be hosted independently - see this
 // project's own README.md for the full rationale. Still primarily an API +
 // WebSocket backend, meant to run headless (e.g. as a daemon on the CM5)
 // with no dev middleware of its own - but it DOES optionally serve
@@ -158,9 +157,9 @@ async function startServer() {
   // separate" section - the whole point of splitting this server out is
   // that the UI no longer has to share this process' own origin).
   //
-  // Used to be wide-open `cors()` with no arguments unconditionally - a
-  // defensible call while every real client sat on the same trusted LAN,
-  // but this server can now also be reached over the open internet
+  // A wide-open `cors()` with no arguments is not acceptable here - it
+  // would be defensible while every real client sat on the same trusted LAN,
+  // but this server can also be reached over the open internet
   // (NAT/port-forward), where "reflect literally any Origin header" stops
   // being a LAN-only trade-off and starts letting any random website a
   // logged-in admin's browser happens to visit make authenticated
@@ -547,7 +546,7 @@ async function startServer() {
 
   // The live pictures and the saved photos and recordings ask for a ticket (POST /api/camera/ticket) or a signed-in client unless the installation opts out with
   // HYDRA_UMC_CAMERA_AUTH=open, for the clients that do not ask for tickets yet.
-  // The read-only host and project information (metrics, the process supervisor, the ecosystem status, the model catalogue) used to answer anybody on the LAN. HYDRA_UMC_INFO_AUTH=required
+  // The read-only host and project information (metrics, the process supervisor, the ecosystem status, the model catalogue) answers anybody on the LAN by default. HYDRA_UMC_INFO_AUTH=required
   // makes it ask for a signed-in client, once every client sends its token on those requests; until then it stays as it was, and a production start says so.
   if (!security.infoAuthRequired() && NODE_ENV === "production") {
     console.warn("[SECURITY] Host metrics, the process supervisor and the ecosystem status are readable by the whole LAN. Set HYDRA_UMC_INFO_AUTH=required once every client sends its token on them.");

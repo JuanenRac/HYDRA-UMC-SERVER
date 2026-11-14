@@ -123,10 +123,10 @@ export function resolvePort(): number {
   return resolved.port;
 }
 
-// Opened once and kept open for the life of the process instead of the
-// open+write+close fs.appendFileSync() this used to do on EVERY call
+// Opened once and kept open for the life of the process instead of an
+// open+write+close fs.appendFileSync() on EVERY call
 // (industrialLog() fires on every robot command, not just at startup) -
-// that blocked the entire Node event loop (every other in-flight
+// that would block the entire Node event loop (every other in-flight
 // request/WS message, since this is a single-threaded server) for the
 // duration of a synchronous disk write each time. A persistent
 // WriteStream in append mode queues writes internally and flushes them
@@ -135,9 +135,8 @@ export function resolvePort(): number {
 let logStream = fs.createWriteStream(LOG_FILE, { flags: "a" });
 logStream.on("error", (err) => console.error("[industrialLog] log stream error", err));
 
-// Real size-based rotation - the "Log rotation utility" comment above this
-// block used to be aspirational only (an append-only stream with nothing
-// that ever trimmed it): an industrial
+// Real size-based rotation: an append-only stream with nothing that ever
+// trims it is not enough, since an industrial
 // cell logs a line on every robot command, so an unattended CM5 running
 // continuously for weeks/months WILL fill the eMMC eventually with no
 // bound at all. Single-file rotation (current -> .1, current truncated),

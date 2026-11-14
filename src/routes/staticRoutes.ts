@@ -44,8 +44,8 @@ export function registerStaticRoutes(app: express.Express, deps: { dataPath: str
     // decoded/routing-normalized path) is NOT the same string
     // `express.static`/`send` below ultimately resolve to a real file
     // with - confirmed live against this exact block, all four of these
-    // served the real settings.json despite failing the naive
-    // string-equality check that used to run here: a single character
+    // served the real settings.json despite failing a naive
+    // string-equality check: a single character
     // percent-encoded (`/%73ettings.json`), a doubled leading slash
     // (`//settings.json`), a case difference (`/Settings.json` - this
     // filesystem resolves it to the same file case-insensitively even

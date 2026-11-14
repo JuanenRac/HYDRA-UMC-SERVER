@@ -313,10 +313,10 @@ export async function getSupervisorSnapshot() {
 // Shared by GET /api/system/metrics (unchanged wire shape - the browser
 // UI's own StatusFooter) and GET /metrics (src/metrics.ts's own
 // hydra_system_* Prometheus gauges, wired up via setSystemMetricsSource()
-// below) - pulled out of the route handler it used to live in directly so
+// below) - kept apart from the route handler so
 // both call sites do the exact same vcgencmd read computation instead of
-// two copies drifting apart. See the original inline comment (now here)
-// for why this is execFile (async, no shell) and not execSync.
+// two copies drifting apart. It is execFile (async, no shell) and not
+// execSync so that a slow vcgencmd never blocks the event loop.
 export async function getSystemMetrics(): Promise<{
   cpu_load: number;
   memory_usage: number;
@@ -352,14 +352,12 @@ export async function getSystemMetrics(): Promise<{
   // cpu_load/memory_usage reuse the exact same real sources GET
   // /api/system/supervisor computes from (lastCpuUsage's delta-sampled
   // os.cpus() busy%, readMemoryInfo()'s /proc/meminfo MemAvailable-based
-  // used%) - this used to be its own independent formula
-  // (os.loadavg()[0]*10, a 1-minute load-average heuristic that isn't a
-  // percentage at all, and raw freemem() which double-counts reclaimable
-  // page cache as "used"), which is exactly why the footer and the
-  // Supervisor panel could show two different numbers for what a user
-  // reasonably expects to be the same "CPU load" - real feedback: 21% in
-  // the Supervisor vs 9% in the footer for the same instant. One real
-  // measurement now, read from two places, never two competing guesses.
+  // used%) - an independent formula (os.loadavg()[0]*10, a 1-minute
+  // load-average heuristic that isn't a percentage at all, and raw
+  // freemem() which double-counts reclaimable page cache as "used") would
+  // let the footer and the Supervisor panel show two different numbers for
+  // what a user reasonably expects to be the same "CPU load". One real
+  // measurement, read from two places, never two competing guesses.
   const memInfo = readMemoryInfo();
   return {
     cpu_load: Math.round(lastCpuUsage.overallPercent),

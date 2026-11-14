@@ -3,7 +3,7 @@
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
 // GPL-3.0-or-later - see LICENSE
 // =============================================================================
-// The edits an operator makes on one robot that used to travel inside the whole settings tree (which only an administrator may write): the list of
+// The edits an operator makes on one robot, which must not travel inside the whole settings tree (only an administrator may write that): the list of
 // recorded points, the repeat flag, the model and the role of the robot, the robots it is combined with, the joint values of the sliders and the
 // layout of its XY table. Each one is a robot command of its own (POST /api/robot/:id/command), checked here as a whole before anything changes, so a
 // bad value changes nothing; the route then applies the claim, If-Match and arming rules that every other command already goes through.

@@ -47,10 +47,9 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
   });
 
   // Real proxy to HYDRA-UMC-VISION-STREAMER's own real MJPEG capture+serve
-  // (mjpeg_server.py, "hydra-umc-vision-streamer stream serve") - this
-  // used to be a placeholder that wrote fake, non-JPEG bytes forever (see
-  // that project's own CHANGELOG for the real fix that made this
-  // possible). One camera = one local, loopback-only mjpeg_server.py
+  // (mjpeg_server.py, "hydra-umc-vision-streamer stream serve") - the
+  // bytes are the real JPEG frames of the camera, never placeholder data.
+  // One camera = one local, loopback-only mjpeg_server.py
   // instance on its own port, deterministically 8100 + (id - 1) - camera
   // 1 -> 8100, camera 2 -> 8101, etc, up to the documented 8-camera cap
   // (config.py's own MAX_CAMERAS) - avoids needing a separate port-
@@ -277,18 +276,17 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
     const writeStream = fs.createWriteStream(filePath);
     const reader = (upstream.body as any).getReader();
     const startedAt = new Date().toISOString();
-    // Real bug fixed (found via live testing on the CM5): recording/stop
-    // used to call reader.cancel() and respond immediately, without
-    // waiting for this loop to actually notice the cancellation and run
-    // its own finally{} below. If the loop was mid-`await` on the
+    // recording/stop must not call reader.cancel() and respond immediately:
+    // it has to wait for this loop to actually notice the cancellation and
+    // run its own finally{} below. If the loop is mid-`await` on the
     // writeStream's own "drain" event (backpressure) rather than
     // reader.read() at that exact moment, cancel() had nothing pending to
-    // reject - the loop only woke up and saw ITS OWN NEXT read() reject on
-    // the NEXT drain, which could take an arbitrarily long time (or never
-    // happen at all if writes stalled). The client had already been told
-    // "stopped", so a second stop attempt got a confusing 404 (a stale
-    // map entry looked "not recording" from that race alone) while the
-    // recording itself kept running underneath. `finished` now lets
+    // reject - the loop only wakes up and sees ITS OWN NEXT read() reject on
+    // the NEXT drain, which can take an arbitrarily long time (or never
+    // happen at all if writes stall). A client told "stopped" too early
+    // would get a confusing 404 on a second stop attempt (a stale
+    // map entry looks "not recording" from that race alone) while the
+    // recording itself kept running underneath. `finished` lets
     // /recording/stop actually AWAIT real completion before answering, so
     // "stopped" only ever means "truly stopped, file closed".
     let resolveFinished!: () => void;

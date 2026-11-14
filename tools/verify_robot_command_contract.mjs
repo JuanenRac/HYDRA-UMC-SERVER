@@ -170,8 +170,8 @@ async function main() {
     assert.equal(settings.body.controllers[0].cameras[0].connected, false, "controller camera must match its robot command");
 
     // A rejected speed/acceleration setpoint (outside the 10-500
-    // range STUDIO's own sliders enforce) used to be silently discarded -
-    // `success: true` never said whether the value actually applied.
+    // range STUDIO's own sliders enforce) must not be silently discarded:
+    // `success: true` alone does not say whether the value actually applied.
     const validSpeed = await request(port, "/api/robot/1/command", {
       method: "POST",
       headers: authorization,
@@ -241,10 +241,10 @@ async function main() {
     assert.equal(trajectoryA1.playbackState.activeStep, -1, "loading a Work must reset its playback cursor");
     assert.deepEqual(trajectoryA2.recordedPoints ?? [], [], "combined sibling must retain its own trajectory");
 
-    // Real regression found live on STUDIO/CM5: jogging robot 1's own
-    // real XY table used to also relocate robot 2 (a combined sibling
-    // with NO real table, hasXYTable: false) because the server only
-    // checked "does a config object exist" (robot.xyTable, always
+    // Guards against a regression seen live on STUDIO/CM5: jogging robot 1's own
+    // real XY table must not also relocate robot 2 (a combined sibling
+    // with NO real table, hasXYTable: false), which happens if the server only
+    // checks "does a config object exist" (robot.xyTable, always
     // present) instead of "does THIS robot actually have a table"
     // (robot.hasXYTable). robot 2's own pos.tx/ty doubles as its
     // general world-placement in the 3D scene for a table-less combined

@@ -179,10 +179,10 @@ export function createPlayback(deps: PlaybackDeps) {
           broadcastRobotDelta([{ controllerId: cId, robotId, patch: { playbackState: r.playbackState } }], getSettings());
           return;
         }
-        // Natural completion - isFinished used to be set ONLY by a
-        // browser client's own playback loop reaching the end (see
-        // RobotDetail.tsx's own isFinished comment); this engine is now
-        // an equally real source of that same natural-completion signal.
+        // Natural completion: isFinished is set both by a browser client's
+        // own playback loop reaching the end (see RobotDetail.tsx's own
+        // isFinished comment) and here, so the engine is an equally real
+        // source of that same natural-completion signal.
         r.playbackState = { ...pb, isPlaying: false, playing: false, isFinished: true, finished: true, activeStep: -1 };
         queueSettingsWrite(getSettings());
         broadcastRobotDelta([{ controllerId: cId, robotId, patch: { playbackState: r.playbackState } }], getSettings());
