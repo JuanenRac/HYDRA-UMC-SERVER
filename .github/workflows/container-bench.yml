@@ -38,6 +38,6 @@ concurrency:
 jobs:
   bench:
     name: Container bench of the server
-    uses: JuanenRac/HYDRA-UMC-DEV-SERVER/.github/workflows/server-bench.yml@b249d9b529b1c368aa9415d74de91b48361d3910
+    uses: JuanenRac/HYDRA-UMC-DEV-SERVER/.github/workflows/server-bench.yml@5a81f23d2a7f51433a6c89a281be612842386cab
     with:
       server_ref: ${{ github.event.pull_request.head.sha || github.sha }}
