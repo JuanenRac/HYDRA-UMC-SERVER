@@ -291,7 +291,7 @@ async function main() {
     // Repeat/loop: with isLooping set, reaching the end must NOT stop
     // playback - it must wrap back to the first point and keep going,
     // instead of always halting regardless of the Repeat button's own
-    // state (the real regression this covers: the engine used to ignore
+    // state (the real regression this covers: an engine that ignores
     // playbackState.isLooping entirely).
     const settingsBeforeLoop = await request(port, "/api/settings", { headers: authorization });
     const loopSettings = settingsBeforeLoop.body;

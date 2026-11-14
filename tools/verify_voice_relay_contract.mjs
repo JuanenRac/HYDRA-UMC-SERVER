@@ -162,9 +162,9 @@ async function main() {
     assert.equal(telemetry.body.type, "assistant_reply");
     assert.equal(telemetry.body.requestId, "voice-status-001");
     assert.equal(telemetry.body.requiresConfirmation, false);
-    // Real gap closed: this used to be VOICE-UI's own canned "Live
-    // telemetry will be supplied by the authenticated HYDRA-UMC gateway"
-    // placeholder - the Server itself now fills that promise in with real
+    // VOICE-UI's own canned "Live telemetry will be supplied by the
+    // authenticated HYDRA-UMC gateway" placeholder must not be what the
+    // user hears: the Server itself fills that promise in with real
     // data (same real source GET /api/hydra-info/GET /api/watch/system-status
     // already read from), right here in the relay step.
     assert.match(telemetry.body.text, /controller/);

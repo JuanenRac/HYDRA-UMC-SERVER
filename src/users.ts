@@ -225,8 +225,8 @@ function loadUsers(): StoredUser[] {
     parsed = JSON.parse(raw);
   } catch (err) {
     // A corrupted/truncated users.json (e.g. from a crash mid-write,
-    // before saveUsers() below was made atomic) must never look like
-    // "no users file yet" - that used to let ensureSeedUser() silently
+    // before saveUsers() below writes atomically) must never look like
+    // "no users file yet" - that would let ensureSeedUser() silently
     // create a fresh admin account, discarding every real account that
     // file actually held.
     throw new UsersFileError(`${usersPath()} exists but is not valid JSON: ${(err as Error).message}`);

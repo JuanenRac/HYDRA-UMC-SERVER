@@ -404,8 +404,8 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
       editPatch = plan.patch;
     }
 
-    // Work loading used to be a browser-only change followed by the normal
-    // 500 ms full-settings debounce. A Play click could therefore arrive at
+    // Work loading must not be a browser-only change followed by the normal
+    // 500 ms full-settings debounce: a Play click could then arrive at
     // Server first and replay the previous trajectory. Validate and prepare
     // the complete point list before touching state so "trajectory" is one
     // durable, broadcast atomic command like every other robot operation.
@@ -566,11 +566,11 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
               // case - `absolute: true` sets the axis to `amount` instead of
               // adding it, reusing this case's existing validation/patch/
               // broadcast plumbing instead of a bespoke command. Those
-              // sliders used to call updateRobot() directly (the
+              // sliders must not call updateRobot() directly (the
               // optimistic-local + 500ms-debounced-full-tree-save path,
-              // which never broadcasts to any OTHER connected client) -
-              // real feedback from live testing: dragging the XY table from
-              // one client never appeared on another.
+              // which never broadcasts to any OTHER connected client):
+              // dragging the XY table from one client has to appear on
+              // the others.
               const isAbsolute = params?.absolute === true;
               if (typeof params?.axis === "string" && ROBOT_AXES.has(params.axis) && validAmount) {
                 const target = params.target || "robot";
@@ -728,12 +728,12 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
               // step.
               const validSpeedField = (v: unknown) => typeof v === "number" && Number.isFinite(v) && v >= 10 && v <= 500;
               let touched = false;
-              // A rejected setpoint used to be indistinguishable from
-              // one that was simply never sent - the response's own
-              // `success: true` never said WHY playbackState.speed/
+              // A rejected setpoint must be distinguishable from
+              // one that was simply never sent: the response's own
+              // `success: true` does not say WHY playbackState.speed/
               // acceleration didn't change, so an out-of-range value from
               // a buggy client (or a future STUDIO range that drifts out of
-              // sync with this endpoint's own 10-500) looked identical to a
+              // sync with this endpoint's own 10-500) would look identical to a
               // real success. `warnings` records the real clip reason per
               // robot instead of discarding it.
               if (params?.speed !== undefined) {

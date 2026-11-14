@@ -235,10 +235,9 @@ export function hi3510PtzRequest(host: string, port: number, username: string, p
   });
 }
 
-// hi3510Action now lives in ./serverPolicy (see that module's own header
-// comment) - the pan/tilt/zoom-magnitudes-to-CGI-direction mapping that
-// used to be declared here moved there unchanged, so it's directly
-// unit-testable.
+// hi3510Action lives in ./serverPolicy (see that module's own header
+// comment): the pan/tilt/zoom-magnitudes-to-CGI-direction mapping is kept
+// there so it is directly unit-testable.
 
 // Real PTZ control - IP cameras only, this ecosystem's own USB cameras
 // have no pan/tilt/zoom hardware to speak of. Tries this ecosystem's

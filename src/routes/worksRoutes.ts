@@ -29,12 +29,10 @@ export function registerWorksRoutes(app: express.Express, deps: WorksRouteDeps):
   // trajectory files is an operational action, same tier as POST
   // /api/robot/:id/command below - it writes to disk so it must not be
   // reachable by a fully anonymous caller, but an "operator" account
-  // shouldn't need admin rights just to save a work file. This route was
-  // previously missing ANY auth check at all (every other disk-writing
-  // route in this file requires at least authenticate) - see
-  // src/components/AuthGate.tsx's own header comment, which already
-  // enumerated POST /api/settings and POST /api/robot/:id/command as the
-  // writes gated behind login and never mentioned this one.
+  // shouldn't need admin rights just to save a work file. It requires at
+  // least authenticate, like every other disk-writing route in this file
+  // (see src/components/AuthGate.tsx's own header comment, which lists the
+  // writes gated behind login).
   app.post("/api/upload-work", apiRateLimiter, authenticate, (req, res) => {
     try {
       const { folderPath, fileName, content } = req.body || {};

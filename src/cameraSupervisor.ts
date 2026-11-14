@@ -127,10 +127,10 @@ export function createCameraSupervisor() {
   // technically alive but never answers (a hung RTSP reconnect - the
   // exact real bug reported live: camera 4's own stream would freeze
   // mid-switch and never come back) or one that genuinely exits on its
-  // own used to just sit in cameraProcesses forever marked "error" -
+  // own would otherwise sit in cameraProcesses forever marked "error":
   // reconcileCameraProcesses()'s own short-circuit only skips a camera
-  // when it already has a live `proc`, so once one went stuck, NOTHING
-  // touched it again until an unrelated settings save happened to come
+  // when it already has a live `proc`, so once one goes stuck, NOTHING
+  // touches it again until an unrelated settings save happens to come
   // through. This schedules a real respawn of the exact same config
   // instead, with an escalating backoff (5s/10s/20s, capped at 30s) so a
   // genuinely broken camera (wrong credentials, unreachable host)
