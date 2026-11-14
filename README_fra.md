@@ -452,7 +452,7 @@ npm test                    # unit tests, the OpenAPI check and the contract scr
 npm run build && npm start  # one bundled file (build.sh and build.bat make a versioned release build)
 ```
 
-Le serveur écoute sur `0.0.0.0:3000` ; tout son état vit dans `data/`. Ce dépôt n'a volontairement pas de Dockerfile : HYDRA-UMC-OS l'installe sur la CM5 (`provisioning/install_server.sh`). La version en cours se lit dans `GET /api/hydra-info` (`appVersion`) ; seuls les scripts `build*.sh` et `build*.bat` de la racine font un build de version, `npm run build` ne fait que compiler.
+Le serveur écoute sur `0.0.0.0:3000` ; tout son état vit dans `data/`. Son Dockerfile (`scripts/Dockerfile`) ne sert qu'au banc de conteneurs de HYDRA-UMC-DEV-SERVER (utilisateur `node`, contrôle de santé, aucun secret à l'intérieur) ; HYDRA-UMC-OS installe le serveur sur la CM5 (`provisioning/install_server.sh`) et rien n'y change. La version en cours se lit dans `GET /api/hydra-info` (`appVersion`) ; seuls les scripts `build*.sh` et `build*.bat` de la racine font un build de version, `npm run build` ne fait que compiler.
 
 ## 🧪 Tests
 
