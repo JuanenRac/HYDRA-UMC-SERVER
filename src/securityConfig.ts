@@ -158,6 +158,12 @@ export interface TwinRelayFile {
   enabled?: boolean;
 }
 
+/** The last health frame of a controller board as the brain heard it (GET /api/node-health, src/nodeHealth.ts). */
+export interface NodeHealthFile {
+  /** Whether the route answers (default: no; a signed-in client then gets 404). */
+  enabled?: boolean;
+}
+
 /** The health of the ecosystem in one answer (GET /api/ecosystem/health, src/ecosystemHealth.ts). */
 export interface EcosystemHealthFile {
   /** Whether the route answers (default: no; a signed-in client then gets 404). */
@@ -417,6 +423,7 @@ export interface SecurityFile {
   ingest?: IngestFile;
   health?: HealthFile;
   ecosystemHealth?: EcosystemHealthFile;
+  nodeHealth?: NodeHealthFile;
   twinRelay?: TwinRelayFile;
   infoTickets?: InfoTicketsFile;
   deviceTokens?: DeviceTokensFile;
@@ -463,6 +470,7 @@ export interface SecurityEnv {
   /** The ingest switches (INGEST_SWITCH_VARIABLES) and the keys file of the proposals, as written. */
   ingest?: Partial<Record<IngestSwitchKey | "proposalKeysFile", string>>;
   ecosystemHealth?: string;
+  nodeHealth?: string;
   twinRelay?: string;
   infoTickets?: string;
   deviceTokens?: string;
@@ -518,6 +526,7 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     productionRdpLevel: env.HYDRA_UMC_PRODUCTION_RDP_LEVEL,
     ingest: { ...Object.fromEntries(INGEST_SWITCH_KEYS.map((key) => [key, env[INGEST_SWITCH_VARIABLES[key]]])), proposalKeysFile: env[PROPOSAL_KEYS_VARIABLE] },
     ecosystemHealth: env.HYDRA_UMC_ECOSYSTEM_HEALTH,
+    nodeHealth: env.HYDRA_UMC_NODE_HEALTH,
     twinRelay: env.HYDRA_UMC_TWIN_RELAY,
     infoTickets: env.HYDRA_UMC_INFO_TICKETS,
     deviceTokens: env.HYDRA_UMC_DEVICE_TOKENS,
@@ -654,6 +663,13 @@ export function resolveProposalKeysFile(env: string | undefined, file: SecurityF
 export function resolveHealthOpen(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
   if (isSet(env)) return { value: env.trim() === "1", source: "env" };
   if (typeof file.health?.open === "boolean") return { value: file.health.open, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** The health of the controller boards (GET /api/node-health): only the exact word "1" in the environment switches it on; the default is off. */
+export function resolveNodeHealth(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.nodeHealth?.enabled === "boolean") return { value: file.nodeHealth.enabled, source: "config" };
   return { value: false, source: "default" };
 }
 
@@ -1063,6 +1079,7 @@ export interface SecuritySnapshot {
   ingest: Record<IngestSwitchKey, { value: boolean; source: Source }> & { proposalKeysFile: { value: string; source: Source }; appliesOnRestart: boolean };
   health: { open: { value: boolean; source: Source } };
   ecosystemHealth: { enabled: { value: boolean; source: Source } };
+  nodeHealth: { enabled: { value: boolean; source: Source } };
   twinRelay: { enabled: { value: boolean; source: Source } };
   infoTickets: { enabled: { value: boolean; source: Source } };
   deviceTokens: { enabled: { value: boolean; source: Source } };
@@ -1310,6 +1327,11 @@ export class SecurityConfig {
     return resolvePresenceAction(this.options.env.presenceAction, this.file).value;
   }
 
+  /** Whether GET /api/node-health answers (off unless an administrator turned it on). */
+  nodeHealthEnabled(): boolean {
+    return resolveNodeHealth(this.options.env.nodeHealth, this.file).value;
+  }
+
   /** Whether GET /api/ecosystem/health answers (off unless an administrator turned it on). */
   ecosystemHealthEnabled(): boolean {
     return resolveEcosystemHealth(this.options.env.ecosystemHealth, this.file).value;
@@ -1462,6 +1484,7 @@ export class SecurityConfig {
       },
       health: { open: resolveHealthOpen(this.options.env.healthOpen, this.file) },
       ecosystemHealth: { enabled: resolveEcosystemHealth(this.options.env.ecosystemHealth, this.file) },
+      nodeHealth: { enabled: resolveNodeHealth(this.options.env.nodeHealth, this.file) },
       twinRelay: { enabled: resolveTwinRelay(this.options.env.twinRelay, this.file) },
       infoTickets: { enabled: resolveInfoTickets(this.options.env.infoTickets, this.file) },
       deviceTokens: { enabled: resolveDeviceTokens(this.options.env.deviceTokens, this.file) },
@@ -1539,7 +1562,7 @@ export class SecurityConfig {
   /** Applies a change asked for by an administrator; returns the new state and the warnings to show. */
   update(patch: any, actor: string): { snapshot: SecuritySnapshot; warnings: string[]; appliesOnRestart: boolean } {
     const warnings: string[] = [];
-    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, ingest: this.file.ingest ? { ...this.file.ingest } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, twinRelay: this.file.twinRelay ? { ...this.file.twinRelay } : undefined, infoTickets: this.file.infoTickets ? { ...this.file.infoTickets } : undefined, deviceTokens: this.file.deviceTokens ? { ...this.file.deviceTokens } : undefined, updateCheck: this.file.updateCheck ? { ...this.file.updateCheck } : undefined, discovery: this.file.discovery ? { ...this.file.discovery } : undefined, maintenance: this.file.maintenance ? { ...this.file.maintenance } : undefined, atc: this.file.atc ? { ...this.file.atc } : undefined, detectionHef: this.file.detectionHef ? { ...this.file.detectionHef } : undefined, presence: this.file.presence ? { ...this.file.presence } : undefined, bridgeGateway: this.file.bridgeGateway ? { ...this.file.bridgeGateway } : undefined, push: this.file.push ? { ...this.file.push } : undefined, trustedNetworks: this.file.trustedNetworks ? { ...this.file.trustedNetworks } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
+    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, ingest: this.file.ingest ? { ...this.file.ingest } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, nodeHealth: this.file.nodeHealth ? { ...this.file.nodeHealth } : undefined, twinRelay: this.file.twinRelay ? { ...this.file.twinRelay } : undefined, infoTickets: this.file.infoTickets ? { ...this.file.infoTickets } : undefined, deviceTokens: this.file.deviceTokens ? { ...this.file.deviceTokens } : undefined, updateCheck: this.file.updateCheck ? { ...this.file.updateCheck } : undefined, discovery: this.file.discovery ? { ...this.file.discovery } : undefined, maintenance: this.file.maintenance ? { ...this.file.maintenance } : undefined, atc: this.file.atc ? { ...this.file.atc } : undefined, detectionHef: this.file.detectionHef ? { ...this.file.detectionHef } : undefined, presence: this.file.presence ? { ...this.file.presence } : undefined, bridgeGateway: this.file.bridgeGateway ? { ...this.file.bridgeGateway } : undefined, push: this.file.push ? { ...this.file.push } : undefined, trustedNetworks: this.file.trustedNetworks ? { ...this.file.trustedNetworks } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
     let appliesOnRestart = false;
     const log = this.options.log ?? (() => undefined);
     const lockedBy = (name: string) => new SecurityConfigError(409, `${name} is set in the environment of this server; remove it there to change it here`);
@@ -1767,6 +1790,18 @@ export class SecurityConfig {
       }
       next.health = merged;
       if (healthPatch.open === true) warnings.push("health_open");
+    }
+
+    if (patch.nodeHealth !== undefined) {
+      const nodePatch = patch.nodeHealth;
+      if (typeof nodePatch !== "object" || nodePatch === null || Array.isArray(nodePatch)) throw new SecurityConfigError(400, "nodeHealth must be an object");
+      const merged: NodeHealthFile = { ...(next.nodeHealth ?? {}) };
+      if (nodePatch.enabled !== undefined) {
+        if (typeof nodePatch.enabled !== "boolean") throw new SecurityConfigError(400, "nodeHealth.enabled must be true or false");
+        if (resolveNodeHealth(this.options.env.nodeHealth, this.file).source === "env") throw lockedBy("HYDRA_UMC_NODE_HEALTH");
+        merged.enabled = nodePatch.enabled;
+      }
+      next.nodeHealth = merged;
     }
 
     if (patch.ecosystemHealth !== undefined) {
@@ -2336,6 +2371,9 @@ export class SecurityConfig {
     if (patch.push !== undefined) {
       if (patch.push.enabled !== undefined) log(`[SECURITY] ${actor} turned the push notifications to the registered phones ${snapshot.push.enabled.value ? "on" : "off"}.`);
       if (patch.push.liveActivity !== undefined) log(`[SECURITY] ${actor} set the Live Activity on the lock screen to ${snapshot.push.liveActivity.enabled.value ? "on" : "off"}, showing ${snapshot.push.liveActivity.level.value}.`);
+    }
+    if (patch.nodeHealth !== undefined) {
+      log(`[SECURITY] ${actor} turned the health of the controller boards (GET /api/node-health) ${snapshot.nodeHealth.enabled.value ? "on" : "off"}.`);
     }
     if (patch.ecosystemHealth !== undefined) {
       log(`[SECURITY] ${actor} turned the health of the ecosystem (GET /api/ecosystem/health) ${snapshot.ecosystemHealth.enabled.value ? "on" : "off"}.`);

@@ -2193,6 +2193,83 @@
             "type": "boolean"
           }
         }
+      },
+      "NodeHealth": {
+        "type": "object",
+        "required": [
+          "online",
+          "slot",
+          "heard",
+          "source"
+        ],
+        "description": "The last health frame that the kinematic brain heard from the controller board in a slot, read from the SPI bridge. Only on a server where nodeHealth.enabled is on (404 otherwise); for an operator or an administrator. Read only.",
+        "properties": {
+          "online": {
+            "type": "boolean",
+            "description": "False when the brain did not answer (its build has the health query off, or the link is down): then only slot and source carry anything."
+          },
+          "slot": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 7
+          },
+          "heard": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "True when the brain has heard a health frame of the slot, false when it never has, null when it did not answer."
+          },
+          "ageMs": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 25400,
+            "description": "How long ago the brain heard it, in steps of 100 ms."
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          },
+          "flags": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          },
+          "flagNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "txErrors": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          },
+          "rxErrors": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          },
+          "stalls": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 255
+          },
+          "uptimeS": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4080,
+            "description": "Seconds since the board started, in steps of 16 (4080 means 4080 or more)."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "brain-health"
+            ]
+          }
+        }
       }
     }
   },
@@ -6345,6 +6422,83 @@
           }
         ],
         "x-rate-limited": true
+      }
+    },
+    "/api/node-health": {
+      "get": {
+        "tags": [
+          "node-health"
+        ],
+        "summary": "GET /api/node-health",
+        "description": "Requires a signed-in account (bearer token).",
+        "x-access": "user",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeHealth"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Signed in but not allowed. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "slot",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
       }
     },
     "/api/operator/confirmations": {
