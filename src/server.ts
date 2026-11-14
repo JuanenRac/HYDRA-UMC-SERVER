@@ -35,6 +35,7 @@ import { registerCameraRoutes } from "./routes/cameraRoutes";
 import { registerRobotRoutes } from "./routes/robotRoutes";
 import { registerCommandRoutes, ROBOT_COMMANDS, stoppedPlaybackState } from "./routes/commandRoutes";
 import { JobStopRelay, resolveStopRelay, type StopRelayFile } from "./jobStopRelay";
+import { DispatcherRegistrar, resolveRegistrar, type RegistrarFile } from "./dispatcherRegistrar";
 import { OrchestratorTakeover, resolveTakeover, type TakeoverFile } from "./orchestratorTakeover";
 import { reloadDispatcher, resolveReload, type ReloadFile } from "./dispatcherReload";
 import { registerUpstreamRoutes } from "./routes/upstreamRoutes";
@@ -294,6 +295,7 @@ async function startServer() {
   // Off unless an administrator (or HYDRA_UMC_MQTT_BRIDGE) turns the MQTT bridge on: then the robots' state goes to the broker of the cell and, in "commands" mode, a command published there is carried out.
   let mqttBridge: MqttBridge | null = null;
   let jobStopRelay: JobStopRelay | null = null;
+  let dispatcherRegistrar: DispatcherRegistrar | null = null;
   let orchestratorTakeover: OrchestratorTakeover | null = null;
   const livenessTracker = new RobotLivenessTracker();
   const hub = createWsHub({
@@ -779,6 +781,23 @@ async function startServer() {
       jobStopRelay.start({ set: (fn, ms) => setTimeout(fn, ms), clear: (handle) => clearTimeout(handle as NodeJS.Timeout) });
       industrialLog(`[stop-relay] ON: delivering the stop requests of ${relayResolution.settings.url} every ${relayResolution.settings.pollSeconds} s`);
     }
+    // The registration of the robots of the roster in the job dispatcher (off unless jobDispatcher.registrar.enabled or HYDRA_UMC_JOB_ROBOT_REGISTRAR=1): see src/dispatcherRegistrar.ts.
+    const registrarFile = (loadServerConfig() as { jobDispatcher?: { registrar?: RegistrarFile; stopRelay?: { url?: unknown } } }).jobDispatcher;
+    const registrarResolution = resolveRegistrar(process.env, registrarFile?.registrar, registrarFile?.stopRelay?.url);
+    if (!registrarResolution.ok) {
+      industrialLog(`[robot-registrar] NOT STARTED: ${registrarResolution.error}`);
+    } else if (registrarResolution.settings.enabled) {
+      dispatcherRegistrar = new DispatcherRegistrar({
+        settings: registrarResolution.settings,
+        fetch: (url, init) => fetch(url, init),
+        getSettings: () => getSettings(),
+        robotMap: () => security.jobStopRobotMap(),
+        log: industrialLog,
+        audit: (event) => audit.record({ type: event.type, outcome: event.outcome, robotId: event.robotId, detail: event.detail }),
+      });
+      dispatcherRegistrar.start({ set: (fn, ms) => setTimeout(fn, ms), clear: (handle) => clearTimeout(handle as NodeJS.Timeout) });
+      industrialLog(`[robot-registrar] ON: registering the robots of the roster in ${registrarResolution.settings.url} every ${registrarResolution.settings.pollSeconds} s`);
+    }
     mqttBridge = startMqttBridge({
       settings: security.mqtt(),
       env: securityEnvFrom(process.env).mqtt ?? {},
@@ -856,6 +875,7 @@ async function startServer() {
     void anomalyFeedClient?.stop().catch(() => undefined);
     void bridgeGateway.stop().catch(() => undefined);
     jobStopRelay?.stop();
+    dispatcherRegistrar?.stop();
     orchestratorTakeover?.stop();
     try { connectionTracker().flush(); } catch { /* best-effort */ }
     closeLog();
