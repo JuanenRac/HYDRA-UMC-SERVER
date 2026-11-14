@@ -240,6 +240,8 @@ CORS は、設定可能な許可リスト（`CORS_ALLOWED_ORIGINS`、下記「�
 
 - `HYDRA_UMC_HEALTH_OPEN=1`（`health.open`）- `GET /health` がサインインなしで最小限のヘルスレポート（バージョン、ホスト、件数なし）を返します。オフのときは `404` を返します。
 - `HYDRA_UMC_ECOSYSTEM_HEALTH=1`（`ecosystemHealth.enabled`）- `GET /api/ecosystem/health` がエコシステムのサービスの健全性を返します。オフのときは `404` を返します。
+- `HYDRA_UMC_NODE_HEALTH=1`（`nodeHealth.enabled`）- `GET /api/ecosystem/node-health?slot=N` は、そのスロットのコントローラーボードから頭脳が最後に受け取ったヘルスフレーム（CM5 の SPI ブリッジから読み取り）を返します。オフのときは `404` を返します。
+- `HYDRA_UMC_JOB_EXECUTOR=1`（`jobDispatcher.executor.enabled`）- ディスパッチャーが割り当てたジョブのロボットの記録済み軌道を再生し、終了時にジョブを完了として報告します。オンでも、`HYDRA_UMC_JOB_EXECUTOR_LIVE=1`（`jobDispatcher.executor.dryRun: false`）でロボットを動かせるようにするまでは、開始するはずの内容を監査するだけ（ドライラン）です。
 - `HYDRA_UMC_TWIN_RELAY=1`（`twinRelay.enabled`）- `WebSocket /api/twin/ws` がツインのライブ状態（`HYDRA_UMC_TWIN_WS_URL`）をパネルへ中継します。オフのときはソケットを `1013` で閉じます。
 - `HYDRA_UMC_ESTOP_WATCH_MS=2000`（500〜60000。`0` または未設定: オフ）- サーバーは CM5 の SPI ブリッジ（`GET /estop`）から運動学ブレインの非常停止を読み取り、物理停止とグローバル停止をまとめた `stop-state` メッセージを `/ws` で送ります。読み取り専用で、応答のないブリッジは `UNKNOWN` であり `READY` にはなりません。
 - `HYDRA_UMC_SERVICE_IDENTITY=1`（`auth.serviceIdentity.enabled`） - このサーバーがサービスへ行う呼び出し（ヘルスプローブ、中継、停止の中継、引き継ぎ）に、自身の短い署名付きトークン（`JWT_SECRET` による HS256、有効期間 60 秒）を付けます。識別キーをオンにしたサービスがこれを要求します。独自のトークンを持つサービスには引き続きそれを渡し、`JWT_SECRET` が未設定・例の値・短すぎる場合は何も署名しません。オフのときは呼び出しに何も追加しません。オンにするには確認が必要で、どのサービスにも識別キーを渡す前にオンにします。
@@ -264,6 +266,7 @@ CORS は、設定可能な許可リスト（`CORS_ALLOWED_ORIGINS`、下記「�
 - **接続者：** `GET /api/connections/clients` と `GET /api/connections/events` は、HYDRA-UMC-SDK の閉じた契約 `ConnectionClient` と `ConnectionEvent` で応答します（初回確認、成功または失敗したサインイン、第 2 要素、サインアウト、終了したセッション）。管理者はすべての項目を、その他のアカウントは自分の分だけを見ます。パスワード、トークン、秘密情報は保存されません。
 - **生存信号：** `GET /api/robots/liveness` は、名簿の各ロボットについてサーバーに便りがあったか（`live`、`stale`、`unknown`、最後の便りからの経過時間付き）を返します。オペレーターが入れた内容しか記録しない `online` フラグを繰り返すものではありません。`data/server-config.json` の `liveness.staleAfterS` で上限を設定します（既定は 30 秒）。
 - **エコシステムの健全性：** `GET /api/ecosystem/health`（オペレーターまたは管理者。管理者が `ecosystemHealth.enabled` をオンにするまでは `404`）は、ポートまたは systemd ユニットを宣言しているサービスを `ok`、`degraded`、`down`、`unknown` で一覧にし、理由コード、各サービスが報告するバージョンとマニフェストのバージョンの比較（ずれ）、サーバーが最後に応答を受けた時刻、サーバー自身の TLS 証明書の残り日数、警告の一覧を返します。各サービスには短いタイムアウトで副作用なく問い合わせるため、停止した 1 つのサービスが他を隠すことはなく、ポート、ヘルスパス、ユニットが見えるのは管理者だけです。`data/server-config.json` の `ecosystemHealth.certWarnDays` と `ecosystemHealth.probeTimeoutMs` で、警告の期間（30 日）とサービスごとの待ち時間（1500 ms）を設定します。各サービスの最終接触は `data/ecosystem-health-last-seen.json` に保存され（アトミックに書き込まれ、`ecosystemHealth.lastSeenMaxEntries` と `ecosystemHealth.lastSeenSaveIntervalS` で上限が決まります）、再起動後も残ります。
+- **コントローラーボードのヘルス：** `GET /api/ecosystem/node-health?slot=N`（オペレーターまたは管理者。管理者が `nodeHealth.enabled` をオンにするまで `404`）は、スロット N（0〜7）のボードから頭脳が最後に受け取ったヘルスフレームを返します：経過時間、シーケンス、フラグ、CAN エラーカウンター、停止回数、稼働時間。伝えることがないときは `heard: false` / `online: false` です。読み取り専用で、ボードには何も送らず、ブリッジの壊れた応答は渡しません。
 - `HYDRA_UMC_SERVER_PORT` - 待ち受けポート。共有の `PORT` より優先されます。`HYDRA_UMC_PORTS_REGISTRY`、`HYDRA_UMC_SDK_DIR` / `HYDRA_UMC_REQUIRE_SDK=1` は同じ表に記載されています。
 
 以下のアクセススイッチは、STUDIO と SUITE の Server Admin 画面が編集するものです。どれも同じ順序で決まります。まずデプロイの環境変数（画面ではロック表示）、次に管理者が `data/server-config.json` に保存した値、最後に保守的な既定値です。ほかのすべては上に挙げた変数が扱います。
