@@ -672,7 +672,7 @@ async function startServer() {
   const runningVersion = (): string | null => { try { return JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf-8")).version ?? null; } catch { return null; } };
   registerSelfUpdateRoutes(app, {
     authenticate, requireAdmin, audit, lookEnabled: () => security.updateCheckEnabled(), applyEnabled: () => security.maintenanceEnabled(),
-    selfUpdate: new SelfUpdate({ settings: () => selfUpdateSettings((loadServerConfig() as { selfUpdate?: SelfUpdateFile }).selfUpdate), maintenance: maintenanceNow, dataPath, installed: installedReader(maintenanceNow, runningVersion) }),
+    selfUpdate: new SelfUpdate({ settings: () => selfUpdateSettings((loadServerConfig() as { selfUpdate?: SelfUpdateFile }).selfUpdate), maintenance: maintenanceNow, dataPath, installed: installedReader(maintenanceNow, runningVersion), running: (component) => (component === "server" ? runningVersion() : null) }),
   });
 
   // Every program installed on the device, updated from Studio one after the other by tools/fleet_update.py of HYDRA-UMC-OS (the look is updateCheck.enabled, applying is maintenance.enabled; both off by default: 404).
