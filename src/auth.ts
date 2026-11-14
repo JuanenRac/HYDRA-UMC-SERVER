@@ -99,11 +99,11 @@ export function authenticate(req: any, res: any, next: any) {
         code: expired ? "TOKEN_EXPIRED" : "TOKEN_INVALID",
       });
     }
-    // A valid JWT signature alone used to authorize for the token's
-    // entire lifetime - deleting or demoting a user never revoked an
-    // already-issued token, since {username, role} were trusted straight
-    // from the (old, stale) token claims. Re-looks up the account on
-    // EVERY request instead: gone entirely (deleted), or a real,
+    // A valid JWT signature alone must not authorize for the token's
+    // entire lifetime: deleting or demoting a user has to revoke an
+    // already-issued token, so {username, role} are never trusted straight
+    // from the token claims. The account is looked up again on
+    // EVERY request: gone entirely (deleted), or a real,
     // comparable tokenVersion mismatch (password/role changed since this
     // token was issued) - either way, this exact token no longer
     // authorizes, even though it hasn't expired yet. requireAdmin below
@@ -146,7 +146,7 @@ export function authenticate(req: any, res: any, next: any) {
 // instead of a clean response. Needed now that users.ts's own functions
 // are real async (crypto.scrypt, see the async-scrypt reasoning in users.ts) and can throw a real,
 // distinct UsersFileError for a genuinely corrupted users.json
-// that a plain synchronous handler used to catch for free.
+// that a plain synchronous handler would catch without further work.
 export function asyncHandler(handler: (req: any, res: any) => Promise<any>) {
   return (req: any, res: any) => {
     handler(req, res).catch((err: unknown) => {

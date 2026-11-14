@@ -14,7 +14,6 @@ export interface Position {
 
 /**
  * Calculates joint angles from Cartesian coordinates (Inverse Kinematics).
- * Ported from frontend src/examples/utils.ts
  */
 export function calculateJoints(pos: Partial<Position>): Joints {
   const x = pos.x ?? 0;

@@ -48,9 +48,8 @@ export const SPI_BRIDGE_VERSION_TIMEOUT_MS = Math.min(
 // Same reasoning and same shape as VOICE_UI_URL/DATALAKE_URL/SPI_BRIDGE_URL
 // above, for HYDRA-UMC-CONNECTOR-HUB's own real `serve-catalog` (Python,
 // GET-only - see that project's own catalog_server.py). This is Server's
-// first real client of the adapter catalog (previously only a CLI/fixture
-// existed - see that project's own README "No real client integration
-// yet"): Server proxies /catalog(/:id) so Studio/Suite/Updater can read
+// first real client of the adapter catalog (the project itself ships a
+// CLI and fixtures, see its own README): Server proxies /catalog(/:id) so Studio/Suite/Updater can read
 // what an external-machine adapter can do without each of them needing to
 // know CONNECTOR-HUB's own host/port. No auth token of its own to hold
 // here (same as Datalake) - the catalog is read-only manifest metadata,

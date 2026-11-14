@@ -146,7 +146,7 @@ async function main() {
     assert.equal(workFile.response.status, 200);
     assert.equal(workFile.body.success, true);
 
-    // An exact-string check against req.path used to guard
+    // An exact-string check against req.path must not be what guards
     // settings.json/users.json/etc. under express.static(dataPath) - real,
     // unauthenticated bypasses confirmed live before the fix: a single
     // percent-encoded character, a doubled leading slash, a case

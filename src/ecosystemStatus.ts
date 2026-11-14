@@ -148,8 +148,8 @@ export function ecosystemRoot(): string {
 // hardcoded `"HYDRA-UMC-VISION-STREAMER"` literal - a real CM5
 // deployment's own directory naming (`/opt/hydra-umc/vision-streamer`,
 // no prefix, matching every other service under `/opt/hydra-umc/`)
-// doesn't match the Windows dev sibling-checkout convention this
-// literal used to assume, and silently never found it there. Falls back
+// doesn't match the Windows dev sibling-checkout convention that a fixed
+// literal would assume, and would silently never be found there. Falls back
 // to the literal sibling-checkout name if no manifest match is found
 // (keeps working unmodified for the one dev layout that never had this
 // problem in the first place).

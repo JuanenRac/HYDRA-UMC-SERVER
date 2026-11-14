@@ -625,8 +625,8 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
 
   // Real "Test Connection" for STUDIO's Config > Integrations panel
   // (OpenPnP/CNC/Laser/ROS2/Printer3D bridges) - the "real, working
-  // integrations (not just text)" gap: those cards used to only save an
-  // ip/port to settings.json with zero verification either way. This is
+  // integrations (not just text)" need: saving an ip/port to
+  // settings.json alone verifies nothing either way. This is
   // deliberately a bare TCP reachability probe (probeTcp, the same real
   // primitive getEcosystemStatus() uses above) rather than anything
   // bridge-specific - a generic "is anything listening at host:port"

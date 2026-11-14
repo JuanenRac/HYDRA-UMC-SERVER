@@ -149,8 +149,8 @@ async function main() {
     // Deliberately unauthenticated, matching GET /api/camera/:id/stream's
     // own precedent - a plain <img src="..."> (what CameraMediaView.tsx
     // really renders) cannot send an Authorization header. Real bug found
-    // via live testing on the CM5: this route used to require auth, so
-    // every real photo/recording rendered as a broken image.
+    // via live testing on the CM5: this route must not require auth, or
+    // every real photo/recording renders as a broken image.
     const snapshotBytes = await fetch(`http://127.0.0.1:${serverPort}/api/camera/media/1/snapshots/${snapshot.body.filename}`);
     assert.equal(snapshotBytes.status, 200, "serving a saved snapshot must not require authentication, same as the live stream route");
     assert.equal(snapshotBytes.headers.get("content-type"), "image/jpeg");

@@ -46,8 +46,8 @@ import nodePath from "node:path";
 // never recognized "dsi" as one of the gated client types, so a DSI kiosk
 // request fell into the same "no such header" bucket as an ungated
 // browser tab and always passed regardless of the Remote Access toggle
-// state - the toggle for DSI (added to store.tsx/Config.tsx in the same
-// pass) previously had no server-side enforcement whatsoever.
+// state - the toggle for DSI (store.tsx/Config.tsx) needs this
+// server-side enforcement to mean anything.
 //
 // The header is `X-Hydra-Client: <type>` or `<type>/<version>` (an app says which version it is, for the
 // history of connections). Only the TYPE is compared here: the version is cut off before the comparison, so a
@@ -159,8 +159,8 @@ export function computeDeviceArg(camera: CameraSettings): string | null {
 // that process cares about changed".
 //
 // Real bug found live on the CM5: camera 1 restarted every couple
-// minutes with no config change an operator ever made, because this
-// used to hash EVERY field unconditionally, including the ip*/rtsp*
+// minutes with no config change an operator ever made, because hashing
+// EVERY field unconditionally would include the ip*/rtsp*
 // fields computeDeviceArg() never even reads for a "usb" camera (and
 // vice versa for an "ip" one). A camera that had ever been reconfigured
 // from ip to usb (or usb to ip) genuinely keeps its now-irrelevant old
@@ -323,7 +323,7 @@ const CAMERA_SECRET_KEYS = new Set(["ipUsername", "ipPassword"]);
 
 /**
  * The settings tree without the credentials of the IP cameras. Everyone signed in receives the settings (an operator drives the robots), but the user name and password of a
- * camera are an administrator's: the full tree used to be broadcast to every client, an operator's tablet included. Returns a copy; the original is not touched.
+ * camera are an administrator's: the full tree is never broadcast to every client, an operator's tablet included. Returns a copy; the original is not touched.
  */
 export function redactSettingsSecrets<T>(payload: T): T {
   const walk = (value: unknown): unknown => {
