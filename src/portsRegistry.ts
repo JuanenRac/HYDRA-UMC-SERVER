@@ -71,6 +71,43 @@ export function loadPortsRegistry(ecosystemRoot: string, env: NodeJS.ProcessEnv 
   return new Map();
 }
 
+/** The name a local AI service has in the registry: the repository it comes from (`visual-servoing-api` is HYDRA-UMC-VISUAL-SERVOING-API). */
+export function registryNameOfAiService(key: string): string {
+  return `HYDRA-UMC-${key.toUpperCase()}`;
+}
+
+const validPort = (port: number | null | undefined): port is number => typeof port === "number" && Number.isInteger(port) && port >= 1 && port <= 65535;
+
+/**
+ * The ports of the local AI services for the relay. The built-in table is the default and stays the answer unless [useRegistry] is on, and then only a service that
+ * the table already knows and the registry names with a valid port takes the registry's port: the registry can correct a port, never add a service or an address.
+ */
+export function effectiveAiPorts(defaults: Record<string, number>, registry: Map<string, RegistryService>, useRegistry: boolean): Record<string, number> {
+  if (!useRegistry) return defaults;
+  const ports: Record<string, number> = {};
+  for (const [key, port] of Object.entries(defaults)) {
+    const entry = registry.get(registryNameOfAiService(key));
+    ports[key] = entry && validPort(entry.port) ? entry.port : port;
+  }
+  return ports;
+}
+
+export interface AiPortDrift {
+  service: string;
+  builtIn: number;
+  registry: number;
+}
+
+/** The services whose built-in port differs from the registry's: what a port that moved leaves behind (the bug that sent visual servoing to the voice service). */
+export function aiPortDrift(defaults: Record<string, number>, registry: Map<string, RegistryService>): AiPortDrift[] {
+  const drift: AiPortDrift[] = [];
+  for (const [key, port] of Object.entries(defaults)) {
+    const entry = registry.get(registryNameOfAiService(key));
+    if (entry && validPort(entry.port) && entry.port !== port) drift.push({ service: key, builtIn: port, registry: entry.port });
+  }
+  return drift;
+}
+
 export interface DeclaredService {
   servicePort: number | null;
   serviceHealthPath: string | null;
