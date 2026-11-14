@@ -189,6 +189,8 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
         detail: {
           stopRelayEnabled: jd.stopRelay.enabled.value,
           robotsMapped: Object.keys(jd.stopRelay.robotMap).length,
+          executorEnabled: jd.executor.enabled.value,
+          executorLive: jd.executor.live.value,
           allowUnconfirmed: jd.replan.allowUnconfirmed.value,
           stopAckTimeoutSeconds: jd.replan.stopAckTimeoutSeconds.value,
         },

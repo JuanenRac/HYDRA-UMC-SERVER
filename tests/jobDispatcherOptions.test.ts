@@ -13,7 +13,7 @@ function temp(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "jd-options-"));
 }
 
-function makeConfig(env: any = {}, initial: SecurityFile = {}, extra: { jobStopRelayActive?: boolean } = {}) {
+function makeConfig(env: any = {}, initial: SecurityFile = {}, extra: { jobStopRelayActive?: boolean; jobExecutorActive?: boolean; jobExecutorLiveActive?: boolean } = {}) {
   let stored: SecurityFile = { ...initial };
   const logs: string[] = [];
   const config = new SecurityConfig({ env, load: () => ({ ...stored }), save: (file) => { stored = { ...file }; }, tlsActive: false, log: (m) => logs.push(m), ...extra });
@@ -170,4 +170,61 @@ test("the admin route carries the options, writes the file, answers the warnings
   assert.equal(bad.status, 400);
   assert.deepEqual(events.map((e) => e.outcome), ["ok", "refused"]);
   assert.deepEqual(readReplanOptions(file), { allowUnconfirmed: true, stopAckTimeoutSeconds: 60 });
+});
+
+test("the execution of the assigned jobs is off and a dry run by default, and only the exact word 1 in the environment switches either on and locks it", () => {
+  const off = makeConfig().config.snapshot().jobDispatcher.executor;
+  assert.deepEqual(off.enabled, { value: false, source: "default" });
+  assert.deepEqual(off.live, { value: false, source: "default" });
+  assert.equal(off.appliesOnRestart, false);
+  for (const word of ["true", "yes", "0", ""]) {
+    const view = makeConfig({ jobExecutor: word, jobExecutorLive: word }).config.snapshot().jobDispatcher.executor;
+    assert.equal(view.enabled.value, false, word);
+    assert.equal(view.live.value, false, word);
+  }
+  const locked = makeConfig({ jobExecutor: "1", jobExecutorLive: "1" });
+  assert.deepEqual(locked.config.snapshot().jobDispatcher.executor.enabled, { value: true, source: "env" });
+  assert.deepEqual(locked.config.snapshot().jobDispatcher.executor.live, { value: true, source: "env" });
+  refused(() => locked.config.update({ jobDispatcher: { executor: { enabled: false } } }, "root"), 409, /HYDRA_UMC_JOB_EXECUTOR/);
+  refused(() => locked.config.update({ jobDispatcher: { executor: { live: false } } }, "root"), 409, /HYDRA_UMC_JOB_EXECUTOR_LIVE/);
+});
+
+test("an administrator switches the executor on as a dry run, then live, and the other keys of its section are kept", () => {
+  const { config, logs, stored } = makeConfig({}, { jobDispatcher: { executor: { pollSeconds: 7, tools: ["PnP"] } as any } }, { jobExecutorActive: false });
+  const on = config.update({ jobDispatcher: { executor: { enabled: true } } }, "root");
+  assert.deepEqual(on.snapshot.jobDispatcher.executor.enabled, { value: true, source: "config" });
+  assert.deepEqual(on.snapshot.jobDispatcher.executor.live, { value: false, source: "default" }, "on is a dry run");
+  assert.equal(on.snapshot.jobDispatcher.executor.appliesOnRestart, true);
+  assert.ok(on.warnings.includes("job_executor_on"));
+  assert.ok(!on.warnings.includes("job_executor_live"));
+  assert.equal(stored().jobDispatcher?.executor?.enabled, true);
+  assert.equal(stored().jobDispatcher?.executor?.dryRun, undefined);
+  assert.equal((stored().jobDispatcher?.executor as any).pollSeconds, 7);
+  assert.deepEqual((stored().jobDispatcher?.executor as any).tools, ["PnP"]);
+  const live = config.update({ jobDispatcher: { executor: { live: true } } }, "root");
+  assert.deepEqual(live.snapshot.jobDispatcher.executor.live, { value: true, source: "config" });
+  assert.ok(live.warnings.includes("job_executor_live"));
+  assert.equal(stored().jobDispatcher?.executor?.dryRun, false);
+  assert.ok(logs.some((line) => /ON and LIVE/.test(line)));
+  const back = config.update({ jobDispatcher: { executor: { live: false } } }, "root");
+  assert.deepEqual(back.snapshot.jobDispatcher.executor.live, { value: false, source: "config" });
+  assert.equal(stored().jobDispatcher?.executor?.dryRun, true);
+  assert.ok(logs.some((line) => /on as a dry run/.test(line)));
+});
+
+test("the executor applies on the next start: nothing to restart once it runs the way the switches say", () => {
+  const same = makeConfig({}, { jobDispatcher: { executor: { enabled: true, dryRun: false } } }, { jobExecutorActive: true, jobExecutorLiveActive: true });
+  assert.equal(same.config.snapshot().jobDispatcher.executor.appliesOnRestart, false);
+  const liveChanged = makeConfig({}, { jobDispatcher: { executor: { enabled: true, dryRun: false } } }, { jobExecutorActive: true, jobExecutorLiveActive: false });
+  assert.equal(liveChanged.config.snapshot().jobDispatcher.executor.appliesOnRestart, true);
+  const offAndLiveDiffers = makeConfig({}, { jobDispatcher: { executor: { dryRun: false } } }, { jobExecutorActive: false, jobExecutorLiveActive: false });
+  assert.equal(offAndLiveDiffers.config.snapshot().jobDispatcher.executor.appliesOnRestart, false, "while it is off the live switch changes nothing");
+});
+
+test("the executor options are checked: a wrong type or an unknown key is refused", () => {
+  const { config } = makeConfig();
+  refused(() => config.update({ jobDispatcher: { executor: { enabled: "yes" } } } as any, "root"), 400);
+  refused(() => config.update({ jobDispatcher: { executor: { live: 1 } } } as any, "root"), 400);
+  refused(() => config.update({ jobDispatcher: { executor: { pollSeconds: 1 } } } as any, "root"), 400, /cannot be changed here/);
+  refused(() => config.update({ jobDispatcher: { executor: [] } } as any, "root"), 400, /object/);
 });

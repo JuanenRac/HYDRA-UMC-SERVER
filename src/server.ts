@@ -416,6 +416,8 @@ async function startServer() {
         audit.record({ type: "job-dispatcher-reload", outcome: outcome.ok ? "ok" : "failed", detail: outcome.ok ? {} : { reason: outcome.reason } });
       });
     },
+    jobExecutorActive: (() => { const r = resolveExecutor(process.env, (loadServerConfig() as { jobDispatcher?: { executor?: ExecutorFile } }).jobDispatcher?.executor, (loadServerConfig() as { jobDispatcher?: { stopRelay?: { url?: unknown } } }).jobDispatcher?.stopRelay?.url); return r.ok && r.settings.enabled; })(),
+    jobExecutorLiveActive: (() => { const r = resolveExecutor(process.env, (loadServerConfig() as { jobDispatcher?: { executor?: ExecutorFile } }).jobDispatcher?.executor, (loadServerConfig() as { jobDispatcher?: { stopRelay?: { url?: unknown } } }).jobDispatcher?.stopRelay?.url); return r.ok && r.settings.enabled && !r.settings.dryRun; })(),
     jobStopRelayActive: (() => { const r = resolveStopRelay(process.env, (loadServerConfig() as { jobDispatcher?: { stopRelay?: StopRelayFile } }).jobDispatcher?.stopRelay); return r.ok && r.settings.enabled; })(),
     log: industrialLog,
   });
