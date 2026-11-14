@@ -15,7 +15,7 @@ test("the table has the 25 tools with their identifiers in order and the no-tool
 });
 
 test("the table is the list of the SDK when a checkout of the SDK is at hand", (t) => {
-  const roots = [process.env.HYDRA_UMC_SDK_DIR, path.resolve(__dirname, "..", "..", "HYDRA-UMC-SDK")].filter((dir): dir is string => !!dir);
+  const roots = [process.env.HYDRA_UMC_SDK_DIR, path.resolve(process.cwd(), "..", "HYDRA-UMC-SDK")].filter((dir): dir is string => !!dir);
   const file = roots.map((dir) => path.join(dir, "contracts", "urtc_tools.json")).find((candidate) => fs.existsSync(candidate));
   if (!file) {
     t.skip("no checkout of the SDK");
