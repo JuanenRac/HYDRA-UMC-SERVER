@@ -340,6 +340,12 @@ export interface JobDispatcherFile {
     allowUnconfirmed?: boolean;
     stopAckTimeoutSeconds?: number;
   };
+  /** The execution of the jobs the dispatcher assigns (src/dispatcherExecutor.ts): off, and a dry run when on (`dryRun` is true unless it says false). Other keys (times, tools) are kept as they are. */
+  executor?: {
+    enabled?: boolean;
+    dryRun?: boolean;
+    [other: string]: unknown;
+  };
 }
 
 /** The request limits per address (src/auth.ts). The switch and every number can be changed from Server Admin; each number keeps the range of RATE_LIMIT_BOUNDS. */
@@ -487,6 +493,8 @@ export interface SecurityEnv {
   rateLimits?: string;
   rateLimitNumbers?: Partial<Record<RateLimitKey, string>>;
   jobStopRelay?: string;
+  jobExecutor?: string;
+  jobExecutorLive?: string;
   jobDispatcherConfig?: string;
 }
 
@@ -538,6 +546,8 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     rateLimits: env[RATE_LIMITS_ENV_SWITCH],
     rateLimitNumbers: Object.fromEntries(RATE_LIMIT_KEYS.map((key) => [key, env[RATE_LIMIT_ENV_NAMES[key]]])) as Partial<Record<RateLimitKey, string>>,
     jobStopRelay: env.HYDRA_UMC_JOB_STOP_RELAY,
+    jobExecutor: env.HYDRA_UMC_JOB_EXECUTOR,
+    jobExecutorLive: env.HYDRA_UMC_JOB_EXECUTOR_LIVE,
     jobDispatcherConfig: env.HYDRA_UMC_JOB_DISPATCHER_CONFIG,
   };
 }
@@ -815,6 +825,20 @@ export function resolveJobStopRelay(env: string | undefined, file: SecurityFile)
   return { value: false, source: "default" };
 }
 
+/** The execution of the assigned jobs: only the exact word "1" in the environment switches it on; the default is off. */
+export function resolveJobExecutor(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.jobDispatcher?.executor?.enabled === "boolean") return { value: file.jobDispatcher.executor.enabled, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** Whether the executor really moves the robots (true) or only decides and audits (false, the default): only the exact word "1" in the environment, or `dryRun: false` in the file. */
+export function resolveJobExecutorLive(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.jobDispatcher?.executor?.dryRun === "boolean") return { value: file.jobDispatcher.executor.dryRun === false, source: "config" };
+  return { value: false, source: "default" };
+}
+
 /** The configuration file of the dispatcher, from the deployment only (environment first, then the settings file). Empty: none. */
 export function resolveDispatcherConfigFile(env: string | undefined, file: SecurityFile): string {
   if (isSet(env)) return env.trim();
@@ -1059,6 +1083,8 @@ export interface SecuritySnapshot {
   safety: { publishGlobalStop: { value: boolean; source: Source }; framErase: { value: boolean; source: Source }; estopWatchMs: { value: number; source: Source } };
   jobDispatcher: {
     stopRelay: { enabled: { value: boolean; source: Source }; robotMap: Record<string, number>; activeEnabled: boolean; appliesOnRestart: boolean };
+    /** The execution of the assigned jobs: `enabled` switches it on (a dry run), `live` lets it move the robots. Both apply on the next start. */
+    executor: { enabled: { value: boolean; source: Source }; live: { value: boolean; source: Source }; activeEnabled: boolean; activeLive: boolean; appliesOnRestart: boolean };
     replan: {
       allowUnconfirmed: { value: boolean; source: Source };
       stopAckTimeoutSeconds: { value: number; source: Source };
@@ -1107,6 +1133,9 @@ export interface SecurityConfigOptions {
   mqttActiveMode?: MqttMode;
   /** Whether the delivery of the stop requests started with this server (it changes only on a restart). */
   jobStopRelayActive?: boolean;
+  /** Whether the executor of the assigned jobs started with this server, and whether it started live (both change only on a restart). */
+  jobExecutorActive?: boolean;
+  jobExecutorLiveActive?: boolean;
   /** Asks the job dispatcher to read its configuration file again (called after the two replanning options were written). */
   afterReplanWritten?: () => void;
   /** What came of the last request to reload it. */
@@ -1328,6 +1357,10 @@ export class SecurityConfig {
 
   private jobDispatcherSnapshot(): SecuritySnapshot["jobDispatcher"] {
     const relay = resolveJobStopRelay(this.options.env.jobStopRelay, this.file);
+    const executor = resolveJobExecutor(this.options.env.jobExecutor, this.file);
+    const executorLive = resolveJobExecutorLive(this.options.env.jobExecutorLive, this.file);
+    const executorActive = this.options.jobExecutorActive ?? false;
+    const executorLiveActive = this.options.jobExecutorLiveActive ?? false;
     const configFile = resolveDispatcherConfigFile(this.options.env.jobDispatcherConfig, this.file);
     let allow = this.file.jobDispatcher?.replan?.allowUnconfirmed;
     let timeout = this.file.jobDispatcher?.replan?.stopAckTimeoutSeconds;
@@ -1347,6 +1380,13 @@ export class SecurityConfig {
         robotMap: this.jobStopRobotMap(),
         activeEnabled: this.options.jobStopRelayActive ?? false,
         appliesOnRestart: relay.value !== (this.options.jobStopRelayActive ?? false),
+      },
+      executor: {
+        enabled: executor,
+        live: executorLive,
+        activeEnabled: executorActive,
+        activeLive: executorLiveActive,
+        appliesOnRestart: executor.value !== executorActive || (executor.value && executorLive.value !== executorLiveActive),
       },
       replan: {
         allowUnconfirmed: { value: allow === true, source: stored ? "config" : "default" },
@@ -2076,7 +2116,7 @@ export class SecurityConfig {
     if (patch.jobDispatcher !== undefined) {
       const jd = patch.jobDispatcher;
       if (typeof jd !== "object" || jd === null || Array.isArray(jd)) throw new SecurityConfigError(400, "jobDispatcher must be an object");
-      for (const key of Object.keys(jd)) if (key !== "stopRelay" && key !== "replan") throw new SecurityConfigError(400, `jobDispatcher.${key} cannot be changed here`);
+      for (const key of Object.keys(jd)) if (key !== "stopRelay" && key !== "replan" && key !== "executor") throw new SecurityConfigError(400, `jobDispatcher.${key} cannot be changed here`);
       const merged: JobDispatcherFile = { ...(next.jobDispatcher ?? {}) };
       if (jd.stopRelay !== undefined) {
         const sr = jd.stopRelay;
@@ -2104,6 +2144,27 @@ export class SecurityConfig {
           relay.robotMap = clean;
         }
         merged.stopRelay = relay;
+      }
+      if (jd.executor !== undefined) {
+        const ex = jd.executor;
+        if (typeof ex !== "object" || ex === null || Array.isArray(ex)) throw new SecurityConfigError(400, "jobDispatcher.executor must be an object");
+        for (const key of Object.keys(ex)) if (key !== "enabled" && key !== "live") throw new SecurityConfigError(400, `jobDispatcher.executor.${key} cannot be changed here`);
+        const executor = { ...(merged.executor ?? {}) };
+        if (ex.enabled !== undefined) {
+          if (typeof ex.enabled !== "boolean") throw new SecurityConfigError(400, "jobDispatcher.executor.enabled must be true or false");
+          if (resolveJobExecutor(this.options.env.jobExecutor, this.file).source === "env") throw lockedBy("HYDRA_UMC_JOB_EXECUTOR");
+          executor.enabled = ex.enabled;
+          appliesOnRestart = true;
+          if (ex.enabled) warnings.push("job_executor_on");
+        }
+        if (ex.live !== undefined) {
+          if (typeof ex.live !== "boolean") throw new SecurityConfigError(400, "jobDispatcher.executor.live must be true or false");
+          if (resolveJobExecutorLive(this.options.env.jobExecutorLive, this.file).source === "env") throw lockedBy("HYDRA_UMC_JOB_EXECUTOR_LIVE");
+          executor.dryRun = !ex.live;
+          appliesOnRestart = true;
+          if (ex.live) warnings.push("job_executor_live");
+        }
+        merged.executor = executor;
       }
       if (jd.replan !== undefined) {
         const rp = jd.replan;
@@ -2326,7 +2387,7 @@ export class SecurityConfig {
     }
     if (patch.jobDispatcher !== undefined) {
       const jd = snapshot.jobDispatcher;
-      log(`[SECURITY] ${actor} set the job dispatcher options: delivery of its stop requests ${jd.stopRelay.enabled.value ? "ON" : "off"} (${Object.keys(jd.stopRelay.robotMap).length} robot(s) mapped; it applies on the next start), replanning without a confirmed stop ${jd.replan.allowUnconfirmed.value ? "ALLOWED" : "not allowed"}, wait for the confirmation ${jd.replan.stopAckTimeoutSeconds.value} s (the dispatcher reads this on its next start).`);
+      log(`[SECURITY] ${actor} set the job dispatcher options: delivery of its stop requests ${jd.stopRelay.enabled.value ? "ON" : "off"} (${Object.keys(jd.stopRelay.robotMap).length} robot(s) mapped; it applies on the next start), the execution of the assigned jobs ${jd.executor.enabled.value ? (jd.executor.live.value ? "ON and LIVE (it moves the robots)" : "on as a dry run") : "off"}, replanning without a confirmed stop ${jd.replan.allowUnconfirmed.value ? "ALLOWED" : "not allowed"}, wait for the confirmation ${jd.replan.stopAckTimeoutSeconds.value} s (the dispatcher reads this on its next start).`);
     }
     if (patch.mavlink !== undefined) {
       log(`[SECURITY] ${actor} set MAVLink signing ${snapshot.mavlink.signing ? "on" : "OFF"}${snapshot.mavlink.signing && snapshot.mavlink.signingAllowUnsigned.value ? " (unsigned messages still accepted)" : ""}; the bridge applies it on its next start.`);
