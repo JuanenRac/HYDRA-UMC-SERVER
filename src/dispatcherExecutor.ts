@@ -338,8 +338,9 @@ export class DispatcherExecutor {
       try {
         const answer = await this.call("POST", "/jobs/complete", { id: run.jobId, success: true, robotId: run.dispatcherRobot, attempt: run.attempt });
         if (answer.status === 200) {
-          this.runs.delete(DispatcherExecutor.key(run));
-          this.reported.add(DispatcherExecutor.key(run));
+          const done = DispatcherExecutor.key({ id: run.jobId, attempt: run.attempt });
+          this.runs.delete(done);
+          this.reported.add(done);
           report.completed.push(run.jobId);
           log(`[job-executor] job ${run.jobId} done on robot ${run.robotId}`);
           audit?.({ type: "job-executor", outcome: "ok", robotId: run.robotId, detail: { jobId: run.jobId, attempt: run.attempt, action: "complete" } });
