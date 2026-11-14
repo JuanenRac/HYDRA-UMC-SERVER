@@ -141,6 +141,8 @@ export interface SelfUpdateDeps {
   /** The data folder of this server: the job file and its output live in `self-update/` under it. */
   dataPath: string;
   installed: (component: SelfUpdateComponent) => Promise<Installed>;
+  /** The version of the process that answers, for the server only (null for the other programs or when unknown). A release put in place that this process is not running is not a finished update. */
+  running?: (component: SelfUpdateComponent) => string | null;
   fetch?: FetchLike;
   download?: Downloader;
   run?: Runner;
@@ -364,7 +366,10 @@ export class SelfUpdate {
     const installed = await this.deps.installed(job.component).catch((): Installed => ({ current: null, previous: null }));
     if (outcome.result === "pass") {
       // The tool ended well; the program in use must be the one asked for (the new server answers, so it is the one that says so).
+      const running = this.deps.running?.(job.component) ?? null;
       if (job.targetVersion !== null && installed.current !== null && installed.current !== job.targetVersion) this.finish("failed", "deploy_failed", `the tool finished but ${installed.current} is in use`);
+      // The release is in place, but the unit that answers here still runs another one (a unit that does not start from the release in use): not done, and said so.
+      else if (job.targetVersion !== null && running !== null && ![0, null].includes(compareVersions(running, job.targetVersion))) this.finish("failed", "deploy_failed", `${job.targetVersion} is in place but this ${job.component} still runs ${running}`);
       else this.finish("done", null, job.action === "rollback" ? `back to ${job.targetVersion ?? ""}` : `${job.targetVersion ?? ""} is in use`);
       return;
     }

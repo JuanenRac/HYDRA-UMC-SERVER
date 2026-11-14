@@ -20,6 +20,8 @@ import { launcherWith, type Launcher } from "./selfUpdate";
 export const FLEET_SCHEMA = "hydra-fleet-update/1";
 export const FLEET_STALE_SECONDS = 60;
 export const FLEET_PLAN_MAX_AGE_SECONDS = 30 * 60;
+/** How long after the start of the tool its file may still be the one from before: past this, a tool that left no trace did not start. */
+export const FLEET_START_GRACE_SECONDS = 20;
 const NAME = /^[a-z][a-z0-9-]{0,40}$/;
 const OUTPUT_LIMIT = 64 * 1024;
 
@@ -128,6 +130,7 @@ export class FleetUpdate {
   private readonly deps: FleetDeps;
   private planning = false;
   private launchedAt = 0;
+  private lastLaunch: { at: number; outFile: string; seen: string } | null = null;
 
   constructor(deps: FleetDeps) {
     this.deps = deps;
@@ -149,7 +152,26 @@ export class FleetUpdate {
     if (!report) return null;
     let age: number | null = null;
     try { age = (this.now() - fs.statSync(this.heartbeatFile()).mtimeMs) / 1000; } catch { age = null; }
-    return withInterruption(report, age);
+    return this.withoutStart(withInterruption(report, age));
+  }
+
+  /**
+   * A tool that was started here but left no trace (no program, no file of the earlier plan rewritten, no beat of its own) did not start: the file would
+   * keep saying "planned" for ever. It is told as interrupted, with the last line the process printed, so that Studio does not wait for a run that is not there.
+   */
+  private withoutStart(report: FleetReport): FleetReport {
+    const launch = this.lastLaunch;
+    if (!launch || report.state === "running" || this.now() - launch.at < FLEET_START_GRACE_SECONDS * 1000) return report;
+    if (this.trace() !== launch.seen) return report;
+    let last = "";
+    try { last = fs.readFileSync(launch.outFile, "utf8").trim().split(/\r?\n/).slice(-1)[0] ?? ""; } catch { /* nothing written */ }
+    return { ...report, state: "interrupted", error: "interrupted", stoppedAt: (last || "the tool did not start").slice(0, 60) };
+  }
+
+  /** What the two files of the tool looked like (modification time and size): it changes as soon as the tool writes anything. */
+  private trace(): string {
+    const stamp = (file: string): string => { try { const s = fs.statSync(file); return `${s.mtimeMs}:${s.size}`; } catch { return "-"; } };
+    return `${stamp(this.deps.settings().stateFile)}|${stamp(this.heartbeatFile())}`;
   }
 
   get busy(): boolean {
@@ -217,6 +239,7 @@ export class FleetUpdate {
     // A fresh heartbeat so that the file is not read as cut in the second before the tool writes its own.
     fs.writeFileSync(this.heartbeatFile(), String(this.now() / 1000), { mode: 0o600 });
     this.launchedAt = this.now();
+    this.lastLaunch = { at: this.launchedAt, outFile, seen: this.trace() };
     await (this.deps.launch ?? launcherWith)(this.deps.runnerPrefix(), id)({ file: settings.python, args: [settings.tool, args[0], "--state", settings.stateFile, ...args.slice(1)], outFile });
     const report = this.read();
     if (!report) throw new FleetUpdateError(502, "The tool did not leave a file");

@@ -183,6 +183,36 @@ test("the server restarting in the middle of its own update: a new object over t
   } finally { done(); }
 });
 
+test("a tool that was started and left no trace is told as not started, with what the process printed, and the update can be asked again", async () => {
+  const { dir, done } = scratch();
+  try {
+    const m = machine(dir);
+    const settings = m.settings;
+    const prints: string[] = [];
+    // a launcher that prints a line of error to the file of the run and never starts the tool (python3 missing, a wrong path of the tool)
+    const failing = new FleetUpdate({ ...(m as any).fleet.deps, launch: () => ({ outFile }) => { prints.push(outFile); fs.writeFileSync(outFile, "python3: can't open file\n"); } });
+    await failing.plan();
+    const started = await failing.apply(["datalake"]);
+    assert.equal(started.state, "running");
+    m.clock.now += 10_000;
+    assert.equal(failing.read()!.state, "planned");
+    m.clock.now += 11_000;
+    const lost = failing.read()!;
+    assert.equal(lost.state, "interrupted");
+    assert.equal(lost.error, "interrupted");
+    assert.match(lost.stoppedAt, /can't open file/);
+    assert.equal(failing.busy, false);
+    // it can be asked again, and a tool that does write its file (even before the grace is over) is never told as lost
+    const writing = new FleetUpdate({ ...(m as any).fleet.deps, launch: () => ({ outFile }) => { fs.writeFileSync(outFile, ""); fs.writeFileSync(settings.stateFile, JSON.stringify(file("running", [row("datalake", { state: "running" })], { mode: "run" }))); fs.writeFileSync(`${settings.stateFile}.hb`, "y"); } });
+    await writing.apply(["datalake"]);
+    m.clock.now += 30_000;
+    m.beat(1);
+    assert.equal(writing.read()!.state, "running");
+    assert.equal(writing.busy, true);
+    assert.equal(prints.length, 1);
+  } finally { done(); }
+});
+
 type Handler = (req: any, res: any, next?: any) => Promise<unknown> | unknown;
 
 function routesWith(look: () => boolean, apply: () => boolean, role = "admin") {
