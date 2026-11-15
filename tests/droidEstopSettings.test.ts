@@ -18,7 +18,7 @@ async function setup(serviceStatus = 200, role = "admin") {
   const app: any = {
     get(path: string, ...handlers: Handler[]) { routes[`GET ${path}`] = handlers; },
     post(path: string, ...handlers: Handler[]) { routes[`POST ${path}`] = handlers; },
-    put() {}, delete() {}, patch() {},
+    put() {},
   };
   const seen: { method?: string; url?: string; authorization?: string; body?: string }[] = [];
   const service = http.createServer((req, res) => {
@@ -172,7 +172,7 @@ test("without an address for the service both routes answer 503 and nothing is a
   const app: any = {
     get(path: string, ...handlers: Handler[]) { routes[`GET ${path}`] = handlers; },
     post(path: string, ...handlers: Handler[]) { routes[`POST ${path}`] = handlers; },
-    put() {}, delete() {}, patch() {},
+    put() {},
   };
   registerUpstreamRoutes(app, {
     authenticate: ((_req: any, _res: any, next: any) => next()) as any, requireAdmin: ((_req: any, _res: any, next: any) => next()) as any,
