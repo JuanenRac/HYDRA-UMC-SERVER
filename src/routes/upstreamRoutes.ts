@@ -429,6 +429,35 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
     await relayWithOwnToken(ROS2_BRIDGE_URL, "The ROS 2 bridge", "HYDRA-UMC-BRIDGE-ROS2", req, res, "POST", "/settings/sros2");
   });
 
+  // The channel by which STUDIO and SUITE read and edit the switch of the reading of the droid emergency stop in the safety zones service (`droidEstop.enabled`, off by
+  // default; the service has the route only when it was started with `droidEstop.stateFile`). The service keeps the switch and the last word (it wants an administrator, a
+  // confirmation and its own credential check); this server carries the signed-in administrator's own token to it, checks the shape of the request and the confirmation before
+  // anything leaves, and writes the attempt and its outcome to its audit record.
+  app.get("/api/droid-estop/settings", authenticate, async (req, res) => {
+    await relayWithOwnToken(SAFETY_ZONES_URL, "The safety zones service", "HYDRA-UMC-SAFETY-ZONES", req, res, "GET", "/settings/droid-estop");
+  });
+
+  app.post("/api/droid-estop/settings", authenticate, requireAdmin, async (req, res) => {
+    const user = (req as any).user;
+    const record = (outcome: "ok" | "refused" | "failed", detail: Record<string, unknown>) =>
+      deps.audit?.record({ type: "droid-estop-switch", outcome, userId: user?.id, username: user?.username, ip: req.ip, detail });
+    const body = req.body;
+    const keys = body && typeof body === "object" && !Array.isArray(body) ? Object.keys(body) : [];
+    if (keys.length === 0 || keys.some((key) => key !== "enabled" && key !== "confirm") || typeof body.enabled !== "boolean") {
+      record("refused", { reason: "the body must be an object with enabled (true or false) and confirm: true" });
+      return res.status(400).json({ error: "The body must be an object with enabled (true or false) and confirm: true" });
+    }
+    if (body.confirm !== true) {
+      record("refused", { reason: "a change needs a confirmation", enabled: body.enabled });
+      return res.status(400).json({ error: "Changing the reading of the droid emergency stop needs confirm: true", code: "CONFIRMATION_REQUIRED" });
+    }
+    res.once("finish", () => {
+      const status = res.statusCode;
+      record(status === 200 ? "ok" : status >= 500 ? "failed" : "refused", { enabled: body.enabled, serviceStatus: status });
+    });
+    await relayWithOwnToken(SAFETY_ZONES_URL, "The safety zones service", "HYDRA-UMC-SAFETY-ZONES", req, res, "POST", "/settings/droid-estop");
+  });
+
   // The arm state of the URTC tools, as the safety zones service lists it (GET /tool-arms there; it exists only when that service was started with
   // --tool-arms). Read only: the service only records what the driving service reports, and this route carries the signed-in person's own token to it
   // and passes the answer on as it is (a stale report stays stale: the panel decides how to show it, and never as safe). A service without the option
