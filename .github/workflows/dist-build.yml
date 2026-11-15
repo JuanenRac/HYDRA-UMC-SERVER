@@ -90,8 +90,8 @@ jobs:
           version="$(python3 -c "import json; print(json.load(open('hydra-umc.project.json', encoding='utf-8'))['version'])")"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || { echo "::error::the version $version is not one the updater accepts"; exit 1; }
           grep -q "^## \[$version\]" CHANGELOG.md || { echo "::error::CHANGELOG.md has no section for $version (raise the version BEFORE the build)"; exit 1; }
-          pkg="$(python3 -c "import json; print(json.load(open('package.json', encoding='utf-8'))['version'])")"
-          [ "$pkg" = "$version" ] || { echo "::error::package.json says $pkg, the manifest says $version"; exit 1; }
+          # the manifest decides; package.json and package-lock.json hold its first three components (npm has no fourth one) and must agree with each other
+          python3 tools/extra_checks.py dist-version
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "epoch=$(git log -1 --format=%ct HEAD)" >> "$GITHUB_OUTPUT"
