@@ -973,6 +973,23 @@ or `HYDRA_UMC_ATC_URL` is not set or when a service is down. Every attempt and i
 switch on needs `confirm: true` in `PUT /api/admin/server-config` (`{"atc": {"resetEnabled": true, "confirm": true}}`, `warnings: ["atc_reset_on"]`);
 turning it off needs nothing.
 
+### The requirement of ROS 2 security of the ROS 2 bridge: `GET /api/ros2-bridge/settings`, `POST /api/ros2-bridge/settings`
+
+The ROS 2 bridge can refuse to start unless the ROS 2 security (SROS2) is fully on in its environment (`security.require_sros2`, **off by default**). STUDIO and SUITE
+show and edit that requirement through these two routes, which carry the administrator's own `Authorization` header to the settings route of the bridge
+(`HYDRA_UMC_ROS2_BRIDGE_URL`), so the bridge still decides and checks who asked.
+
+- `GET /api/ros2-bridge/settings` (any signed-in account): `requireSros2` (the value now in the configuration file of the bridge), `active` (the value the running
+  bridge started with), `restartNeeded` (they differ), `canChange` (the bridge was started allowing the change) and `environmentReady` (the three ROS 2 security
+  variables are set in the environment of the bridge).
+- `POST /api/ros2-bridge/settings` (administrator only): the body is `{"requireSros2": true|false, "confirm": true}` and nothing else. **Both directions** need
+  `confirm: true` (`400` with `code: CONFIRMATION_REQUIRED` otherwise, and nothing leaves this server). The bridge writes the value to its file and answers `200`
+  with the new state, `changed` and `appliesAfterRestart: true` (the running bridge does not change until it restarts), or refuses (`401`, `403` with
+  `code: CHANGE_NOT_ALLOWED` when it was started without allowing the change, `409` with `code: SETTING_REFUSED`), and that answer is passed on. This server also
+  writes the attempt and its outcome to its audit record (`ros2-bridge-sros2`, with who asked, from which address, the value and the status of the bridge).
+
+Both answer `503` with `available: false` while `HYDRA_UMC_ROS2_BRIDGE_URL` is not set (off by default), and `503` when the bridge does not answer.
+
 ## 2k. Settings of the installation that harden this API
 
 Environment variables, read once at start (see `docs/PRODUCTION_BOOTSTRAP.md`):

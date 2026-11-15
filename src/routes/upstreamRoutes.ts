@@ -33,6 +33,7 @@ export interface UpstreamDeps {
   SEMANTIC_PLANNER_URL?: string;
   /** The address of the HIL bridge (empty: the relay of the switch that requires a pass verdict of the twin answers 503). */
   HIL_BRIDGE_URL?: string;
+  ROS2_BRIDGE_URL?: string;
   /** The address of the safety zones service (empty: the read of the arm state of the tools answers 503). */
   SAFETY_ZONES_URL?: string;
   /** The address of the URTC tool changer service (empty: the reset of the arm state of a tool changer answers 503). */
@@ -69,6 +70,7 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
   const CONNECTOR_HUB_GATE_URL = deps.CONNECTOR_HUB_GATE_URL ?? "";
   const SEMANTIC_PLANNER_URL = deps.SEMANTIC_PLANNER_URL ?? "";
   const HIL_BRIDGE_URL = deps.HIL_BRIDGE_URL ?? "";
+  const ROS2_BRIDGE_URL = deps.ROS2_BRIDGE_URL ?? "";
   const SAFETY_ZONES_URL = deps.SAFETY_ZONES_URL ?? "";
   const ATC_URL = deps.ATC_URL ?? "";
   const requireOperator: Middleware = deps.requireOperator ?? ((_req, _res, next) => (next as () => unknown)());
@@ -395,6 +397,36 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
       record(status === 200 ? "ok" : status >= 500 ? "failed" : "refused", { requireTwinPass: body.requireTwinPass, bridgeStatus: status });
     });
     await relayWithOwnToken(HIL_BRIDGE_URL, "The HIL bridge", "HYDRA-UMC-HIL-BRIDGE", req, res, "POST", "/settings/twin-pass");
+  });
+
+  // The channel by which STUDIO and SUITE read and edit the requirement of ROS 2 security (SROS2) of the ROS 2 bridge (`security.require_sros2`, off by
+  // default). The bridge keeps the value in its own configuration file, applies a change only when it restarts and has the last word (it checks the signed
+  // token of this server, wants an administrator and the confirmation, and refuses unless it was started allowing the change); this server carries the
+  // signed-in administrator's own token to it, checks the shape of the request and the confirmation before anything leaves, and writes the attempt and its
+  // outcome to its audit record.
+  app.get("/api/ros2-bridge/settings", authenticate, async (req, res) => {
+    await relayWithOwnToken(ROS2_BRIDGE_URL, "The ROS 2 bridge", "HYDRA-UMC-BRIDGE-ROS2", req, res, "GET", "/settings/sros2");
+  });
+
+  app.post("/api/ros2-bridge/settings", authenticate, requireAdmin, async (req, res) => {
+    const user = (req as any).user;
+    const record = (outcome: "ok" | "refused" | "failed", detail: Record<string, unknown>) =>
+      deps.audit?.record({ type: "ros2-bridge-sros2", outcome, userId: user?.id, username: user?.username, ip: req.ip, detail });
+    const body = req.body;
+    const keys = body && typeof body === "object" && !Array.isArray(body) ? Object.keys(body) : [];
+    if (keys.length === 0 || keys.some((key) => key !== "requireSros2" && key !== "confirm") || typeof body.requireSros2 !== "boolean") {
+      record("refused", { reason: "the body must be an object with requireSros2 (true or false) and confirm: true" });
+      return res.status(400).json({ error: "The body must be an object with requireSros2 (true or false) and confirm: true" });
+    }
+    if (body.confirm !== true) {
+      record("refused", { reason: "a change needs a confirmation", requireSros2: body.requireSros2 });
+      return res.status(400).json({ error: "Changing the requirement of ROS 2 security needs confirm: true", code: "CONFIRMATION_REQUIRED" });
+    }
+    res.once("finish", () => {
+      const status = res.statusCode;
+      record(status === 200 ? "ok" : status >= 500 ? "failed" : "refused", { requireSros2: body.requireSros2, bridgeStatus: status });
+    });
+    await relayWithOwnToken(ROS2_BRIDGE_URL, "The ROS 2 bridge", "HYDRA-UMC-BRIDGE-ROS2", req, res, "POST", "/settings/sros2");
   });
 
   // The arm state of the URTC tools, as the safety zones service lists it (GET /tool-arms there; it exists only when that service was started with
