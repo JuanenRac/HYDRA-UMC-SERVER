@@ -935,6 +935,21 @@ STUDIO and SUITE show and edit that switch through these two routes, which carry
 
 Both answer `503` with `available: false` while `HYDRA_UMC_HIL_BRIDGE_URL` is not set (off by default).
 
+### The reading of the droid emergency stop: `GET /api/droid-estop/settings`, `POST /api/droid-estop/settings`
+
+The safety zones service can hold new starts of the cell while a droid is cut (`droidEstop.enabled`, **off by default**; `docs/DROID_ESTOP.md` of HYDRA-UMC-SAFETY-ZONES). When that service
+was started with `droidEstop.stateFile`, STUDIO and SUITE show and edit the switch through these two routes, which carry the caller's own `Authorization` header to the service
+(`HYDRA_UMC_SAFETY_ZONES_URL`), so the service still decides and checks who asked.
+
+- `GET /api/droid-estop/settings` (any signed-in account): `enabled`, `default` (false) and `running` (the broker link is up). The service answers `404` when it was started without a
+  state file; that answer is passed on and the screen reads it as "not switchable from here".
+- `POST /api/droid-estop/settings` (administrator only): the body is `{"enabled": true|false, "confirm": true}` and nothing else. **Both directions** need `confirm: true` (`400` with
+  `code: CONFIRMATION_REQUIRED` otherwise, and nothing leaves this server). The service answers `200` with the new state and `changed`, or refuses (`401`, `403`, `502` when the broker
+  link cannot start or the choice cannot be saved: the setting stays as it was) and that answer is passed on. This server also writes the attempt and its outcome to its audit record
+  (`droid-estop-switch`, with who asked, from which address, the value and the status of the service).
+
+Both answer `503` with `available: false` while `HYDRA_UMC_SAFETY_ZONES_URL` is not set (off by default).
+
 ### The arm state of the URTC tools: `GET /api/tool-arms`
 
 A tool of the URTC family is armed when its power stage may act. The safety zones service keeps the last report of each pair of robot and tool
