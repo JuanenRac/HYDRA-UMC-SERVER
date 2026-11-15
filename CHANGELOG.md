@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **The SDK is pinned to `v0.7.1`, and four more answers use its shapes:** the pin of the workflow moves to `v0.7.1`, the byte copy of the shapes of the SDK (`tools/sdk/server.shapes.json`) is refreshed (it also opens the keys of `ServerConfig`), and `POST /api/voice/confirm`, `GET /api/claims`, `GET /api/safety-limits` and `GET /api/audit` name `VoiceConfirmResult`, `ClaimList`, `SafetyLimitsView` and `AuditReport` as their answers, so `docs/openapi.json` shows them. A test fixes the four names.
+
 - **A relay for the requirement of ROS 2 security of the ROS 2 bridge (`GET` and `POST /api/ros2-bridge/settings`):** STUDIO and SUITE read and change `security.require_sros2` (off by default) through the server, which carries the signed-in person's own token to the settings route of the bridge (`HYDRA_UMC_ROS2_BRIDGE_URL`; the bridge opens it with `--settings-port` and the identity key of this server). Reading is open to any signed-in account; changing it needs an administrator and `confirm: true` in both directions, is checked before anything leaves, and is written to the audit record (`ros2-bridge-sros2`). The bridge writes the value to its file and applies it when it restarts, and the answer says so. Both routes answer 503 with `available: false` while the address is not set. The routes are in `docs/openapi.json` and `docs/REMOTE_API.md`.
 
 

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { SCHEMAS, SHAPES_FILE, loadShapes } from "../tools/openapi_types.mjs";
+import { RESPONSES, SCHEMAS, SHAPES_FILE, loadShapes } from "../tools/openapi_types.mjs";
 import { compareShapesFile } from "../tools/verify_sdk_contract.mjs";
 
 // The shapes of the answers belong to the SDK: this server carries a byte copy and builds its inventory from it.
@@ -63,4 +63,21 @@ test("an SDK without the shapes file leaves nothing to compare, and a missing co
   assert.deepEqual(compareShapesFile(fakeSdk(temp(), null), SHAPES_FILE), []);
   const contract = fakeSdk(temp(), "{}");
   assert.match(compareShapesFile(contract, path.join(temp(), "none.json"))[0], /has no copy/);
+});
+
+test("the voice confirmation, the claims, the safety limits and the audit record answer with the shapes of the SDK", () => {
+  const inventory = JSON.parse(fs.readFileSync(new URL("../docs/openapi.json", import.meta.url), "utf8"));
+  const wanted: Array<[string, string, string]> = [
+    ["/api/claims", "get", "ClaimList"],
+    ["/api/safety-limits", "get", "SafetyLimitsView"],
+    ["/api/audit", "get", "AuditReport"],
+  ];
+  for (const [route, method, shape] of wanted) {
+    const schema = inventory.paths[route][method].responses["200"].content["application/json"].schema;
+    assert.equal(schema.$ref, `#/components/schemas/${shape}`, `${method} ${route}`);
+    assert.ok(SCHEMAS[shape], shape);
+  }
+  // the handler of the voice confirmation answers through a relay, so the inventory lists no 200 for it; the mapping is what the contract check reads
+  assert.deepEqual(RESPONSES["POST /api/voice/confirm"], { $ref: "#/components/schemas/VoiceConfirmResult" });
+  assert.ok(SCHEMAS.VoiceConfirmResult);
 });
