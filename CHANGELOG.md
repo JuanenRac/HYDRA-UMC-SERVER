@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+
+## [0.8.3.2]
+
 - **The SDK is pinned to `v0.7.1`, and four more answers use its shapes:** the pin of the workflow moves to `v0.7.1`, the byte copy of the shapes of the SDK (`tools/sdk/server.shapes.json`) is refreshed (it also opens the keys of `ServerConfig`), and `POST /api/voice/confirm`, `GET /api/claims`, `GET /api/safety-limits` and `GET /api/audit` name `VoiceConfirmResult`, `ClaimList`, `SafetyLimitsView` and `AuditReport` as their answers, so `docs/openapi.json` shows them. A test fixes the four names.
 
 - **A relay for the requirement of ROS 2 security of the ROS 2 bridge (`GET` and `POST /api/ros2-bridge/settings`):** STUDIO and SUITE read and change `security.require_sros2` (off by default) through the server, which carries the signed-in person's own token to the settings route of the bridge (`HYDRA_UMC_ROS2_BRIDGE_URL`; the bridge opens it with `--settings-port` and the identity key of this server). Reading is open to any signed-in account; changing it needs an administrator and `confirm: true` in both directions, is checked before anything leaves, and is written to the audit record (`ros2-bridge-sros2`). The bridge writes the value to its file and applies it when it restarts, and the answer says so. Both routes answer 503 with `available: false` while the address is not set. The routes are in `docs/openapi.json` and `docs/REMOTE_API.md`.
@@ -51,6 +54,8 @@
 - **The flight policy of the machine bridges has switches in Server Admin:** `bridges.uav.envelopeRequired`, `confirmationRequired` (both on by default), `chainInFlight` and `uploadGeofence` (off), and `bridges.droids.confirmationRequired` and `returnHomeAlways` (on). Turning off a requirement or turning on chaining or the geofence upload asks for a confirmation and answers the warning `bridge_<bridge>_<option>`. The bridges apply them in the tightening direction only, under the same host switch and the same signature as the other bridge switches.
 - **Read-only mode can be switched in Server Admin (`robots.readOnly`, off by default):** besides `HYDRA_UMC_READ_ONLY`, an administrator can switch the mode with `PUT /api/admin/server-config` (`{ "robots": { "readOnly": true } }`); the answer warns with `server_read_only_on`, the change is logged and applies at once, and the variable, when set, wins and locks the option (409). The WebSocket settings write follows the same switch. Tests in `tests/securityConfig.test.ts`.
 - **A read-only mode of the server (`HYDRA_UMC_READ_ONLY`, off by default):** with `1` the server shows its robots and data and changes nothing, for every account and app: a request that writes is answered with `423` and the code `server-read-only` before it reaches a route (and the settings write of the WebSocket the same), while reading, the sign-in and sign-out, STOP, the global stop and the safe-mode disable go on. Read on every request. `src/readOnlyMode.ts`, `.env.example`, `docs/REMOTE_API.md`, `tests/readOnlyMode.test.ts`.
+
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
 
 ## [0.8.3.1]
 
