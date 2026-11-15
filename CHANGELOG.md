@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **The manual production-files build no longer refuses a four-component version:** `package.json` and `package-lock.json` must equal the first three components of the manifest version (npm has no fourth component) and agree with each other, and the archive keeps the name of the manifest version. The rule lives in `tools/extra_checks.py` (`dist-version`), the workflow runs it, and the validator tries it on made-up folders (three components equal, four components with a three-component `package.json`, and a different `package.json` or lock failing).
+
 
 ## [0.8.3.2]
 
