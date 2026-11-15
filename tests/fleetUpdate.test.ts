@@ -302,3 +302,140 @@ test("applying and taking up need the confirmation and are audited whether they 
     assert.equal((await call("POST /api/admin/fleet-update/resume", { query: {}, body: { confirm: true, service: "datalake" } })).statusCode, 409);
   } finally { done(); }
 });
+
+
+// ---- the helper way (fleetUpdate.helper, off by default): the isolated unit of the server starts nothing; a unit of the device does -------------------------------------------
+
+function helperMachine(dir: string, plan = file("planned", [row("datalake"), row("server", { latest: "v1.0.0" })]), answer: { exit: number } | null = { exit: 0 }) {
+  const settings = fleetSettings({ helper: true }, dir);
+  const clock = { now: Date.parse("2030-01-01T00:01:00Z") };
+  const requests: Array<Record<string, unknown>> = [];
+  let toolRuns = 0;
+  const launches: unknown[] = [];
+  const deps: FleetDeps = {
+    settings: () => settings, runnerPrefix: () => ["systemd-run"], dataPath: dir, now: () => clock.now, newId: () => "req1",
+    runTool: async () => { toolRuns++; return { exitCode: 1, stdout: "", stderr: "must not run", timedOut: false }; },
+    launch: () => (job) => { launches.push(job); },
+    // The helper unit of the device: it takes the request away, makes the plan and writes the answer.
+    sleep: async () => {
+      if (!fs.existsSync(settings.requestFile)) return;
+      const request = JSON.parse(fs.readFileSync(settings.requestFile, "utf8"));
+      requests.push(request);
+      fs.rmSync(settings.requestFile);
+      if (answer && request.command === "plan") {
+        fs.writeFileSync(settings.stateFile, JSON.stringify(plan));
+        fs.writeFileSync(settings.answerFile, JSON.stringify({ id: request.id, command: "plan", exit: answer.exit }));
+      }
+    },
+  };
+  return { fleet: new FleetUpdate(deps), settings, requests, clock, launches, toolRuns: () => toolRuns };
+}
+
+test("the helper way is off unless the file says true, and its files sit beside the progress file", () => {
+  for (const value of [undefined, false, "true", 1, null]) assert.equal(fleetSettings({ helper: value }, "/data").helper, false);
+  const on = fleetSettings({ helper: true }, "/data");
+  assert.equal(on.helper, true);
+  assert.equal(on.requestFile, path.join(path.dirname(on.stateFile), "request.json"));
+  assert.equal(on.answerFile, `${on.stateFile}.done`);
+});
+
+test("with the helper a look writes one request, waits for the answer and starts no process", async () => {
+  const { dir, done } = scratch();
+  try {
+    const m = helperMachine(dir);
+    const report = await m.fleet.plan();
+    assert.equal(report.services.length, 2);
+    assert.deepEqual(m.requests, [{ v: 1, id: "req1", command: "plan", names: [] }]);
+    assert.equal(m.toolRuns(), 0);
+    assert.equal(m.launches.length, 0);
+    assert.equal(fs.existsSync(m.settings.requestFile), false);
+  } finally { done(); }
+});
+
+test("with the helper a look that gets no answer is a 502 and the request is taken back so that it cannot run later", async () => {
+  const { dir, done } = scratch();
+  try {
+    const silent = helperMachine(dir, undefined, null);
+    await assert.rejects(silent.fleet.plan(), (e: unknown) => e instanceof FleetUpdateError && e.status === 502);
+    assert.equal(fs.existsSync(silent.settings.requestFile), false);
+    const failed = helperMachine(dir, undefined, { exit: 2 });
+    await assert.rejects(failed.fleet.plan(), (e: unknown) => e instanceof FleetUpdateError && e.status === 502);
+  } finally { done(); }
+});
+
+test("with the helper applying writes a request with the names of the plan, launches nothing and a second ask waits", async () => {
+  const { dir, done } = scratch();
+  try {
+    const m = helperMachine(dir);
+    await m.fleet.plan();
+    const started = await m.fleet.apply(["datalake"]);
+    assert.equal(started.state, "running");
+    assert.deepEqual(JSON.parse(fs.readFileSync(m.settings.requestFile, "utf8")), { v: 1, id: "req1", command: "run", names: ["datalake"] });
+    assert.equal(m.launches.length, 0);
+    assert.equal(m.toolRuns(), 0);
+    if (process.platform !== "win32") {
+      assert.equal(fs.statSync(m.settings.requestFile).mode & 0o007, 0);
+      assert.equal(fs.statSync(`${m.settings.stateFile}.hb`).mode & 0o007, 0);
+    }
+    await assert.rejects(m.fleet.apply(["datalake"]), (e: unknown) => e instanceof FleetUpdateError && e.status === 409);
+  } finally { done(); }
+});
+
+test("with the helper taking up a program writes a resume request", async () => {
+  const { dir, done } = scratch();
+  try {
+    const m = helperMachine(dir, file("interrupted", [row("datalake", { state: "interrupted" })]));
+    await m.fleet.plan();
+    m.clock.now += 60_000;
+    fs.writeFileSync(`${m.settings.stateFile}.hb`, "x");
+    await m.fleet.resume("datalake");
+    assert.deepEqual(JSON.parse(fs.readFileSync(m.settings.requestFile, "utf8")), { v: 1, id: "req1", command: "resume", names: ["datalake"] });
+    assert.equal(m.launches.length, 0);
+  } finally { done(); }
+});
+
+test("with the helper a request nobody took for two minutes is removed and does not hold the next ask", async () => {
+  const { dir, done } = scratch();
+  try {
+    const m = helperMachine(dir);
+    await m.fleet.plan();
+    await m.fleet.apply(["datalake"]);
+    assert.equal(m.fleet.busy, true);
+    const old = new Date(m.clock.now - 3 * 60_000);
+    fs.utimesSync(m.settings.requestFile, old, old);
+    m.clock.now += 3 * 60_000;
+    assert.equal(m.fleet.busy, false);
+    assert.equal(fs.existsSync(m.settings.requestFile), false);
+  } finally { done(); }
+});
+
+// The unit of the server and the default of the way to the tool have to agree: this test pins the facts that make the direct way impossible under the isolated unit
+// and the helper way possible, so that a change of either file shows up here.
+test("the isolated unit of the server and the settings agree on the account, the folder and the way the work is reached", () => {
+  const unit = fs.readFileSync(new URL("../systemd/hydra-umc-server.service", import.meta.url), "utf8");
+  const get = (key: string) => (unit.match(new RegExp(`^${key}=(.*)$`, "m")) ?? [])[1]?.trim();
+  const writable = (get("ReadWritePaths") ?? "").split(/\s+/).filter(Boolean);
+  assert.equal(get("User"), "hydra-umc-server");
+  assert.equal(get("Group"), "hydra-umc-server");
+  assert.equal(get("NoNewPrivileges"), "true");
+  assert.equal(get("CapabilityBoundingSet"), "");
+  assert.equal(get("ProtectHome"), "true");
+  assert.equal(get("UMask"), "0027");
+  assert.deepEqual(writable, ["/opt/hydra-umc/server/data"]);
+  assert.equal(get("WorkingDirectory"), "/opt/hydra-umc/server");
+  // The data folder is the only one the account can write and its HOME: every file of the helper way has to be inside it.
+  const data = path.posix.join(...writable);
+  const s = fleetSettings({ helper: true }, data, data);
+  for (const name of [s.stateFile, s.requestFile, s.answerFile, `${s.stateFile}.hb`]) assert.ok(path.resolve(name).startsWith(path.resolve(data)), name);
+  // The direct way looks for the tool under the HOME of that account, where nothing is installed (and /home is hidden): only the helper way can work under this unit.
+  assert.ok(path.resolve(fleetSettings(undefined, data, data).tool).startsWith(path.resolve(data)));
+  // The helper unit of HYDRA-UMC-OS (when its checkout is next to this one) uses exactly these files and the group of this unit, and may call sudo.
+  const sibling = new URL("../../HYDRA-UMC-OS/systemd/hydra-umc-fleet.service", import.meta.url);
+  if (!fs.existsSync(sibling)) return;
+  const helper = fs.readFileSync(sibling, "utf8");
+  const exec = (helper.match(/^ExecStart=(.*)$/m) ?? [])[1] ?? "";
+  assert.ok(exec.includes(`--state ${data}/fleet-update/state.json`), exec);
+  assert.ok(exec.includes(`--request ${data}/fleet-update/request.json`), exec);
+  assert.match(helper, /^Group=hydra-umc-server$/m);
+  assert.doesNotMatch(helper, /^NoNewPrivileges=true$/m);
+});
