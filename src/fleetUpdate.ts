@@ -11,6 +11,11 @@
 //    last program is this server and restarting it kills whatever it started,
 //  * and reads the progress file the tool writes (`hydra-fleet-update/1`), telling a run that stopped writing (heartbeat older than a minute) from one that goes on.
 // A name is checked against the plan before it reaches the command, the command has no shell, one run goes at a time, and nothing here restarts the machine.
+//
+// Two ways to reach the tool. The first (default) starts it as a child of this server, which only works where the account of the server can run it, see its checkout and call
+// sudo (not the case of the isolated unit of systemd/hydra-umc-server.service: NoNewPrivileges, no capabilities, hidden /home). The second, `fleetUpdate.helper: true` (off by
+// default), starts nothing: this server writes ONE small request file in its own data folder and a path unit of the device (HYDRA-UMC-OS provisioning/install_fleet_helper.sh)
+// runs the tool under the account that owns the checkout and the rule of sudo, then writes an answer file beside the progress file. The server needs no privilege for it.
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -22,6 +27,12 @@ export const FLEET_STALE_SECONDS = 60;
 export const FLEET_PLAN_MAX_AGE_SECONDS = 30 * 60;
 /** How long after the start of the tool its file may still be the one from before: past this, a tool that left no trace did not start. */
 export const FLEET_START_GRACE_SECONDS = 20;
+/** Helper way: a request file that nobody picked up for this long was not seen by the helper, so it is removed and does not block the next look. */
+export const FLEET_REQUEST_STALE_SECONDS = 120;
+/** Helper way: how long a look may take, and how often its answer file is read. */
+export const FLEET_HELPER_PLAN_TIMEOUT_MS = 5 * 60_000;
+export const FLEET_HELPER_POLL_MS = 500;
+export const FLEET_REQUEST_SCHEMA = 1;
 const NAME = /^[a-z][a-z0-9-]{0,40}$/;
 const OUTPUT_LIMIT = 64 * 1024;
 
@@ -38,16 +49,25 @@ export interface FleetFile {
   tool?: unknown;
   python?: unknown;
   stateFile?: unknown;
+  helper?: unknown;
 }
 
-export interface FleetSettings { tool: string; python: string; stateFile: string }
+export interface FleetSettings {
+  tool: string; python: string; stateFile: string;
+  /** Off by default. On: the work is done by the helper unit of the device, asked through `requestFile`; `tool` and `python` are then not used by this server. */
+  helper: boolean; requestFile: string; answerFile: string;
+}
 
 export function fleetSettings(file: FleetFile | undefined, dataPath: string, home: string = os.homedir()): FleetSettings {
   const text = (value: unknown, fallback: string) => (typeof value === "string" && value.trim() && !value.includes("\0") ? value.trim() : fallback);
+  const stateFile = path.resolve(dataPath, text(file?.stateFile, path.join("fleet-update", "state.json")));
   return {
     tool: text(file?.tool, path.join(home, "hydra-umc", "HYDRA-UMC-OS", "tools", "fleet_update.py")),
     python: text(file?.python, "python3"),
-    stateFile: path.resolve(dataPath, text(file?.stateFile, path.join("fleet-update", "state.json"))),
+    stateFile,
+    helper: file?.helper === true,
+    requestFile: path.join(path.dirname(stateFile), "request.json"),
+    answerFile: `${stateFile}.done`,
   };
 }
 
@@ -124,6 +144,8 @@ export interface FleetDeps {
   launch?: (prefix: string[], job: string) => Launcher;
   now?: () => number;
   newId?: () => string;
+  /** Helper way only: waits between two reads of the answer file (replaced in tests). */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export class FleetUpdate {
@@ -175,7 +197,40 @@ export class FleetUpdate {
   }
 
   get busy(): boolean {
-    return this.planning || this.now() - this.launchedAt < 15_000 || this.read()?.state === "running";
+    return this.planning || this.now() - this.launchedAt < 15_000 || this.requestPending() || this.read()?.state === "running";
+  }
+
+  /** Helper way: a request is waiting for the helper to take it. One that nobody took for too long is removed (the helper is not there) so that it cannot run later by surprise. */
+  private requestPending(): boolean {
+    const settings = this.deps.settings();
+    if (!settings.helper) return false;
+    let age: number;
+    try { age = (this.now() - fs.statSync(settings.requestFile).mtimeMs) / 1000; } catch { return false; }
+    if (age <= FLEET_REQUEST_STALE_SECONDS) return true;
+    fs.rmSync(settings.requestFile, { force: true });
+    return false;
+  }
+
+  /** Helper way: writes the request in one step (a file that is complete or not there) for the helper unit to find. The helper takes the file away as soon as it starts. */
+  private writeRequest(settings: FleetSettings, id: string, command: "plan" | "run" | "resume", names: string[]): void {
+    fs.mkdirSync(path.dirname(settings.requestFile), { recursive: true, mode: 0o770 });
+    fs.rmSync(settings.answerFile, { force: true });
+    const body = JSON.stringify({ v: FLEET_REQUEST_SCHEMA, id, command, names });
+    const partial = `${settings.requestFile}.${id}.tmp`;
+    fs.writeFileSync(partial, body, { mode: 0o660 });
+    fs.renameSync(partial, settings.requestFile);
+  }
+
+  private newId(): string {
+    return (this.deps.newId ?? (() => `${this.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`))();
+  }
+
+  /** Helper way: the exit status the helper gave to the request `id`, or null while its answer is not there. */
+  private answer(settings: FleetSettings, id: string): number | null {
+    try {
+      const raw = JSON.parse(fs.readFileSync(settings.answerFile, "utf8")) as { id?: unknown; exit?: unknown };
+      return raw.id === id && typeof raw.exit === "number" ? raw.exit : null;
+    } catch { return null; }
   }
 
   /** Looks at the device and at the newest releases; nothing is changed. */
@@ -184,7 +239,25 @@ export class FleetUpdate {
     const settings = this.deps.settings();
     this.planning = true;
     try {
-      fs.mkdirSync(path.dirname(settings.stateFile), { recursive: true, mode: 0o700 });
+      fs.mkdirSync(path.dirname(settings.stateFile), { recursive: true, mode: settings.helper ? 0o770 : 0o700 });
+      if (settings.helper) {
+        const id = this.newId();
+        this.writeRequest(settings, id, "plan", []);
+        const sleep = this.deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+        let exit: number | null = null;
+        for (let polls = 0; exit === null && polls < FLEET_HELPER_PLAN_TIMEOUT_MS / FLEET_HELPER_POLL_MS; polls++) {
+          exit = this.answer(settings, id);
+          if (exit === null) await sleep(FLEET_HELPER_POLL_MS);
+        }
+        if (exit === null) {
+          fs.rmSync(settings.requestFile, { force: true });
+          throw new FleetUpdateError(502, "The helper of the device did not answer");
+        }
+        if (exit !== 0) throw new FleetUpdateError(502, "The look failed");
+        const looked = this.read();
+        if (!looked) throw new FleetUpdateError(502, "The tool did not leave a plan");
+        return looked;
+      }
       const done = await (this.deps.runTool ?? defaultToolRunner)(settings.python, [settings.tool, "plan", "--state", settings.stateFile], 5 * 60_000);
       if (done.exitCode !== 0 || done.timedOut) throw new FleetUpdateError(502, done.timedOut ? "The look took too long" : (done.stderr.trim().split("\n").slice(-1)[0] || "The look failed").slice(0, 200));
     } finally {
@@ -231,8 +304,19 @@ export class FleetUpdate {
 
   private async launch(args: string[]): Promise<FleetReport> {
     const settings = this.deps.settings();
-    const id = (this.deps.newId ?? (() => `${this.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`))();
+    const id = this.newId();
     const folder = path.dirname(settings.stateFile);
+    if (settings.helper) {
+      fs.mkdirSync(folder, { recursive: true, mode: 0o770 });
+      // A fresh heartbeat (group-writable: the helper runs under another account) so that the file is not read as cut before the tool writes its own.
+      fs.writeFileSync(this.heartbeatFile(), String(this.now() / 1000), { mode: 0o660 });
+      this.launchedAt = this.now();
+      this.lastLaunch = { at: this.launchedAt, outFile: settings.answerFile, seen: this.trace() };
+      this.writeRequest(settings, id, args[0] as "run" | "resume", args[args.indexOf("--only") + 1].split(","));
+      const asked = this.read();
+      if (!asked) throw new FleetUpdateError(502, "The tool did not leave a file");
+      return { ...asked, state: "running" };
+    }
     fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
     const outFile = path.join(folder, `run-${id}.out`);
     fs.writeFileSync(outFile, "", { mode: 0o600 });
