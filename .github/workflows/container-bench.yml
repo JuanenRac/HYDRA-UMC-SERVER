@@ -5,8 +5,9 @@
 # =============================================================================
 # Calls the reusable workflow of HYDRA-UMC-DEV-SERVER that builds the image of this server (scripts/Dockerfile) from the head of the pull request, starts it as
 # a real container and runs its scenarios: the version route without a token, the refusals without a token, with a wrong token and with a wrong password, the
-# sign-in of the first administrator and a command to a robot that does not exist. It is a light check on purpose: it runs only when the pull request touches
-# what those scenarios cover (the start of the server, the sign-in and the routes, the settings store, the policy, the image and its dependencies), never on a
+# sign-in of the first administrator and a command to a robot that does not exist. It is a light check on purpose: it runs when the pull request touches
+# what those scenarios cover (the start of the server, the sign-in and the routes, the settings store, the policy, the image and its dependencies), once a week on main
+# (Monday, UTC), so that a drift in the image or the dependencies shows even when no pull request touches them, never on a
 # push to main, and a second push to the same pull request cancels the run in progress. The called workflow is pinned by commit hash, like every other action of
 # the repository.
 name: Container bench
@@ -27,6 +28,8 @@ on:
       - "package-lock.json"
       - ".github/workflows/container-bench.yml"
   workflow_dispatch:
+  schedule:
+    - cron: "7 3 * * 1"  # weekly (Monday, UTC), on a minute of its own so that the benches do not queue behind each other
 
 permissions:
   contents: read
