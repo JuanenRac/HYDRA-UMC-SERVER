@@ -441,6 +441,7 @@
     },
     "ServerConfig": {
       "type": "object",
+      "description": "The listen port and, besides it, the security options of the server (the groups of PUT /api/admin/server-config: tls, ble, mqtt, voice, auth, ingest...). The groups grow with the server, so a key this list does not name is kept, not dropped.",
       "required": [
         "port",
         "pendingPort"
@@ -455,7 +456,8 @@
             "null"
           ]
         }
-      }
+      },
+      "additionalProperties": true
     },
     "ServerConfigSaved": {
       "type": "object",
@@ -2753,6 +2755,395 @@
           ]
         }
       }
+    },
+    "ClaimView": {
+      "type": "object",
+      "description": "One robot that has an active claim: who holds it, from which controller, until when and until when its jog is armed.",
+      "required": [
+        "robotId",
+        "ownerUsername",
+        "claimedAt",
+        "expiresAt"
+      ],
+      "properties": {
+        "robotId": {
+          "type": "integer"
+        },
+        "robotName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cellId": {
+          "description": "The id of the controller the robot belongs to (any JSON value; the server does not fix its type)."
+        },
+        "ownerId": {
+          "description": "The id of the account that holds the claim (any JSON value)."
+        },
+        "ownerUsername": {
+          "type": "string"
+        },
+        "controllerId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "claimedAt": {
+          "type": "number",
+          "description": "Milliseconds since the epoch."
+        },
+        "expiresAt": {
+          "type": "number",
+          "description": "Milliseconds since the epoch."
+        },
+        "jogArmedUntil": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Milliseconds since the epoch; null when the jog is not armed."
+        }
+      }
+    },
+    "ClaimList": {
+      "type": "object",
+      "required": [
+        "claims"
+      ],
+      "properties": {
+        "claims": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/ClaimView"
+          }
+        }
+      }
+    },
+    "SafetyLimitsConfig": {
+      "type": "object",
+      "description": "The limits every client is held to (data/safety-limits.json), as saved by PUT /api/admin/safety-limits.",
+      "required": [
+        "jog",
+        "temperature",
+        "claims",
+        "audit"
+      ],
+      "properties": {
+        "jog": {
+          "type": "object",
+          "required": [
+            "armRequired",
+            "armTtlMs",
+            "default",
+            "models"
+          ],
+          "properties": {
+            "armRequired": {
+              "type": "boolean"
+            },
+            "armTtlMs": {
+              "type": "number"
+            },
+            "default": {
+              "type": "object",
+              "required": [
+                "maxAmount",
+                "maxAbsolute"
+              ],
+              "properties": {
+                "maxAmount": {
+                  "type": "number"
+                },
+                "maxAbsolute": {
+                  "type": "number"
+                }
+              }
+            },
+            "models": {
+              "type": "object",
+              "description": "Per model (lower-case name before the parenthesis), the entries that differ from the default.",
+              "additionalProperties": {
+                "type": "object",
+                "description": "The limits of a relative and an absolute jog; a model entry names only what it changes.",
+                "properties": {
+                  "maxAmount": {
+                    "type": "number"
+                  },
+                  "maxAbsolute": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "temperature": {
+          "type": "object",
+          "required": [
+            "default",
+            "models"
+          ],
+          "properties": {
+            "default": {
+              "type": "object",
+              "required": [
+                "bedMaxC"
+              ],
+              "properties": {
+                "bedMaxC": {
+                  "type": "number"
+                }
+              }
+            },
+            "models": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "bedMaxC": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "claims": {
+          "type": "object",
+          "required": [
+            "requireControllerId"
+          ],
+          "properties": {
+            "requireControllerId": {
+              "type": "boolean"
+            }
+          }
+        },
+        "audit": {
+          "type": "object",
+          "required": [
+            "enabled",
+            "motionIntervalSeconds"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "motionIntervalSeconds": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "SafetyLimitsView": {
+      "type": "object",
+      "description": "GET /api/safety-limits: the limits in force, the defaults, the ceilings no value can pass and, when ?robotId= names a robot, the limits that apply to it.",
+      "required": [
+        "limits",
+        "defaults",
+        "hardLimits"
+      ],
+      "properties": {
+        "limits": {
+          "$ref": "#/components/schemas/SafetyLimitsConfig"
+        },
+        "defaults": {
+          "$ref": "#/components/schemas/SafetyLimitsConfig"
+        },
+        "hardLimits": {
+          "type": "object",
+          "description": "The fixed ceilings (jogMaxAmount, jogMaxAbsolute, armTtlMs {min,max}, bedMaxC, auditMotionIntervalSeconds {min,max}); the set grows with the server.",
+          "additionalProperties": true
+        },
+        "robot": {
+          "type": "object",
+          "required": [
+            "id",
+            "jog",
+            "temperature"
+          ],
+          "properties": {
+            "id": {
+              "type": "integer"
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "jog": {
+              "type": "object",
+              "properties": {
+                "maxAmount": {
+                  "type": "number"
+                },
+                "maxAbsolute": {
+                  "type": "number"
+                }
+              }
+            },
+            "temperature": {
+              "type": "object",
+              "properties": {
+                "bedMaxC": {
+                  "type": "number"
+                }
+              }
+            },
+            "jogArmedUntil": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "description": "Milliseconds since the epoch; null when the jog is not armed."
+            }
+          }
+        }
+      }
+    },
+    "AuditEntry": {
+      "type": "object",
+      "description": "One line of the audit record: the hash chain (seq, prev, hash) around the event. The keys of an event the server adds later are kept.",
+      "required": [
+        "seq",
+        "ts",
+        "prev",
+        "hash",
+        "type",
+        "outcome"
+      ],
+      "properties": {
+        "seq": {
+          "type": "integer"
+        },
+        "ts": {
+          "type": "string"
+        },
+        "prev": {
+          "type": "string"
+        },
+        "hash": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "description": "Short stable name of the event: claim, release, force-claim, force-release, safety-limits, jog-arm, stop-all, table-move..."
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "ok",
+            "refused",
+            "failed"
+          ]
+        },
+        "userId": {
+          "description": "The id of the account (any JSON value)."
+        },
+        "username": {
+          "type": "string"
+        },
+        "controllerId": {
+          "type": "string"
+        },
+        "ip": {
+          "type": "string"
+        },
+        "robotId": {
+          "type": "integer"
+        },
+        "detail": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "AuditVerification": {
+      "type": "object",
+      "required": [
+        "ok",
+        "entries"
+      ],
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        },
+        "entries": {
+          "type": "integer"
+        },
+        "brokenAtSeq": {
+          "type": "integer"
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
+    "AuditReport": {
+      "type": "object",
+      "description": "GET /api/audit as JSON: the newest entries (oldest first) and, with ?verify=1, the check of the hash chain. The same entries come as lines of JSON with ?format=jsonl.",
+      "required": [
+        "enabled",
+        "lockedOff",
+        "entries"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "lockedOff": {
+          "type": "boolean"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/AuditEntry"
+          }
+        },
+        "verification": {
+          "$ref": "#/components/schemas/AuditVerification"
+        }
+      }
+    },
+    "VoiceConfirmResult": {
+      "type": "object",
+      "description": "The answer of POST /api/voice/confirm: the confirmation result of the voice interface and whether the server verified its signature. Keys the interface adds are kept.",
+      "required": [
+        "type",
+        "status",
+        "verified"
+      ],
+      "properties": {
+        "type": {
+          "const": "confirmation_result"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "confirmed",
+            "expired",
+            "invalid"
+          ]
+        },
+        "requestId": {
+          "type": "string"
+        },
+        "intent": {
+          "type": "object"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "verified": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
     }
   }
 }

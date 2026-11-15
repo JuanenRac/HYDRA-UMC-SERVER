@@ -64,3 +64,18 @@ test("an SDK without the shapes file leaves nothing to compare, and a missing co
   const contract = fakeSdk(temp(), "{}");
   assert.match(compareShapesFile(contract, path.join(temp(), "none.json"))[0], /has no copy/);
 });
+
+test("the voice confirmation, the claims, the safety limits and the audit record answer with the shapes of the SDK", () => {
+  const inventory = JSON.parse(fs.readFileSync(new URL("../docs/openapi.json", import.meta.url), "utf8"));
+  const wanted: Array<[string, string, string]> = [
+    ["/api/voice/confirm", "post", "VoiceConfirmResult"],
+    ["/api/claims", "get", "ClaimList"],
+    ["/api/safety-limits", "get", "SafetyLimitsView"],
+    ["/api/audit", "get", "AuditReport"],
+  ];
+  for (const [route, method, shape] of wanted) {
+    const schema = inventory.paths[route][method].responses["200"].content["application/json"].schema;
+    assert.equal(schema.$ref, `#/components/schemas/${shape}`, `${method} ${route}`);
+    assert.ok(SCHEMAS[shape], shape);
+  }
+});
