@@ -170,6 +170,9 @@ async function hashPassword(password: string): Promise<string> {
   });
 }
 
+/** A stored hash that belongs to nobody: a sign-in for an account that does not exist is checked against it, so it takes as long as one for an account that does (and never matches). */
+export const NO_ACCOUNT_HASH = `${"00".repeat(16)}:${"00".repeat(64)}`;
+
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
   const [salt, hash] = stored.split(":");
   if (!salt || !hash) return false;
