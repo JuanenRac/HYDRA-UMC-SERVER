@@ -206,7 +206,13 @@ POST /api/login
   `viewer` (read only: it reads the state, the claims, the limits, the
   camera lists and pictures and asks for a camera ticket, and gets `403`
   `{ "code": "VIEWER_READ_ONLY" }` from every call that writes - a robot command,
-  the global stop included, a claim, an upload, a settings write). The
+  the global stop included, a claim, an upload, a settings write). The one
+  exception is what the account does to itself: it can turn its own second
+  factor on (`POST /api/totp/begin` and `POST /api/totp/confirm`) and register or
+  remove its own phone for notifications (`POST /api/push/devices`,
+  `DELETE /api/push/devices/{token}`); those routes take no account name, so they
+  reach only the account of the token that calls them, and turning the factor
+  off stays refused). The
   read-only rule is decided in one place, by method, so a route added later
   is read-only for a viewer too; it uses the role the account has now, so
   demoting an account to `viewer` ends what its open session could do on the

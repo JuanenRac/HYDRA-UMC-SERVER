@@ -172,3 +172,46 @@ test("sign-in over HTTP: an account without the factor signs in as before, one w
     fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 });
+
+test("a read-only account can turn its own second factor on, and that reaches no other account", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hydra-umc-totp-viewer-"));
+  const originalCwd = process.cwd();
+  process.chdir(dir);
+  let server: import("node:http").Server | undefined;
+  try {
+    const { createUser } = await import("../src/users");
+    const { registerAuthRoutes } = await import("../src/routes/auth");
+    const { registerTotpRoutes } = await import("../src/routes/totpRoutes");
+    assert.deepEqual(await createUser("eyes", "correct-horse-battery", "viewer"), { ok: true });
+    assert.deepEqual(await createUser("eyes2", "second-long-password", "viewer"), { ok: true });
+    const app = express();
+    app.use(express.json());
+    registerAuthRoutes(app);
+    registerTotpRoutes(app);
+    server = app.listen(0, "127.0.0.1");
+    await new Promise((resolve) => server!.once("listening", resolve));
+    const base = "http://127.0.0.1:" + (server.address() as AddressInfo).port;
+    const call = async (method: string, url: string, body?: unknown, token?: string) => {
+      const response = await fetch(base + url, { method, headers: { "content-type": "application/json", ...(token ? { authorization: "Bearer " + token } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
+      return { status: response.status, body: (await response.json().catch(() => ({}))) as any };
+    };
+    const mine = (await call("POST", "/api/login", { username: "eyes", password: "correct-horse-battery" })).body.token as string;
+    const other = (await call("POST", "/api/login", { username: "eyes2", password: "second-long-password" })).body.token as string;
+    const begun = await call("POST", "/api/totp/begin", { password: "correct-horse-battery" }, mine);
+    assert.equal(begun.status, 200, "a viewer may start the enrolment of its own account");
+    // the password asked for is the one of the account of the token: the other viewer's password does not work here
+    assert.equal((await call("POST", "/api/totp/begin", { password: "second-long-password" }, mine)).status, 401);
+    const confirmed = await call("POST", "/api/totp/confirm", { code: totpCode(fromBase32(begun.body.secret), stepOf(Date.now())) }, mine);
+    assert.equal(confirmed.status, 200);
+    assert.equal((await call("GET", "/api/totp/status", undefined, mine)).body.enabled, true);
+    assert.equal((await call("GET", "/api/totp/status", undefined, other)).body.enabled, false, "the other viewer is untouched");
+    // the rest of the second factor is not a viewer's: it cannot turn it off, and cannot reset another account's
+    assert.equal((await call("POST", "/api/totp/disable", { password: "correct-horse-battery", code: "000000" }, mine)).status, 403);
+    assert.equal((await call("DELETE", "/api/users/eyes2/totp", undefined, mine)).status, 403);
+    assert.equal((await call("GET", "/api/totp/status", undefined, mine)).body.enabled, true);
+  } finally {
+    server?.close();
+    process.chdir(originalCwd);
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+});
