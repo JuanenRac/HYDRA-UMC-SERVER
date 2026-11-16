@@ -8,6 +8,7 @@ import { registerCommandRoutes } from "../src/routes/commandRoutes.ts";
 import { registerRobotRoutes } from "../src/routes/robotRoutes.ts";
 import { registerSafetyRoutes } from "../src/routes/safetyRoutes.ts";
 import { claimConflict, readControllerId } from "../src/claimPolicy.ts";
+import { DamagedConfigError } from "../src/configFileGuard.ts";
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "safety-"));
 const alice = { id: "alice-id", username: "alice", role: "operator" };
@@ -44,7 +45,7 @@ test("a change is validated: unknown keys, wrong types and values beyond the har
   assert.equal(ok.jog.default.maxAmount, 100);
 });
 
-test("the limits are saved through the store and survive a restart; the defaults come back for a damaged file", async () => {
+test("the limits are saved through the store and survive a restart; a damaged file stops the start instead of bringing the defaults back", async () => {
   const dir = tmp();
   const a = new SafetyLimits(dir);
   await a.update({ jog: { models: { parol6: { maxAmount: 25 } } }, temperature: { default: { bedMaxC: 80 } } }, "root");
@@ -55,9 +56,7 @@ test("the limits are saved through the store and survive a restart; the defaults
   await assert.rejects(a.update({ jog: { default: { maxAmount: 5000 } } }, "root"), SafetyLimitsError);
   assert.equal(a.jogFor("x").maxAmount, 100);
   fs.writeFileSync(path.join(dir, "safety-limits.json"), "{ not json");
-  const logs: string[] = [];
-  assert.equal(new SafetyLimits(dir, (m) => logs.push(m)).jogFor("x").maxAmount, 100);
-  assert.equal(logs.length, 1);
+  assert.throws(() => new SafetyLimits(dir), DamagedConfigError);
 });
 
 test("a setting this version does not know is ignored and the known ones keep their saved values", () => {
@@ -68,7 +67,7 @@ test("a setting this version does not know is ignored and the known ones keep th
   assert.equal(s.jogFor("x").maxAmount, 7);
   assert.equal(logs.length, 3);
   fs.writeFileSync(path.join(dir, "safety-limits.json"), JSON.stringify({ jog: { default: { maxAmount: 99999 } } }));
-  assert.equal(new SafetyLimits(dir, () => undefined).jogFor("x").maxAmount, 100);
+  assert.throws(() => new SafetyLimits(dir, () => undefined), DamagedConfigError);
 });
 
 test("a heated-bed target above the limit of its model is lowered", async () => {

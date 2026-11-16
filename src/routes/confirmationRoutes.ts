@@ -6,6 +6,9 @@
 // POST /api/operator/confirmations: issues the one-use token of the confirmation of a person (src/humanConfirmation.ts) for one action and one job, after the
 // person confirmed on a screen. For an operator or an administrator; off by default (HYDRA_UMC_HUMAN_CONFIRMATION=1): a signed-in client gets 404 while it is off.
 // With no usable key the route answers 503 and issues nothing. Every issue and every refusal is written to the audit record; the token itself never is.
+// The answer says `single_use: true` and carries a `jti`, but this server does not keep a list of the identifiers it issued or that were used: a token is used only
+// once because the SERVICE THAT VERIFIES IT remembers the `jti` it has accepted until the token expires (the machine bridges do). The route sits behind the limiter of
+// the sensitive routes so that a script with an operator token cannot mint confirmations without bound.
 import type express from "express";
 import { issueConfirmation, parseConfirmationRequest } from "../humanConfirmation";
 
@@ -20,6 +23,8 @@ export interface ConfirmationRouteDeps {
   key: () => Buffer | null;
   audit?: { record(entry: { type: string; outcome: string; userId?: unknown; username?: string; ip?: string; detail?: unknown }): void };
   now?: () => number;
+  /** The limiter of the sensitive routes, placed before the sign-in check (absent: none). */
+  rateLimiter?: Middleware;
 }
 
 export function registerConfirmationRoutes(app: express.Express, deps: ConfirmationRouteDeps): void {
@@ -37,7 +42,8 @@ export function registerConfirmationRoutes(app: express.Express, deps: Confirmat
     } catch { /* an audit that cannot be written never turns a refusal into an issue */ }
   };
 
-  app.post("/api/operator/confirmations", authenticate, gate, requireOperator, (req: any, res: any) => {
+  const limiter: Middleware = deps.rateLimiter ?? ((_req, _res, next) => (next as () => unknown)());
+  app.post("/api/operator/confirmations", limiter, authenticate, gate, requireOperator, (req: any, res: any) => {
     const parsed = parseConfirmationRequest(req.body);
     if (!parsed.ok) {
       record(req, "refused", { code: parsed.code });

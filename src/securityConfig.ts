@@ -77,6 +77,8 @@ export interface RobotsFile {
 export interface ProductionFile {
   /** The read-out protection level a production flash sets: 0 = off (the default; nothing is protected), 1 = on. Level 2 is permanent and never offered. */
   rdpLevel?: number;
+  /** Whether a firmware flash of a controller board is refused unless it carries a signature, the board it is for and the oldest bootloader that may take it (default: no, as before). HYDRA_UMC_PRODUCTION_REQUIRE_SIGNED_FLASH wins. */
+  requireSignedFlash?: boolean;
 }
 
 /**
@@ -463,6 +465,7 @@ export interface SecurityEnv {
   connectionRecordAddress?: string;
   healthOpen?: string;
   productionRdpLevel?: string;
+  productionRequireSignedFlash?: string;
   /** The ingest switches (INGEST_SWITCH_VARIABLES) and the keys file of the proposals, as written. */
   ingest?: Partial<Record<IngestSwitchKey | "proposalKeysFile", string>>;
   ecosystemHealth?: string;
@@ -521,6 +524,7 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     connectionRecordAddress: env.HYDRA_UMC_CONNECTION_RECORD_ADDRESS,
     healthOpen: env.HYDRA_UMC_HEALTH_OPEN,
     productionRdpLevel: env.HYDRA_UMC_PRODUCTION_RDP_LEVEL,
+    productionRequireSignedFlash: env.HYDRA_UMC_PRODUCTION_REQUIRE_SIGNED_FLASH,
     ingest: { ...Object.fromEntries(INGEST_SWITCH_KEYS.map((key) => [key, env[INGEST_SWITCH_VARIABLES[key]]])), proposalKeysFile: env[PROPOSAL_KEYS_VARIABLE] },
     ecosystemHealth: env.HYDRA_UMC_ECOSYSTEM_HEALTH,
     nodeHealth: env.HYDRA_UMC_NODE_HEALTH,
@@ -639,6 +643,13 @@ export function resolveProductionRdpLevel(env: string | undefined, file: Securit
   if (isSet(env) && (env.trim() === "0" || env.trim() === "1")) return { value: env.trim() === "1" ? 1 : 0, source: "env" };
   if (file.production?.rdpLevel === 0 || file.production?.rdpLevel === 1) return { value: file.production.rdpLevel, source: "config" };
   return { value: 0, source: "default" };
+}
+
+/** Whether a firmware flash must carry its signature, its target and its minimum bootloader: only the exact words "1" and "0" in the environment count; the file decides next; the default is off (as before). */
+export function resolveProductionRequireSignedFlash(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env) && (env.trim() === "0" || env.trim() === "1")) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.production?.requireSignedFlash === "boolean") return { value: file.production.requireSignedFlash, source: "config" };
+  return { value: false, source: "default" };
 }
 
 /** One ingest switch: the exact words "1" (on) and "0" (off) in the environment decide and lock it; otherwise the file; the default is off. */
@@ -1076,7 +1087,7 @@ export interface SecuritySnapshot {
   voice: { includeHeardText: { value: boolean; source: Source }; minConfidence: { value: number; source: Source }; requireSignature: { value: boolean; source: Source } };
   robots: { allowEnable: { value: boolean; source: Source }; readOnly: { value: boolean; source: Source } };
   connections: { recordAddress: { value: boolean; source: Source } };
-  production: { rdpLevel: { value: 0 | 1; source: Source } };
+  production: { rdpLevel: { value: 0 | 1; source: Source }; requireSignedFlash: { value: boolean; source: Source } };
   ingest: Record<IngestSwitchKey, { value: boolean; source: Source }> & { proposalKeysFile: { value: string; source: Source }; appliesOnRestart: boolean };
   health: { open: { value: boolean; source: Source } };
   ecosystemHealth: { enabled: { value: boolean; source: Source } };
@@ -1236,6 +1247,11 @@ export class SecurityConfig {
   /** The read-out protection level a production flash sets (0 = off unless an administrator chose 1). */
   productionRdpLevel(): 0 | 1 {
     return resolveProductionRdpLevel(this.options.env.productionRdpLevel, this.file).value;
+  }
+
+  /** Whether a firmware flash of a controller board is refused unless it is signed and names its board and bootloader (off unless an administrator turned it on). */
+  productionRequireSignedFlash(): boolean {
+    return resolveProductionRequireSignedFlash(this.options.env.productionRequireSignedFlash, this.file).value;
   }
 
   /** Whether the history of connections may keep the address and user agent of a client (off unless an administrator turned it on). */
@@ -1481,7 +1497,7 @@ export class SecurityConfig {
       },
       robots: { allowEnable: resolveRobotAllowEnable(this.options.env.robotAllowEnable, this.file), readOnly: resolveReadOnly(this.options.env.readOnly, this.file) },
       connections: { recordAddress: resolveConnectionRecordAddress(this.options.env.connectionRecordAddress, this.file) },
-      production: { rdpLevel: resolveProductionRdpLevel(this.options.env.productionRdpLevel, this.file) },
+      production: { rdpLevel: resolveProductionRdpLevel(this.options.env.productionRdpLevel, this.file), requireSignedFlash: resolveProductionRequireSignedFlash(this.options.env.productionRequireSignedFlash, this.file) },
       ingest: {
         ...(Object.fromEntries(INGEST_SWITCH_KEYS.map((key) => [key, resolveIngestSwitch(key, this.options.env.ingest?.[key], this.file)])) as Record<IngestSwitchKey, { value: boolean; source: Source }>),
         proposalKeysFile: resolveProposalKeysFile(this.options.env.ingest?.proposalKeysFile, this.file),
@@ -1737,6 +1753,11 @@ export class SecurityConfig {
         if (productionPatch.rdpLevel !== 0 && productionPatch.rdpLevel !== 1) throw new SecurityConfigError(400, "production.rdpLevel must be 0 (off) or 1; level 2 is permanent and is not offered");
         if (this.options.env.productionRdpLevel !== undefined && resolveProductionRdpLevel(this.options.env.productionRdpLevel, this.file).source === "env") throw lockedBy("HYDRA_UMC_PRODUCTION_RDP_LEVEL");
         merged.rdpLevel = productionPatch.rdpLevel;
+      }
+      if (productionPatch.requireSignedFlash !== undefined) {
+        if (typeof productionPatch.requireSignedFlash !== "boolean") throw new SecurityConfigError(400, "production.requireSignedFlash must be true or false");
+        if (resolveProductionRequireSignedFlash(this.options.env.productionRequireSignedFlash, this.file).source === "env") throw lockedBy("HYDRA_UMC_PRODUCTION_REQUIRE_SIGNED_FLASH");
+        merged.requireSignedFlash = productionPatch.requireSignedFlash;
       }
       next.production = merged;
     }
@@ -2348,7 +2369,8 @@ export class SecurityConfig {
       if (patch.robots.readOnly !== undefined) log(`[SECURITY] ${actor} switched the read-only mode of the server ${snapshot.robots.readOnly.value ? "ON (nothing is changed except STOP and the safe-mode disable)" : "off"}.`);
     }
     if (patch.production !== undefined) {
-      log(`[SECURITY] ${actor} set the read-out protection level of a production flash to ${snapshot.production.rdpLevel.value} (${snapshot.production.rdpLevel.value === 1 ? "on" : "off"}).`);
+      if (patch.production.rdpLevel !== undefined) log(`[SECURITY] ${actor} set the read-out protection level of a production flash to ${snapshot.production.rdpLevel.value} (${snapshot.production.rdpLevel.value === 1 ? "on" : "off"}).`);
+      if (patch.production.requireSignedFlash !== undefined) log(`[SECURITY] ${actor} ${snapshot.production.requireSignedFlash.value ? "now requires" : "no longer requires"} a signature, a target and a minimum bootloader on a firmware flash.`);
     }
 
     if (patch.ingest !== undefined) {

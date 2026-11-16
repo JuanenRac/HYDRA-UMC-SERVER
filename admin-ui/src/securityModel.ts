@@ -33,6 +33,7 @@ export const SWITCHES: readonly SwitchDef[] = [
   { id: 'health.open', section: 'health', key: 'open', riskyWhen: true, label: 'sw_health_open', warning: 'warn_health_open', confirm: 'confirm_health_open', warningCode: 'health_open' },
   { id: 'safety.publishGlobalStop', section: 'safety', key: 'publishGlobalStop', riskyWhen: null, label: 'sw_publish_stop', warning: null, confirm: null, warningCode: 'global_stop_published' },
   { id: 'safety.latchGlobalStop', section: 'safety', key: 'latchGlobalStop', riskyWhen: null, label: 'sw_latch_stop', warning: null, confirm: null, warningCode: null },
+  { id: 'production.requireSignedFlash', section: 'production', key: 'requireSignedFlash', riskyWhen: null, label: 'sw_require_signed_flash', warning: null, confirm: null, warningCode: null },
   { id: 'safety.framErase', section: 'safety', key: 'framErase', riskyWhen: true, label: 'sw_fram_erase', warning: 'warn_fram_erase', confirm: 'confirm_fram_erase', warningCode: 'fram_erase_on', sendsConfirm: true },
   { id: 'connections.recordAddress', section: 'connections', key: 'recordAddress', riskyWhen: true, label: 'sw_record_address', warning: 'warn_record_address', confirm: 'confirm_record_address', warningCode: 'connection_address_recorded' },
   { id: 'camera.open', section: 'camera', key: 'open', riskyWhen: true, label: 'sw_camera_open', warning: 'warn_camera_open', confirm: 'confirm_exposure', warningCode: 'camera_open' },

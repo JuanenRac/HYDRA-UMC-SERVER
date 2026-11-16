@@ -71,6 +71,7 @@ export interface IssuedConfirmation {
   job_id: string;
   expires_at: number;
   ttl_seconds: number;
+  /** A promise of the verifier, not of this server: the service that checks the token remembers the `jti` it accepted until the token expires. */
   single_use: true;
 }
 
