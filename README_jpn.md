@@ -142,7 +142,7 @@ HYDRA-UMC SERVER は、HYDRA-UMC マルチロボット・マイクロファク�
 | 脅威 | 防御 | 場所 |
 |---|---|---|
 | 既知の鍵で署名されたトークン | `NODE_ENV=production` では、`JWT_SECRET` が空・例のまま・短い場合や初期管理者が無い場合、サーバーは起動を拒否します。開発では組み込みの値を使い、`[SECURITY]` の警告を出します | `src/auth.ts`, `src/secretsPolicy.ts` |
-| サインインへの総当たり、または停止の大量送信 | サインイン失敗はアドレスごとに 15 分で 5 回まで（`429`）、リフレッシュは毎分 120 回、全体停止は毎分 60 回までで、`LOGIN_RATE_LIMIT_MAX`、`REFRESH_RATE_LIMIT_MAX`、`STOP_ALL_RATE_LIMIT_MAX` で変更できます。パスワードはランダムなソルト付きの scrypt で、同時 4 件・待ち 20 件までなので、大量送信でサーバーが枯渇しません | `src/auth.ts`, `src/users.ts` |
+| サインインへの総当たり、または停止の大量送信 | サインイン失敗はアドレスごとに 15 分で 5 回まで（`429`）、リフレッシュは毎分 120 回までで、`LOGIN_RATE_LIMIT_MAX`、`REFRESH_RATE_LIMIT_MAX` で変更できます。全体停止には回数制限がありません。パスワードはランダムなソルト付きの scrypt で、同時 4 件・待ち 20 件までなので、大量送信でサーバーが枯渇しません | `src/auth.ts`, `src/users.ts` |
 | 盗まれたトークン、またはアドレスから読み取られたトークン | アクセストークンは期限切れになり（`JWT_EXPIRES_IN`、既定 30 日、信頼できる LAN の外では 24 時間を推奨）、ローテーションするリフレッシュトークンで更新されます。WebSocket はトークンを `hydra.bearer` サブプロトコルで受け取り、`HYDRA_UMC_WS_QUERY_TOKEN=allow` で許可しない限り `?token=` を拒否し、起動のたびに警告します | `src/refresh_tokens.ts`, `src/ws.ts` |
 | 同じロボットを 2 つのクライアントが動かす、またはロボットが受け取るべきでないコマンド | ロボットは 1 つのアカウントとウィンドウに予約され、書き込みには `If-Match` が必要で（古いリビジョンは `412`）、閲覧者ロールは書き込めません。ジョグの大きさとヒートベッドの最高目標は管理者が設定した安全制限から来ます。全体停止は予約に関係なく動きます | `src/claimPolicy.ts`, `src/safetyLimits.ts`, `src/routes/commandRoutes.ts` |
 | ネットワーク上の誰にでも見えるカメラ映像 | ライブ映像、写真、録画には 5 分間有効の署名付きチケット（またはベアラートークン）が必要です。カメラは最大 8 台で、カメラのパスワードはプロセス一覧とログに出ません。`HYDRA_UMC_CAMERA_AUTH=open` は一時的な除外設定です | `src/mediaTickets.ts`, `src/serverPolicy.ts` |
@@ -216,7 +216,9 @@ CORS は、設定可能な許可リスト（`CORS_ALLOWED_ORIGINS`、下記「�
 - `HYDRA_UMC_LOG_MAX_BYTES` と `HYDRA_UMC_LOG_KEEP` - サーバーログをローテーションするサイズ（既定 10 MB）と、保持するローテーション済みファイルの数（既定 1）。
 - `HYDRA_UMC_SETTINGS_STORE`、`HYDRA_UMC_SETTINGS_BACKUPS`、`HYDRA_UMC_SETTINGS_BACKUP_INTERVAL_S` - 既定では設定（`settings.json` とポイントファイル）はジャーナル付きの全か無かの単位として書き込まれます。中断された書き込みは次回起動時に完了または破棄され、`settings.json` のコピーが `data/backups/` に保存され（10 件、最短 600 秒間隔）、壊れた `settings.json` は最新の正常なコピーから復元されます。`HYDRA_UMC_SETTINGS_STORE=plain` でファイルを 1 つずつ書く方式に戻せ、`HYDRA_UMC_SETTINGS_BACKUPS=0` でコピーを無効にできます。
 - AI リレーのアクセス、ホスト情報のサインイン要否、TLS（証明書と鍵のパス、証明書の SHA-256 フィンガープリント付き）は、管理者が制御アプリのサーバー管理画面から変更することもできます。環境変数で設定された値が優先され、ロック表示になります。サインイン要否は無効にする前に確認を求め、TLS は次回起動時に反映されます。
-- `STOP_ALL_RATE_LIMIT_MAX` / `STOP_ALL_RATE_LIMIT_WINDOW_MS` —— グローバル停止(`POST /api/stop-all`)のアドレスごとの上限。ログインとは別枠です(既定は毎分 60 回)。本番では、デプロイ用テンプレートの例の `JWT_SECRET` やブートストラップパスワード、32 文字未満の `JWT_SECRET`、12 文字未満のブートストラップパスワードでは起動を拒否します。
+- `HYDRA_UMC_SAFETY_LATCH_STOP` (`safety.latchGlobalStop`) —— 既定はオフです。グローバル停止中は、`stop` と `disable` 以外のロボットコマンドをすべて `423` で拒否します。グローバル停止そのものには回数制限がなく、応答の前に `data/global-stop.json` へ書き込まれます。再起動後も、管理者が `POST /api/stop-all/release` を呼ぶまでサーバーは停止状態で戻ります。
+- `role` なしで作成したアカウントは `viewer`(読み取り専用)になります。管理者は `"admin"` を指定したときだけ作成されます。
+- 本番では、デプロイ用テンプレートの例の `JWT_SECRET` やブートストラップパスワード、32 文字未満の `JWT_SECRET`、12 文字未満のブートストラップパスワードでは起動を拒否します。
 
 ### TLS / HTTPS
 
