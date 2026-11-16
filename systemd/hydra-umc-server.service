@@ -36,7 +36,10 @@ Wants=network-online.target
 User=hydra-umc-server
 Group=hydra-umc-server
 WorkingDirectory=/opt/hydra-umc/server
-EnvironmentFile=-/etc/hydra-umc/server.env
+# Production by default, and the settings file is required: without it the unit does not start, instead of
+# starting in development mode (secret from the source, any origin, listening on every interface).
+Environment=NODE_ENV=production
+EnvironmentFile=/etc/hydra-umc/server.env
 ExecStart=/usr/bin/node dist/server.cjs
 Restart=on-failure
 RestartSec=5
