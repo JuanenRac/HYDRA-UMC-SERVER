@@ -21,6 +21,7 @@ JOB-DISPATCHER  <--POST /jobs/stop-ack------  SERVER  (only after the stop was a
 
 - **Off by default.** `jobDispatcher.stopRelay.enabled` in `data/server-config.json`, or `HYDRA_UMC_JOB_STOP_RELAY=1` (the environment wins). Nothing is read from the dispatcher while it is off.
 - **Fail closed.** A stop that could not be applied is never acknowledged: the dispatcher then keeps the job `unknown`, or, only if its own `replan.allow_unconfirmed` switch is on, reassigns it on its own responsibility. A robot that is not in `robotMap` is neither stopped nor acknowledged. A request that the dispatcher marks `expired`, or that is older than `maxRequestAgeSeconds`, is not delivered.
+- **A silent robot is not confirmed.** The stop is applied in the state of this server, which cannot tell whether the order reached a robot that is not sending news. By default that stop is not acknowledged (see `silentRobot`).
 - **A wrong setting stops the relay from starting** and says why in the log; it never falls back to a default.
 - **No secret in the file.** The address is `HYDRA_UMC_JOB_DISPATCHER_URL` (or `jobDispatcher.stopRelay.url`) and the token is only `HYDRA_UMC_JOB_DISPATCHER_TOKEN`.
 - **Every outcome is audited** (`job-stop-relay`: stopped and acknowledged, refused, or failed).
@@ -40,6 +41,7 @@ An administrator edits the switch (`jobDispatcher.stopRelay.enabled`, applied on
       "requestTimeoutMs": 3000,
       "maxRequestAgeSeconds": 120,
       "maxFailureBackoffSeconds": 60,
+      "silentRobot": "withhold",
       "robotMap": { "arm-1": 1, "arm-2": 2 }
     }
   }
@@ -52,6 +54,7 @@ An administrator edits the switch (`jobDispatcher.stopRelay.enabled`, applied on
 | `requestTimeoutMs` | The longest wait for one answer of the dispatcher. | 3000 |
 | `maxRequestAgeSeconds` | A request older than this is not delivered (the dispatcher has decided by then). | 120 |
 | `maxFailureBackoffSeconds` | After a failed read the pause doubles up to this limit. | 60 |
+| `silentRobot` | What to do with the stop of a robot this server has not heard from (silent for longer than `liveness.staleAfterS`, or never heard): `"withhold"` applies the stop in the state of this server and does not acknowledge it, so the dispatcher keeps the job `unknown` and the next pass acknowledges it once the robot is heard; `"server-state"` acknowledges it with `confirmedBy: "server-state"` so the dispatcher can tell it from a confirmation of a robot that was heard. | `"withhold"` |
 | `robotMap` | The robot id of the dispatcher mapped to the numeric id of the robot in this server. | none (nothing is delivered) |
 
 ## Limits

@@ -796,6 +796,10 @@ async function startServer() {
         log: industrialLog,
         audit: (event) => audit.record({ type: event.type, outcome: event.outcome, robotId: event.robotId, detail: event.detail }),
         onAcknowledged: (jobId, robotId) => orchestratorTakeover?.recordProof(jobId, robotId),
+        robotNews: (robotId) => {
+          const staleAfterS = staleAfterFrom((loadServerConfig() as { liveness?: { staleAfterS?: unknown } }).liveness?.staleAfterS);
+          return livenessTracker.report(getSettings(), staleAfterS).robots.find((r) => r.robot_id === robotId)?.state;
+        },
         stopRobot: (robotId) => {
           // The same stop as the single-robot "stop" command: no claim holds it back.
           for (const controller of getSettings()?.controllers ?? []) {
