@@ -9,7 +9,7 @@
 //
 // The secret of an account is kept encrypted (AES-256-GCM, a key derived from HYDRA_UMC_TOTP_KEY or, when that is not set,
 // from JWT_SECRET) in data/totp.json, written through a temporary file and a rename; the recovery codes are kept only as
-// hashes; a code that was accepted once is not accepted again inside its thirty seconds; and five wrong codes in a row make the
+// keyed hashes (an HMAC under a key of the server, so a copy of the file cannot be searched for the short codes); a code that was accepted once is not accepted again inside its thirty seconds; and five wrong codes in a row make the
 // next tries wait, longer each time (in memory, so a restart clears the wait).
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import fs from "node:fs";
@@ -19,6 +19,8 @@ const STEP_S = 30;
 const DIGITS = 6;
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 export const RECOVERY_CODES = 10;
+/** Hexadecimal digits of a recovery code: 20 are 80 bits. (The first codes this server issued had 10 digits, 40 bits; they stay valid until the person gets new ones.) */
+export const RECOVERY_CODE_DIGITS = 20;
 const ISSUER = "HYDRA-UMC";
 
 export function base32(bytes: Buffer): string {
@@ -76,18 +78,26 @@ function open(sealed: Sealed | undefined, key: Buffer): Buffer | undefined {
     return Buffer.concat([decipher.update(Buffer.from(sealed.data, "base64")), decipher.final()]);
   } catch { return undefined; }
 }
-const recoveryHash = (code: string): string => createHash("sha256").update(`hydra-recovery/v1\0${code.replace(/[\s-]/g, "").toLowerCase()}`).digest("hex");
+const normalizedRecovery = (code: string): string => code.replace(/[\s-]/g, "").toLowerCase();
+/** The way the first codes were kept: a plain SHA-256 without a key. Only read, to honour the codes that were issued that way; nothing new is written like this. */
+const legacyRecoveryHash = (code: string): string => createHash("sha256").update(`hydra-recovery/v1\0${normalizedRecovery(code)}`).digest("hex");
+const recoveryKeyOf = (secret: string): Buffer => createHash("sha256").update(`hydra-recovery/v2\0${secret}`).digest();
+/** How a code is kept now: `v2:` and the HMAC-SHA256 of the code under a key of the server (the same secret that seals the second-factor secrets). */
+const keyedRecoveryHash = (code: string, key: Buffer): string => `v2:${createHmac("sha256", key).update(normalizedRecovery(code)).digest("hex")}`;
+/** A new code: 20 hexadecimal digits from the system's random source, in groups of five. */
+const newRecoveryCode = (): string => randomBytes(RECOVERY_CODE_DIGITS / 2).toString("hex").replace(/(.{5})(?=.)/g, "$1-");
 
 export class TotpStore {
   readonly #records = new Map<string, StoredRecord>();
   readonly #file: string;
   readonly #key: Buffer;
+  readonly #recoveryKey: Buffer;
   readonly #now: () => number;
   /** Wrong codes in a row per account, in memory: five and the next tries wait. */
   readonly #fails = new Map<string, { count: number; until: number }>();
 
   constructor(options: { file: string; secret: string; now?: () => number }) {
-    this.#file = options.file; this.#key = keyOf(options.secret); this.#now = options.now ?? Date.now;
+    this.#file = options.file; this.#key = keyOf(options.secret); this.#recoveryKey = recoveryKeyOf(options.secret); this.#now = options.now ?? Date.now;
     try {
       const saved = JSON.parse(fs.readFileSync(this.#file, "utf8")) as { users?: Record<string, StoredRecord> };
       for (const [id, record] of Object.entries(saved.users ?? {})) {
@@ -125,9 +135,9 @@ export class TotpStore {
     if (!record || !secret) return undefined;
     const step = this.#match(secret, code, 0);
     if (step === undefined) return undefined;
-    const codes = Array.from({ length: RECOVERY_CODES }, () => { const raw = randomBytes(5).toString("hex"); return `${raw.slice(0, 5)}-${raw.slice(5)}`; });
+    const codes = Array.from({ length: RECOVERY_CODES }, newRecoveryCode);
     record.secret = record.pending; record.pending = undefined; record.lastStep = step; record.enabledAt = new Date(this.#now()).toISOString();
-    record.recovery = codes.map(recoveryHash);
+    record.recovery = codes.map((code) => keyedRecoveryHash(code, this.#recoveryKey));
     this.#persist();
     return codes;
   }
@@ -152,8 +162,11 @@ export class TotpStore {
     const step = this.#match(secret, text, record.lastStep);
     if (step !== undefined) { record.lastStep = step; good = true; this.#persist(); }
     else {
-      const hashed = recoveryHash(text);
-      const index = record.recovery.findIndex((item) => equalText(item, hashed));
+      // A code is looked for in the way it is kept now and in the way the first ones were; whichever it is found in, it is used up (so a code of
+      // the first kind is gone for good once it is spent, and the codes of the new kind are the only ones a new enrolment gives).
+      const keyed = keyedRecoveryHash(text, this.#recoveryKey);
+      const legacy = legacyRecoveryHash(text);
+      const index = record.recovery.findIndex((item) => equalText(item, keyed) || equalText(item, legacy));
       if (index >= 0) { record.recovery.splice(index, 1); good = true; this.#persist(); }
     }
     if (good) this.#fails.delete(userId);
@@ -167,6 +180,9 @@ export class TotpStore {
   }
 
   recoveryLeft(userId: string): number { return this.#records.get(userId)?.recovery.length ?? 0; }
+
+  /** How many of the recovery codes left are of the first kind (40 bits, kept as an unkeyed hash): the person is told to enrol again to get stronger ones. */
+  legacyRecoveryLeft(userId: string): number { return (this.#records.get(userId)?.recovery ?? []).filter((item) => !item.startsWith("v2:")).length; }
 
   /** Turns the second factor off for an account (the administrator who resets it, or the person with their password and a code). */
   disable(userId: string): void { if (this.#records.delete(userId)) { this.#fails.delete(userId); this.#persist(); } }
