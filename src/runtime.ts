@@ -11,6 +11,7 @@ import fs from "fs";
 import Bonjour from "bonjour-service";
 import { resolveLogKeep, resolveLogMaxBytes, rotateLogFiles } from "./logRotation";
 import { resolveListenPort } from "./listenPort";
+import { ServerConfigReader } from "./serverConfigFile";
 
 // Bonjour/mDNS service for instant discovery
 export const bonjour = new Bonjour();
@@ -42,6 +43,8 @@ if (!fs.existsSync(path.dirname(LOG_FILE))) fs.mkdirSync(path.dirname(LOG_FILE),
 // and more frequently-written file) since this is small, rarely changes,
 // and is read once at startup rather than kept live in memory throughout.
 const SERVER_CONFIG_FILE = path.join(process.cwd(), "data", "server-config.json");
+// A file that is there and cannot be understood is never read as "no options" (src/serverConfigFile.ts).
+const serverConfigReader = new ServerConfigReader(SERVER_CONFIG_FILE, (message) => industrialLog(message));
 
 import type { BleFile } from "./securityConfig";
 import type { MqttFile } from "./mqttBridge";
@@ -88,11 +91,12 @@ export interface ServerConfig {
 }
 
 export function loadServerConfig(): ServerConfig {
-  try {
-    return JSON.parse(fs.readFileSync(SERVER_CONFIG_FILE, "utf-8"));
-  } catch {
-    return {};
-  }
+  return serverConfigReader.read() as ServerConfig;
+}
+
+/** Start-up check: a saved options file that exists and cannot be understood stops the server (a copy is kept) instead of becoming "no options". */
+export function checkServerConfigAtStart(): void {
+  serverConfigReader.readAtStart();
 }
 
 export function saveServerConfig(config: ServerConfig) {

@@ -306,3 +306,54 @@ test("without the latch (the default) the global stop does not hold the commands
   const latched = setup(makeSettings(), { motionLatched: () => true });
   assert.equal((await latched.call("1", { command: "nope" })).status, 400);
 });
+
+test("a relative jog may not end beyond the absolute range of the model, and a refused jog moves nothing", async () => {
+  const t = setup(makeSettings(), { safety: { get: () => ({ jog: { armRequired: false } }), jogFor: () => ({ maxAmount: 100, maxAbsolute: 150 }) } });
+  const arm = robot(t.settings, 3);
+  arm.pos.x = 140;
+  const before = JSON.stringify(arm.pos);
+  const over = await t.call("3", { command: "jog", params: { axis: "x", amount: 20 } });
+  assert.equal(over.status, 200);
+  assert.equal(over.json.warnings?.[0]?.field, "jog");
+  assert.match(over.json.warnings[0].message, /would end at x 160/);
+  assert.equal(JSON.stringify(arm.pos), before);
+  assert.equal(t.deltas.length, 0);
+  // back toward the middle is fine, and an end exactly on the limit is allowed
+  await t.call("3", { command: "jog", params: { axis: "x", amount: -20 } });
+  assert.equal(arm.pos.x, 120);
+  await t.call("3", { command: "jog", params: { axis: "x", amount: 30 } });
+  assert.equal(arm.pos.x, 150);
+  const past = await t.call("3", { command: "jog", params: { axis: "x", amount: 1 } });
+  assert.equal(past.json.warnings?.[0]?.field, "jog");
+  assert.equal(arm.pos.x, 150);
+});
+
+test("joints sent with a jog must be inside the range of the joints of the model", async () => {
+  const t = setup();
+  const arm = robot(t.settings, 3);
+  const before = JSON.stringify(arm.joints);
+  const r = await t.call("3", { command: "jog", params: { axis: "x", amount: 1, joints: { j1: 400, j2: 0, j3: 0, j4: 0, j5: 0, j6: 0 } } });
+  assert.equal(r.json.warnings?.[0]?.field, "jog");
+  assert.match(r.json.warnings[0].message, /j1 outside the range/);
+  assert.equal(JSON.stringify(arm.joints), before);
+  assert.equal(arm.pos.x, 1, "the position did not change either");
+  assert.equal(t.deltas.length, 0);
+});
+
+test("a jog of the XY table is checked like the table command: the end position, not only the size of the step", async () => {
+  const t = setup(makeSettings(), { safety: { get: () => ({ jog: { armRequired: false } }), jogFor: () => ({ maxAmount: 100, maxAbsolute: 150 }) } });
+  const arm = robot(t.settings, 3);
+  arm.xyTable.pos.y = 140;
+  const relative = await t.call("3", { command: "jog", params: { axis: "y", amount: 20, target: "xytable" } });
+  assert.equal(relative.json.warnings?.[0]?.field, "jog");
+  assert.equal(arm.xyTable.pos.y, 140);
+  const absolute = await t.call("3", { command: "jog", params: { axis: "y", amount: 151, absolute: true, target: "xytable" } });
+  assert.equal(absolute.json.warnings?.[0]?.field, "jog");
+  assert.equal(arm.xyTable.pos.y, 140);
+  assert.equal(t.deltas.length, 0);
+  await t.call("3", { command: "jog", params: { axis: "y", amount: 10, target: "xytable" } });
+  assert.equal(arm.xyTable.pos.y, 150);
+  await t.call("3", { command: "jog", params: { axis: "x", amount: 100, absolute: true, target: "xytable" } });
+  assert.equal(arm.xyTable.pos.x, 100);
+  assert.equal(arm.pos.tx, 100, "the absolute jog keeps writing the older representation, as before");
+});

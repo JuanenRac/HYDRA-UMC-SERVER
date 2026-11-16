@@ -92,7 +92,7 @@ test("the key comes from a file, at least 32 characters; a missing or short one 
 });
 
 // a stand-in for express: it keeps the handlers of the route and runs the chain
-function mount(deps: { enabled: boolean; key: Buffer | null; role?: string }) {
+function mount(deps: { enabled: boolean; key: Buffer | null; role?: string; rateLimiter?: (req: any, res: any, next: any) => unknown }) {
   let chain: Array<(req: any, res: any, next: any) => unknown> = [];
   const app: any = { post: (_path: string, ...handlers: Array<(req: any, res: any, next: any) => unknown>) => { chain = handlers; } };
   const audit: any[] = [];
@@ -103,6 +103,7 @@ function mount(deps: { enabled: boolean; key: Buffer | null; role?: string }) {
     key: () => deps.key,
     audit: { record: (entry) => audit.push(entry) },
     now: () => NOW,
+    ...(deps.rateLimiter ? { rateLimiter: deps.rateLimiter } : {}),
   });
   const call = (body: unknown) => {
     const result: { status: number; json?: any; headers: Record<string, string> } = { status: 200, headers: {} };
@@ -156,4 +157,16 @@ test("without a usable key the route answers 503; a bad body answers 400; both a
   assert.equal(refused.status, 400);
   assert.equal(refused.json.code, "confirmation-not-confirmed");
   assert.equal(withKey.audit[0].outcome, "refused");
+});
+
+test("the route goes through the limiter of the sensitive routes before anything else, and a limiter that says no issues nothing", () => {
+  const order: string[] = [];
+  const open = mount({ enabled: true, key: KEY, rateLimiter: (_req, _res, next) => { order.push("limiter"); return next(); } });
+  assert.equal(open.call(GOOD).status, 200);
+  assert.deepEqual(order, ["limiter"]);
+  const blocked = mount({ enabled: true, key: KEY, rateLimiter: (_req, res) => res.status(429).json({ error: "slow down" }) });
+  const answer = blocked.call(GOOD);
+  assert.equal(answer.status, 429);
+  assert.equal(answer.json.token, undefined);
+  assert.equal(blocked.audit.length, 0);
 });

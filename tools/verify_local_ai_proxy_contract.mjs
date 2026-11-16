@@ -198,7 +198,7 @@ async function main() {
 
     // What the dashboard reads to know whether to show its remaining-useful-life card: any signed-in account, never anonymous, three
     // fields and nothing else. Closed by default; open once an administrator switches rul.enabled on; closed again when the stored
-    // configuration cannot be read at start (fail-closed; a file that is damaged while running only resets the limits, as for the relay).
+    // configuration cannot be read at start (fail-closed; a file that is damaged while running keeps the last good options in use, as for the relay).
     const rulConfigUrl = `http://127.0.0.1:${serverPort}/api/rul/config`;
     assert.equal((await fetch(rulConfigUrl)).status, 401, "anonymous");
     const rulClosed = await fetch(rulConfigUrl, { headers: auth });
@@ -213,7 +213,7 @@ async function main() {
     await writeFile(configFile, JSON.stringify({ ...stored, rul: { enabled: true, maxPoints: 64, timeoutMs: 1500, maxBodyBytes: 4096, token: "never-shown" } }));
     assert.deepEqual(await (await fetch(rulConfigUrl, { headers: auth })).json(), { enabled: true, maxPoints: 64, timeoutMs: 1500 }, "the limits of the file, and only those");
     await writeFile(configFile, "{ this is not json");
-    assert.deepEqual(await (await fetch(rulConfigUrl, { headers: auth })).json(), { enabled: true, maxPoints: 5000, timeoutMs: 8000 }, "damaged file: the switch is the one the relay enforces (held in memory), the limits fall back to their defaults");
+    assert.deepEqual(await (await fetch(rulConfigUrl, { headers: auth })).json(), { enabled: true, maxPoints: 64, timeoutMs: 1500 }, "damaged file while running: the last good options keep being used, nothing falls back to the defaults");
     await writeFile(configFile, JSON.stringify(stored));
 
     // A real, known service whose own systemd unit simply isn't running
