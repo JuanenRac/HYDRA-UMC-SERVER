@@ -10,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import type { AddressInfo } from "node:net";
 import express from "express";
+import { createHash } from "node:crypto";
 import { TotpStore, base32, fromBase32, totpCode, stepOf, RECOVERY_CODES } from "../src/totp";
 
 const RFC_SECRET = Buffer.from("12345678901234567890");
@@ -170,5 +171,50 @@ test("sign-in over HTTP: an account without the factor signs in as before, one w
     server?.close();
     process.chdir(originalCwd);
     fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+});
+
+test("recovery codes have 80 bits, are kept as a keyed hash, and the codes of the first kind still work once", () => {
+  const clock = { t: 1_700_000_000_000 };
+  const { store, file, dir } = newStore(clock);
+  try {
+    const { secret } = store.begin("u1", "ana");
+    const recovery = store.confirm("u1", totpCode(fromBase32(secret), stepOf(clock.t)))!;
+    assert.equal(recovery.length, RECOVERY_CODES);
+    for (const code of recovery) assert.match(code, /^[0-9a-f]{5}-[0-9a-f]{5}-[0-9a-f]{5}-[0-9a-f]{5}$/, "20 hexadecimal digits in four groups");
+    assert.equal(new Set(recovery).size, RECOVERY_CODES, "all different");
+    // the file holds no code and no plain hash of one: only `v2:` and an HMAC under the key of the server
+    const text = fs.readFileSync(file, "utf8");
+    for (const code of recovery) {
+      assert.ok(!text.includes(code) && !text.includes(code.replace(/-/g, "")));
+      assert.ok(!text.includes(createHash("sha256").update("hydra-recovery/v1\0" + code.replace(/-/g, "")).digest("hex")), "not the unkeyed hash of the first kind");
+    }
+    const kept = JSON.parse(text).users.u1.recovery as string[];
+    assert.ok(kept.every((item) => /^v2:[0-9a-f]{64}$/.test(item)));
+    assert.equal(store.legacyRecoveryLeft("u1"), 0);
+    // the code is accepted as it was shown, with spaces or capitals, once
+    assert.equal(store.verify("u1", ` ${recovery[0]!.toUpperCase().replace(/-/g, " ")} `), true);
+    assert.equal(store.verify("u1", recovery[0]!), false);
+    // another key of the server does not open them: a copy of the file is of no use elsewhere
+    const other = new TotpStore({ file, secret: "another-secret", now: () => clock.t });
+    assert.equal(other.verify("u1", recovery[1]!), false);
+    // the first 40 bit codes (an unkeyed SHA-256) that are already in the file keep working until they are used, and are used up like the others
+    const legacy = "abcde-12345";
+    const legacyHash = createHash("sha256").update("hydra-recovery/v1\0" + legacy.replace(/-/g, "")).digest("hex");
+    const saved = JSON.parse(fs.readFileSync(file, "utf8"));
+    saved.users.u1.recovery.push(legacyHash);
+    fs.writeFileSync(file, JSON.stringify(saved));
+    const upgraded = new TotpStore({ file, secret: "test-secret", now: () => clock.t });
+    assert.equal(upgraded.recoveryLeft("u1"), RECOVERY_CODES);
+    assert.equal(upgraded.legacyRecoveryLeft("u1"), 1);
+    assert.equal(upgraded.verify("u1", legacy), true);
+    assert.equal(upgraded.verify("u1", legacy), false, "spent");
+    assert.equal(upgraded.legacyRecoveryLeft("u1"), 0);
+    assert.equal(upgraded.recoveryLeft("u1"), RECOVERY_CODES - 1);
+    assert.ok(!fs.readFileSync(file, "utf8").includes(legacyHash), "and removed from the file");
+    // a code of the wrong length or alphabet is simply wrong
+    for (const wrong of ["abcde-12345-abcde", "zzzzz-zzzzz-zzzzz-zzzzz", "", "0".repeat(40)]) assert.equal(upgraded.verify("u1", wrong), false, wrong);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });

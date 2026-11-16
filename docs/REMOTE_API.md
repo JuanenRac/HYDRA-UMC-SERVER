@@ -184,7 +184,9 @@ POST /api/login
   account without it signs in exactly as above. `POST /api/totp/begin` `{ "password" }` (signed in; asks for the
   password again) answers `{ "secret", "uri" }` for an authenticator app (RFC 6238, six digits, thirty seconds);
   `POST /api/totp/confirm` `{ "code" }` with the first code turns it on and answers ten one-time
-  `recoveryCodes` (shown once, kept only as hashes); `GET /api/totp/status` answers
+  `recoveryCodes` (shown once; each is 20 hexadecimal digits, 80 bits, written in groups of five, and is kept only as an
+  HMAC-SHA256 under a key of the server, so the codes cannot be searched for in a copy of `data/totp.json`; the codes
+  that were issued before, of 10 digits, keep working until they are used or replaced by enrolling again); `GET /api/totp/status` answers
   `{ "enabled", "recoveryLeft" }`; `POST /api/totp/disable` `{ "password", "code" }` turns it off (a current code or an
   unused recovery code). From then on `POST /api/login` also needs `"totp": "<code or recovery code>"`; without it the
   answer is `401` with `{ "totpRequired": true }`, five wrong codes in a row make the next tries wait (`429` with
