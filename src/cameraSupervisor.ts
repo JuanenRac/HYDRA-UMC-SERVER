@@ -15,6 +15,7 @@ import {
 import { visionStreamerExecutablePath } from "./ecosystemStatus";
 import { probeCameraStream, streamHealthy, describeUnhealthy } from "./cameraHealth";
 import { industrialLog } from "./runtime";
+import { serializeCameraPidFile, pidsToReap } from "./cameraPidFile";
 
 export function createCameraSupervisor() {
   // --- Real per-camera process supervisor -------------------------------
@@ -91,7 +92,7 @@ export function createCameraSupervisor() {
       .filter((pid): pid is number => typeof pid === "number");
     try {
       fs.mkdirSync(path.dirname(cameraPidFilePath()), { recursive: true });
-      fs.writeFileSync(cameraPidFilePath(), JSON.stringify(pids), "utf-8");
+      fs.writeFileSync(cameraPidFilePath(), serializeCameraPidFile(pids), "utf-8");
     } catch {
       // best-effort - losing this file only means a future orphan from
       // THIS incarnation won't be reaped next boot, not a functional
@@ -106,16 +107,22 @@ export function createCameraSupervisor() {
     } catch {
       return; // no pidfile yet (first run ever, or already empty) - nothing to reap
     }
-    if (!Array.isArray(pids)) return;
-    let killed = 0;
-    for (const pid of pids) {
-      if (typeof pid !== "number") continue;
+    // On Linux only a number whose boot and start time are the ones written (see cameraPidFile.ts) is stopped: after a reboot the same numbers belong to other processes.
+    const alive = (pid: number): boolean => {
       try {
         process.kill(pid, 0); // real liveness probe - throws (ESRCH) if this PID is already gone, the common case
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    let killed = 0;
+    for (const pid of pidsToReap(pids, alive)) {
+      try {
         process.kill(pid, "SIGTERM");
         killed++;
       } catch {
-        // already gone - nothing to reap for this one
+        // gone between the probe and the signal - nothing to reap for this one
       }
     }
     if (killed > 0) {
