@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **The systemd unit starts in production mode and needs its settings file:** `systemd/hydra-umc-server.service` sets `Environment=NODE_ENV=production` and no longer tolerates a missing `/etc/hydra-umc/server.env` (the `-` of `EnvironmentFile` is gone), so a machine restored without that file fails to start instead of running in development mode (secret from the source, any origin allowed, default administrator account, every interface). The installer of HYDRA-UMC-OS always creates and checks the file before the unit starts. `tests/systemdUnit.test.ts` (new) reads the unit and fixes both lines.
+
 - **The manual production-files build no longer refuses a four-component version:** `package.json` and `package-lock.json` must equal the first three components of the manifest version (npm has no fourth component) and agree with each other, and the archive keeps the name of the manifest version. The rule lives in `tools/extra_checks.py` (`dist-version`), the workflow runs it, and the validator tries it on made-up folders (three components equal, four components with a three-component `package.json`, and a different `package.json` or lock failing).
 
 
