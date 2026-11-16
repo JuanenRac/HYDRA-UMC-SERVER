@@ -292,3 +292,57 @@ test("over the WebSocket an administrator overwrites the settings from the house
     fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }
 });
+
+test("a renewal from outside is refused before its token is used, so the same session renews once back in the house", async () => {
+  const { default: fs } = await import("node:fs");
+  const { default: os } = await import("node:os");
+  const { default: path } = await import("node:path");
+  const { default: express } = await import("express");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hydra-umc-trusted-refresh-"));
+  const originalCwd = process.cwd();
+  process.chdir(dir);
+  let server: import("node:http").Server | undefined;
+  try {
+    const { createUser } = await import("../src/users");
+    const { registerAuthRoutes } = await import("../src/routes/auth");
+    await createUser("ana", "correct-horse-battery", "operator");
+    // the test client sits on the loopback: "inside" when the house is the loopback, "outside" when it is another range
+    let settings = resolveTrustedNetworks(true, { local: ["127.0.0.0/8"] });
+    const app = express();
+    app.use(express.json());
+    registerAuthRoutes(app, { trustedNetworks: () => settings });
+    server = app.listen(0, "127.0.0.1");
+    await new Promise((resolve) => server!.once("listening", resolve));
+    const base = "http://127.0.0.1:" + (server.address() as import("node:net").AddressInfo).port;
+    const call = async (method: string, url: string, body?: unknown) => {
+      const response = await fetch(base + url, { method, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+      return { status: response.status, body: (await response.json().catch(() => ({}))) as any };
+    };
+    const house = await call("POST", "/api/login", { username: "ana", password: "correct-horse-battery" });
+    assert.equal(house.status, 200);
+    const refreshToken = house.body.refreshToken as string;
+    assert.ok(refreshToken);
+
+    settings = resolveTrustedNetworks(true, { local: ["192.0.2.0/24"] });
+    const outside = await call("POST", "/api/refresh", { refreshToken });
+    assert.equal(outside.status, 403);
+    assert.equal(outside.body.code, "second-factor-required");
+    assert.equal(outside.body.refreshToken, undefined, "no new token was issued");
+    // asked again from outside: the same answer, the token is still there
+    assert.equal((await call("POST", "/api/refresh", { refreshToken })).status, 403);
+
+    settings = resolveTrustedNetworks(true, { local: ["127.0.0.0/8"] });
+    const back = await call("POST", "/api/refresh", { refreshToken });
+    assert.equal(back.status, 200, "the session was not lost");
+    assert.notEqual(back.body.refreshToken, refreshToken, "and the token is rotated as always");
+    assert.equal((await call("POST", "/api/refresh", { refreshToken })).status, 401, "the old one is spent now");
+
+    // a token that does not exist is not told apart by where it comes from
+    settings = resolveTrustedNetworks(true, { local: ["192.0.2.0/24"] });
+    assert.equal((await call("POST", "/api/refresh", { refreshToken: "0".repeat(64) })).status, 401);
+  } finally {
+    server?.close();
+    process.chdir(originalCwd);
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+});

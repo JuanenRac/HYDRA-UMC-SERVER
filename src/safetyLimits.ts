@@ -12,6 +12,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { commitFiles } from "./transactionalFiles";
+import { refuseDamagedConfig } from "./configFileGuard";
 
 export interface JogLimits {
   /** Largest relative jog of one command (millimetres or degrees, the unit of the axis). */
@@ -142,14 +143,19 @@ export function mergeSafetyConfig(current: SafetyConfig, patch: any): SafetyConf
   return next;
 }
 
-/** Reads the saved file; a missing or damaged one gives the defaults. */
+/**
+ * Reads the saved file. A missing one gives the defaults (a fresh install). One that is there and cannot be understood (damaged, or holding
+ * a value that is refused) stops the start with a copy kept next to it, because the defaults are not the limits an administrator saved (the jog
+ * arming and the lowered limits would be gone without a word); HYDRA_UMC_ALLOW_DAMAGED_CONFIG=1 starts on the defaults all the same.
+ */
 export function loadSafetyConfig(file: string, log: (m: string) => void = () => undefined): SafetyConfig {
   const defaults = defaultSafetyConfig();
   let raw: unknown;
   try {
     raw = JSON.parse(fs.readFileSync(file, "utf-8"));
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") log(`[SAFETY] ${file} could not be read (${(error as Error).message}); the default limits are used.`);
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return defaults;
+    refuseDamagedConfig(file, `it could not be read: ${(error as Error).message}`, log);
     return defaults;
   }
   // A setting this version does not know (written by a newer version, then rolled back) is ignored
@@ -163,7 +169,7 @@ export function loadSafetyConfig(file: string, log: (m: string) => void = () => 
         log(`[SAFETY] ${file} holds a setting this version does not know ("${unknown[1]}"); it is ignored.`);
         continue;
       }
-      log(`[SAFETY] ${file} holds an invalid value (${(error as Error).message}); the default limits are used.`);
+      refuseDamagedConfig(file, `it holds an invalid value: ${(error as Error).message}`, log);
       return defaults;
     }
   }

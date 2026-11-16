@@ -40,7 +40,8 @@ import crypto from "crypto";
 import { findUser, effectiveTokenVersion, effectiveId, type StoredUser } from "./users";
 
 interface StoredRefreshToken {
-  token: string;
+  /** The SHA-256 (hexadecimal) of the token: the token itself is never kept, so a copy of the file lets nobody renew a session. */
+  tokenHash: string;
   username: string;
   tokenVersion: number;
   userId: string;
@@ -53,6 +54,11 @@ interface StoredRefreshToken {
 }
 
 const refreshTokensPath = () => path.join(process.cwd(), "data", "refresh_tokens.json");
+
+/** What the file keeps for a token: its SHA-256. The token is 32 random bytes, so a plain hash is enough (nothing to guess or to stretch). */
+export function hashRefreshToken(token: string): string {
+  return crypto.createHash("sha256").update(token, "utf8").digest("hex");
+}
 
 // Same "?X.Y.Zd/h/m/s" duration parsing JWT_EXPIRES_IN itself is handed to
 // jsonwebtoken for - re-implemented minimally here (no jsonwebtoken
@@ -75,7 +81,11 @@ const REFRESH_TOKEN_TTL_MS = parseDurationMs(process.env.HYDRA_UMC_REFRESH_TOKEN
 
 export class RefreshTokensFileError extends Error {}
 
+/** True when the last read found records of the old format (the token itself, not its hash) and turned them into hashes in memory. */
+let lastLoadFoundPlaintext = false;
+
 function loadRefreshTokens(): StoredRefreshToken[] {
+  lastLoadFoundPlaintext = false;
   let raw: string;
   try {
     raw = fs.readFileSync(refreshTokensPath(), "utf-8");
@@ -95,7 +105,18 @@ function loadRefreshTokens(): StoredRefreshToken[] {
   if (!Array.isArray(parsed)) {
     throw new RefreshTokensFileError(`${refreshTokensPath()} exists but does not contain a JSON array`);
   }
-  return parsed as StoredRefreshToken[];
+  // Files written before the hash was kept hold the token itself: each such record is turned into its hash here, so every save that follows
+  // (the next sign-in, renewal or the sweep at start-up) writes the new format and a renewal with a token that was issued earlier still works.
+  return (parsed as Array<Partial<StoredRefreshToken> & { token?: unknown }>).map((record) => {
+    if (typeof record?.tokenHash === "string") return record as StoredRefreshToken;
+    if (typeof record?.token === "string") {
+      lastLoadFoundPlaintext = true;
+      const plain: string = record.token;
+      const { token: _plain, ...rest } = record;
+      return { ...rest, tokenHash: hashRefreshToken(plain) } as StoredRefreshToken;
+    }
+    return record as StoredRefreshToken;
+  });
 }
 
 function saveRefreshTokens(tokens: StoredRefreshToken[]): void {
@@ -103,7 +124,8 @@ function saveRefreshTokens(tokens: StoredRefreshToken[]): void {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const target = refreshTokensPath();
   const tmp = `${target}.${process.pid}.${Date.now()}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(tokens, null, 2), "utf-8");
+  // Owner-only, like the files of the second factor and the device tokens: the umask of the process does not decide who can read it.
+  fs.writeFileSync(tmp, JSON.stringify(tokens, null, 2), { encoding: "utf-8", mode: 0o600 });
   fs.renameSync(tmp, target);
 }
 
@@ -122,7 +144,7 @@ export function issueRefreshToken(user: StoredUser, clientId?: string, deviceId?
   const tokens = loadRefreshTokens();
   const token = crypto.randomBytes(32).toString("hex");
   tokens.push({
-    token,
+    tokenHash: hashRefreshToken(token),
     username: user.username,
     tokenVersion: effectiveTokenVersion(user),
     userId: effectiveId(user),
@@ -157,7 +179,8 @@ export type ConsumeRefreshTokenResult =
  * completely as it already revokes an outstanding access token. */
 export function consumeRefreshToken(token: string): ConsumeRefreshTokenResult {
   const tokens = loadRefreshTokens();
-  const idx = tokens.findIndex(t => t.token === token);
+  const wanted = hashRefreshToken(token);
+  const idx = tokens.findIndex(t => t.tokenHash === wanted);
   if (idx === -1) return { ok: false, reason: "invalid" };
   const record = tokens[idx];
 
@@ -180,7 +203,7 @@ export function consumeRefreshToken(token: string): ConsumeRefreshTokenResult {
   tokens.splice(idx, 1);
   const newToken = crypto.randomBytes(32).toString("hex");
   tokens.push({
-    token: newToken,
+    tokenHash: hashRefreshToken(newToken),
     username: currentUser.username,
     tokenVersion: effectiveTokenVersion(currentUser),
     userId: effectiveId(currentUser),
@@ -201,10 +224,29 @@ export function consumeRefreshToken(token: string): ConsumeRefreshTokenResult {
  * point of view. */
 export function revokeRefreshToken(token: string): { clientId?: string } | undefined {
   const tokens = loadRefreshTokens();
-  const found = tokens.find(t => t.token === token);
-  const next = tokens.filter(t => t.token !== token);
+  const wanted = hashRefreshToken(token);
+  const found = tokens.find(t => t.tokenHash === wanted);
+  const next = tokens.filter(t => t.tokenHash !== wanted);
   if (next.length !== tokens.length) saveRefreshTokens(next);
   return found ? { ...(found.clientId ? { clientId: found.clientId } : {}) } : undefined;
+}
+
+export type PeekRefreshTokenResult = { ok: true; user: StoredUser } | { ok: false };
+
+/**
+ * Whether `token` would be accepted by consumeRefreshToken, WITHOUT using it: nothing is rotated, deleted or written. The renewal route asks this
+ * first so that it can refuse a renewal from outside the trusted networks while the token is still good (a refusal that spent the token would end
+ * the session for good, even for a person who comes back to the house network and asks again).
+ */
+export function peekRefreshToken(token: string): PeekRefreshTokenResult {
+  let tokens: StoredRefreshToken[];
+  try { tokens = loadRefreshTokens(); } catch { return { ok: false }; }
+  const wanted = hashRefreshToken(token);
+  const record = tokens.find(t => t.tokenHash === wanted);
+  if (!record || Date.now() > record.expiresAt) return { ok: false };
+  const currentUser = findUser(record.username);
+  if (!currentUser || effectiveTokenVersion(currentUser) !== record.tokenVersion || effectiveId(currentUser) !== record.userId) return { ok: false };
+  return { ok: true, user: currentUser };
 }
 
 /** Ends every session that was opened with the device token `deviceId` (a revoked token). Returns how many were ended. */
@@ -234,9 +276,11 @@ export function openSessionsByClient(): Map<string, number> {
  * line to report. */
 export function pruneExpiredRefreshTokens(onExpired?: (clientId: string) => void): number {
   const tokens = loadRefreshTokens();
+  const migrate = lastLoadFoundPlaintext;
   const now = Date.now();
   const next = tokens.filter(t => t.expiresAt > now);
-  if (next.length !== tokens.length) saveRefreshTokens(next);
+  // the old format is rewritten at start-up too, so no token stays in the file in the clear until its owner happens to renew it
+  if (next.length !== tokens.length || migrate) saveRefreshTokens(next);
   if (onExpired) for (const t of tokens) if (t.expiresAt <= now && t.clientId) onExpired(t.clientId);
   return tokens.length - next.length;
 }

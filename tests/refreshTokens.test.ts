@@ -20,6 +20,8 @@ import {
   openSessionsByClient,
   RefreshTokensFileError,
   MAX_REFRESH_TOKENS_PER_USER,
+  hashRefreshToken,
+  peekRefreshToken,
 } from "../src/refresh_tokens";
 import { createUser, findUser, type StoredUser } from "../src/users";
 
@@ -202,7 +204,8 @@ test("pruneExpiredRefreshTokens - removes only the real expired records", async 
 
     const remaining = JSON.parse(fs.readFileSync(path.join(dir, "data", "refresh_tokens.json"), "utf-8"));
     assert.equal(remaining.length, 1);
-    assert.equal(remaining[0].token, stillValidToken);
+    assert.equal(remaining[0].tokenHash, hashRefreshToken(stillValidToken));
+    assert.equal(remaining[0].token, undefined, "the token itself is not kept");
   });
 });
 
@@ -245,5 +248,92 @@ test("the client that opened a session travels with it through a rotation and a 
     assert.deepEqual(gone, { clientId: "aaaaaaaaaaaaaaaa" });
     assert.equal(openSessionsByClient().get("aaaaaaaaaaaaaaaa"), 1);
     assert.equal(revokeRefreshToken("0".repeat(64)), undefined, "an unknown token revokes nothing");
+  });
+});
+
+test("the file keeps the SHA-256 of a token, never the token, and is written for its owner only", async () => {
+  await withTempCwd(async (dir) => {
+    await createUser("ivan", "correcthorsebattery", "operator");
+    const ivan = findUser("ivan") as StoredUser;
+    const token = issueRefreshToken(ivan);
+    const file = path.join(dir, "data", "refresh_tokens.json");
+    const text = fs.readFileSync(file, "utf-8");
+    assert.equal(text.includes(token), false, "the token is nowhere in the file");
+    const raw = JSON.parse(text);
+    assert.equal(raw[0].tokenHash, hashRefreshToken(token));
+    assert.match(raw[0].tokenHash, /^[0-9a-f]{64}$/);
+    assert.equal(raw[0].token, undefined);
+    if (process.platform !== "win32") assert.equal(fs.statSync(file).mode & 0o077, 0, "no access for the group or the others");
+    // a renewal works with the token and the new one is a hash again
+    const renewed = consumeRefreshToken(token);
+    assert.equal(renewed.ok, true);
+    const after = fs.readFileSync(file, "utf-8");
+    assert.equal(after.includes(token), false);
+    assert.equal(consumeRefreshToken(token).ok, false, "the old one was spent");
+    if (renewed.ok) assert.equal(after.includes(renewed.refreshToken), false);
+  });
+});
+
+test("a file written before the hash was kept still renews, and is rewritten with hashes", async () => {
+  await withTempCwd(async (dir) => {
+    await createUser("judy", "correcthorsebattery", "operator");
+    const judy = findUser("judy") as StoredUser;
+    const issued = issueRefreshToken(judy);
+    const issuedLater = issueRefreshToken(judy);
+    const file = path.join(dir, "data", "refresh_tokens.json");
+    // the old format: the token itself in the field `token`
+    const records = JSON.parse(fs.readFileSync(file, "utf-8"));
+    const plain = [issued, issuedLater];
+    fs.writeFileSync(file, JSON.stringify(records.map((r: any, i: number) => { const { tokenHash: _gone, ...rest } = r; return { ...rest, token: plain[i] }; })), "utf-8");
+
+    // the sweep at start-up rewrites the file even when nothing expired
+    assert.equal(pruneExpiredRefreshTokens(), 0);
+    const migrated = fs.readFileSync(file, "utf-8");
+    for (const token of plain) assert.equal(migrated.includes(token), false, "no token is left in the clear");
+    assert.deepEqual(JSON.parse(migrated).map((r: any) => r.tokenHash), plain.map(hashRefreshToken));
+
+    // and both tokens that were issued before still renew
+    assert.equal(consumeRefreshToken(issued).ok, true);
+    assert.equal(consumeRefreshToken(issuedLater).ok, true);
+  });
+});
+
+test("a record of the old format that is renewed before any sweep is written back as a hash", async () => {
+  await withTempCwd(async (dir) => {
+    await createUser("kim", "correcthorsebattery", "operator");
+    const kim = findUser("kim") as StoredUser;
+    const token = issueRefreshToken(kim);
+    const file = path.join(dir, "data", "refresh_tokens.json");
+    const [record] = JSON.parse(fs.readFileSync(file, "utf-8"));
+    const { tokenHash: _gone, ...rest } = record;
+    fs.writeFileSync(file, JSON.stringify([{ ...rest, token }]), "utf-8");
+    assert.equal(consumeRefreshToken(token).ok, true);
+    assert.equal(fs.readFileSync(file, "utf-8").includes(token), false);
+  });
+});
+
+test("peekRefreshToken answers without using the token", async () => {
+  await withTempCwd(async (dir) => {
+    await createUser("leo", "correcthorsebattery", "operator");
+    const leo = findUser("leo") as StoredUser;
+    const token = issueRefreshToken(leo);
+    const file = path.join(dir, "data", "refresh_tokens.json");
+    const before = fs.readFileSync(file, "utf-8");
+    for (let i = 0; i < 3; i += 1) {
+      const peeked = peekRefreshToken(token);
+      assert.equal(peeked.ok, true);
+      if (peeked.ok) assert.equal(peeked.user.username, "leo");
+    }
+    assert.equal(fs.readFileSync(file, "utf-8"), before, "nothing was rotated or written");
+    assert.equal(peekRefreshToken("0".repeat(64)).ok, false);
+    assert.equal(peekRefreshToken("").ok, false);
+    // an expired token, and one of an account that changed since, are not accepted either
+    const raw = JSON.parse(before);
+    raw[0].expiresAt = Date.now() - 1000;
+    fs.writeFileSync(file, JSON.stringify(raw), "utf-8");
+    assert.equal(peekRefreshToken(token).ok, false);
+    // a damaged file is a refusal, not a crash
+    fs.writeFileSync(file, "{ not json", "utf-8");
+    assert.equal(peekRefreshToken(token).ok, false);
   });
 });

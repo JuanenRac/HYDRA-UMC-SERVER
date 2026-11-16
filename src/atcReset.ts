@@ -82,6 +82,19 @@ export function armEntriesFrom(payload: unknown): ArmEntry[] | null {
   return entries;
 }
 
+/** Whether any robot of the roster is playing a trajectory or paused in one (a firmware flash of a controller board waits until none is). */
+export function anyRobotMovingOf(getSettings: () => any): () => boolean {
+  return () => {
+    for (const controller of getSettings()?.controllers ?? []) {
+      for (const robot of controller?.robots ?? []) {
+        const playback = robot?.playbackState ?? {};
+        if (playback.isPlaying === true || playback.playing === true || playback.isPaused === true || playback.paused === true) return true;
+      }
+    }
+    return false;
+  };
+}
+
 /** The motion of a robot as the server knows it, looked up by the robot id of the arm report (the number of the robot or its name). */
 export function robotMotionOf(getSettings: () => any): (robot: string) => RobotMotion {
   return (robot) => {
