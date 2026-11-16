@@ -1093,7 +1093,7 @@ static file) and every change is written to the server log with the account that
 | Setting | Default | Hard ceiling | Effect |
 |---|---|---|---|
 | `jog.default.maxAmount`, `jog.models.<model>.maxAmount` | 100 | 1000 | A relative jog (`"jog"` command) larger than this is not applied and comes back in `warnings` (`field: "jog"`). |
-| `jog.default.maxAbsolute`, `jog.models.<model>.maxAbsolute` | 1000 | 10000 | The same for an absolute jog (`absolute: true`): the target position, in either direction. |
+| `jog.default.maxAbsolute`, `jog.models.<model>.maxAbsolute` | 1000 | 10000 | The same for an absolute jog (`absolute: true`): the target position, in either direction. A relative jog is also refused when the position it would end in is beyond this value, the `joints` sent with a jog must be inside the range of the joints of the model, and a jog of the XY table (`target: "xytable"`) is checked like the `table` command (end position and step). |
 | `jog.armRequired` | `false` | | When on, a `"jog"`, `"table"`, `"joints"` or `"reset"` command is refused with `403` (`jog-not-armed`) unless the account and controller that send it armed the robot first. |
 | `jog.armTtlMs` | 60000 | 1000 to 600000 | How long an arming lasts. |
 | `temperature.default.bedMaxC`, `temperature.models.<model>.bedMaxC` | 110 | 300 | A heated-bed `targetTemp` above it is lowered to it when settings are saved (`POST /api/settings` or the WebSocket) and `POST /api/settings` returns it in `warnings` (`code: "temperature-limit"`). |
