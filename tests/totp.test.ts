@@ -174,7 +174,6 @@ test("sign-in over HTTP: an account without the factor signs in as before, one w
   }
 });
 
-<<<<<<< HEAD
 test("a read-only account can turn its own second factor on, and that reaches no other account", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hydra-umc-totp-viewer-"));
   const originalCwd = process.cwd();
@@ -215,7 +214,9 @@ test("a read-only account can turn its own second factor on, and that reaches no
     server?.close();
     process.chdir(originalCwd);
     fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
-=======
+  }
+});
+
 test("recovery codes have 80 bits, are kept as a keyed hash, and the codes of the first kind still work once", () => {
   const clock = { t: 1_700_000_000_000 };
   const { store, file, dir } = newStore(clock);
@@ -258,6 +259,5 @@ test("recovery codes have 80 bits, are kept as a keyed hash, and the codes of th
     for (const wrong of ["abcde-12345-abcde", "zzzzz-zzzzz-zzzzz-zzzzz", "", "0".repeat(40)]) assert.equal(upgraded.verify("u1", wrong), false, wrong);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
->>>>>>> origin/main
   }
 });
