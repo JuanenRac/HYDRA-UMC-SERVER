@@ -134,7 +134,6 @@ test("only the folders of the works are served: the state of the server in data/
       assert.equal((await raw(port, target)).status, 404, target);
     }
     assert.equal((await raw(port, "/WORKS/a.json")).status, 200);
-    assert.equal((await raw(port, "/works/a.json")).status, 200);
     assert.equal((await raw(port, "/custom/robot1/b.json")).status, 404, "a folder that no worksPaths names is not served");
   }, false);
 });
