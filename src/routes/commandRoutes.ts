@@ -15,7 +15,7 @@ import { claimConflict, readControllerId, type ClaimConflict } from "../claimPol
 import type { JogArming, SafetyLimits } from "../safetyLimits";
 import type { AuditLog } from "../auditLog";
 import { JogSequence, parseSequence } from "../jogSequence";
-import { resolveHome } from "../modelHome";
+import { homeFor, jointOutOfRange, resolveHome } from "../modelHome";
 import { ifMatchAgrees, robotRevision } from "../serverPolicy";
 import { unknownToolLogLine } from "../urtcTools";
 import { applyTableMove, planTableMove, type TablePlan } from "../tableCommand";
@@ -650,7 +650,30 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
               // dragging the XY table from one client has to appear on
               // the others.
               const isAbsolute = params?.absolute === true;
+              // Where the jog would END must be inside the range of the model as well, not only its size: a relative
+              // jog from a position that is already far out would otherwise walk beyond the absolute limit one small
+              // step at a time. The joints a client sends are held to the range of the joints of the model (the
+              // same check as the reset), and a move of the XY table is checked as a whole like the table command.
+              let jogRefusal: string | null = null;
               if (typeof params?.axis === "string" && ROBOT_AXES.has(params.axis) && validAmount) {
+                const jogTarget = params.target || "robot";
+                const finiteNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+                if (jogTarget === "robot") {
+                  const endsAt = isAbsolute ? params.amount : (finiteNumber(robot.pos?.[params.axis]) ? robot.pos[params.axis] : 0) + params.amount;
+                  if (Math.abs(endsAt) > jogLimits.maxAbsolute) {
+                    jogRefusal = `the jog would end at ${params.axis} ${endsAt}, outside +-${jogLimits.maxAbsolute} for this model - not applied`;
+                  } else if (params.joints && typeof params.joints === "object" && JOINT_KEYS.every((k) => finiteNumber(params.joints[k]))) {
+                    const outside = jointOutOfRange(params.joints, homeFor(robot.model).limits);
+                    if (outside) jogRefusal = `the joints sent have ${outside} outside the range of this model - not applied`;
+                  }
+                } else if (jogTarget === "xytable" && robot.hasXYTable && robot.xyTable && (params.axis === "x" || params.axis === "y")) {
+                  const plan = planTableMove(robot, { x: params.axis === "x" ? params.amount : 0, y: params.axis === "y" ? params.amount : 0, mode: isAbsolute ? "absolute" : "relative" }, jogLimits);
+                  if (!plan.ok) jogRefusal = `${plan.error} - not applied`;
+                }
+              }
+              if (jogRefusal !== null) {
+                warnings.push({ robotId: robot.id, field: "jog", requested: params?.axis, message: jogRefusal });
+              } else if (typeof params?.axis === "string" && ROBOT_AXES.has(params.axis) && validAmount) {
                 const target = params.target || "robot";
                 if (target === "robot") {
                   robot.pos[params.axis] = isAbsolute ? params.amount : robot.pos[params.axis] + params.amount;
