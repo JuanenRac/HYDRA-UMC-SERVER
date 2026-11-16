@@ -142,7 +142,7 @@ HYDRA-UMC SERVER 是驱动 HYDRA-UMC 多机器人微工厂单元的独立后端�
 | 威胁 | 防御 | 位置 |
 |---|---|---|
 | 用已知密钥签名的令牌 | `NODE_ENV=production` 时，如果 `JWT_SECRET` 为空、是示例值或过短，或没有初始管理员，服务器拒绝启动；开发时使用内置值并打印 `[SECURITY]` 警告 | `src/auth.ts`, `src/secretsPolicy.ts` |
-| 对登录的暴力破解，或大量停止请求 | 每个地址每 15 分钟最多 5 次登录失败（`429`），每分钟 120 次刷新和 60 次全局停止，均可用 `LOGIN_RATE_LIMIT_MAX`、`REFRESH_RATE_LIMIT_MAX` 和 `STOP_ALL_RATE_LIMIT_MAX` 调整；密码使用带随机盐的 scrypt，同时最多 4 个、排队最多 20 个，洪水请求无法拖垮服务器 | `src/auth.ts`, `src/users.ts` |
+| 对登录的暴力破解，或大量停止请求 | 每个地址每 15 分钟最多 5 次登录失败（`429`），每分钟 120 次刷新，可用 `LOGIN_RATE_LIMIT_MAX` 和 `REFRESH_RATE_LIMIT_MAX` 调整；全局停止从不受限；密码使用带随机盐的 scrypt，同时最多 4 个、排队最多 20 个，洪水请求无法拖垮服务器 | `src/auth.ts`, `src/users.ts` |
 | 被盗的令牌，或从地址中读取的令牌 | 访问令牌会过期（`JWT_EXPIRES_IN`，默认 30 天，在可信局域网之外建议 24 小时），并由轮换的刷新令牌续期；WebSocket 以 `hydra.bearer` 子协议接收令牌，除非 `HYDRA_UMC_WS_QUERY_TOKEN=allow` 重新允许，否则拒绝 `?token=`，每次启动都会警告 | `src/refresh_tokens.ts`, `src/ws.ts` |
 | 两个客户端移动同一个机器人，或机器人不该收到的命令 | 机器人被预约给一个账户和窗口，写入需要 `If-Match`（过期的修订号得到 `412`），观察者角色不能写入，点动幅度和热床最高目标温度来自管理员设置的安全限制；无论预约如何，全局停止都有效 | `src/claimPolicy.ts`, `src/safetyLimits.ts`, `src/routes/commandRoutes.ts` |
 | 网络上任何人都能看到摄像头画面 | 实时画面、照片和录像需要有效期 5 分钟的签名票据（或持有者令牌）；最多 8 个摄像头；摄像头密码不会出现在进程列表和日志中；`HYDRA_UMC_CAMERA_AUTH=open` 是临时的退出开关 | `src/mediaTickets.ts`, `src/serverPolicy.ts` |
@@ -216,7 +216,9 @@ CORS 通过一个可配置的白名单（`CORS_ALLOWED_ORIGINS`，见下文“�
 - `HYDRA_UMC_LOG_MAX_BYTES` 和 `HYDRA_UMC_LOG_KEEP` - 服务器日志轮转的大小（默认 10 MB）以及保留的已轮转文件数量（默认 1）。
 - `HYDRA_UMC_SETTINGS_STORE`、`HYDRA_UMC_SETTINGS_BACKUPS` 和 `HYDRA_UMC_SETTINGS_BACKUP_INTERVAL_S` - 默认情况下，设置（`settings.json` 和点位文件）作为带日志的“要么全部成功、要么全部不生效”的整体写入：被中断的写入会在下次启动时完成或丢弃，`settings.json` 的副本保存在 `data/backups/`（10 份，最多每 600 秒一份），损坏的 `settings.json` 会从最新的完好副本恢复。`HYDRA_UMC_SETTINGS_STORE=plain` 恢复为逐个文件写入；`HYDRA_UMC_SETTINGS_BACKUPS=0` 关闭副本。
 - AI 中继的访问权限、主机信息是否要求登录以及 TLS（证书和密钥路径，并显示证书的 SHA-256 指纹），管理员也可以在控制应用的“服务器管理”界面中修改。环境变量中设置的值优先并显示为锁定；关闭登录要求前会请求确认；TLS 在下次启动时生效。
-- `STOP_ALL_RATE_LIMIT_MAX` / `STOP_ALL_RATE_LIMIT_WINDOW_MS`——全局停止(`POST /api/stop-all`)每个地址的额度,与登录的额度分开(默认每分钟 60 次)。在生产环境中,服务器还会拒绝使用部署模板中的示例 `JWT_SECRET`/引导密码、少于 32 个字符的 `JWT_SECRET` 或少于 12 个字符的引导密码启动。
+- `HYDRA_UMC_SAFETY_LATCH_STOP` (`safety.latchGlobalStop`)——默认关闭。全局停止期间，除 `stop` 和 `disable` 外的所有机器人命令都会被 `423` 拒绝。全局停止本身从不受限：它在响应之前写入 `data/global-stop.json`，重启后服务器仍处于停止状态，直到管理员调用 `POST /api/stop-all/release`。
+- 未指定 `role` 创建的账户为 `viewer`（只读）；只有明确要求 `"admin"` 时才会创建管理员。
+- 在生产环境中,服务器还会拒绝使用部署模板中的示例 `JWT_SECRET`/引导密码、少于 32 个字符的 `JWT_SECRET` 或少于 12 个字符的引导密码启动。
 
 ### TLS / HTTPS
 
