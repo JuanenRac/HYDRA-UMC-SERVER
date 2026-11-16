@@ -12,6 +12,10 @@
 //   2. stop the robot that the request names (the same stop as POST /api/robot/:id/command "stop", which no claim can hold back);
 //   3. only when that stop was applied, acknowledge it. A stop that could not be applied is never acknowledged: the dispatcher then
 //      keeps the job `unknown` (or, with its own `allow_unconfirmed` switch, reassigns it on its own responsibility).
+//   4. a robot that this server has not heard from lately (silent or never heard in the signal of life of src/robotLiveness.ts) was
+//      stopped only in the state of this server: the order may not have reached it. By default that stop is not acknowledged
+//      (`silentRobot: "withhold"`); with `silentRobot: "server-state"` it is acknowledged with `confirmedBy: "server-state"`, so
+//      the dispatcher can tell it from the confirmation of a robot that was heard.
 //
 // Everything is off until `jobDispatcher.stopRelay.enabled` (data/server-config.json) or HYDRA_UMC_JOB_STOP_RELAY=1 says so (the
 // environment wins). Every time and limit is a parameter of that file, never a constant of the code; the address of the dispatcher
@@ -25,7 +29,13 @@ export const STOP_RELAY_DEFAULTS = {
   requestTimeoutMs: 3000,
   maxRequestAgeSeconds: 120,
   maxFailureBackoffSeconds: 60,
+  silentRobot: "withhold",
 } as const;
+
+/** What to do with a stop of a robot that is silent here: do not acknowledge it, or acknowledge it as a stop of the state of this server only. */
+export type SilentRobotPolicy = "withhold" | "server-state";
+/** The news this server has of a robot (src/robotLiveness.ts); undefined = the robot is not in the roster. */
+export type RobotNews = "live" | "stale" | "unknown" | undefined;
 
 export interface StopRelayFile {
   enabled?: unknown;
@@ -40,6 +50,8 @@ export interface StopRelayFile {
   maxFailureBackoffSeconds?: unknown;
   /** The robot id the dispatcher uses -> the id of the robot in this server. A robot that is not here is never stopped nor acknowledged. */
   robotMap?: unknown;
+  /** "withhold" (default): the stop of a robot that is silent here is applied but not acknowledged. "server-state": it is acknowledged with confirmedBy "server-state". */
+  silentRobot?: unknown;
 }
 
 export interface StopRelaySettings {
@@ -51,6 +63,7 @@ export interface StopRelaySettings {
   maxRequestAgeSeconds: number;
   maxFailureBackoffSeconds: number;
   robotMap: Record<string, number>;
+  silentRobot: SilentRobotPolicy;
 }
 
 export interface StopRelayEnv {
@@ -84,6 +97,9 @@ export function resolveStopRelay(env: StopRelayEnv, file: StopRelayFile | undefi
         robotMap[dispatcherId] = serverId as number;
       }
     }
+    if (file?.silentRobot !== undefined && file.silentRobot !== "withhold" && file.silentRobot !== "server-state") {
+      throw new Error('jobDispatcher.stopRelay.silentRobot must be "withhold" or "server-state"');
+    }
     const settings: StopRelaySettings = {
       enabled,
       url,
@@ -93,6 +109,7 @@ export function resolveStopRelay(env: StopRelayEnv, file: StopRelayFile | undefi
       maxRequestAgeSeconds: inRange(file?.maxRequestAgeSeconds, "maxRequestAgeSeconds", 1, 86400, STOP_RELAY_DEFAULTS.maxRequestAgeSeconds),
       maxFailureBackoffSeconds: inRange(file?.maxFailureBackoffSeconds, "maxFailureBackoffSeconds", 1, 3600, STOP_RELAY_DEFAULTS.maxFailureBackoffSeconds),
       robotMap,
+      silentRobot: (file?.silentRobot as SilentRobotPolicy | undefined) ?? STOP_RELAY_DEFAULTS.silentRobot,
     };
     if (enabled && url === "") throw new Error("the stop relay is on but no dispatcher address is set (HYDRA_UMC_JOB_DISPATCHER_URL or jobDispatcher.stopRelay.url)");
     return { ok: true, settings };
@@ -117,6 +134,8 @@ export interface StopRelayDeps {
   now: () => number;
   /** Stops a robot of this server; true only when the stop was applied. */
   stopRobot: (robotId: number) => boolean | Promise<boolean>;
+  /** What this server knows of the robot before the stop (the stop itself must not count as news). Absent = every robot is taken as heard, as before. */
+  robotNews?: (robotId: number) => RobotNews;
   log: (line: string) => void;
   audit?: (event: { type: string; outcome: "ok" | "failed" | "refused"; robotId?: number; detail: Record<string, unknown> }) => void;
   /** Called for every stop that was applied and that the dispatcher took as acknowledged: the proof that the robot stopped working on the job. */
@@ -219,6 +238,9 @@ export class JobStopRelay {
         continue;
       }
       const robotId = settings.robotMap[request.robotId];
+      // Read before the stop: the stop is itself a change of state and would make any robot look heard.
+      const news = this.deps.robotNews ? this.deps.robotNews(robotId) : "live";
+      const silent = news !== "live";
       let stopped = false;
       try {
         stopped = (await this.deps.stopRobot(robotId)) === true;
@@ -230,8 +252,16 @@ export class JobStopRelay {
         audit?.({ type: "job-stop-relay", outcome: "failed", robotId, detail: { jobId: request.jobId, dispatcherRobotId: request.robotId, reason: "stop-failed" } });
         continue;
       }
+      if (silent && settings.silentRobot === "withhold") {
+        skip("the robot is silent here: stopped in the state of this server only, not acknowledged");
+        log(`[stop-relay] robot ${robotId} is silent (${news ?? "not in the roster"}): job ${request.jobId} stopped in the state of this server only and not acknowledged`);
+        audit?.({ type: "job-stop-relay", outcome: "refused", robotId, detail: { jobId: request.jobId, dispatcherRobotId: request.robotId, reason: "robot-silent", news: news ?? "not-in-roster" } });
+        continue;
+      }
       try {
-        const ack = await this.call("POST", "/jobs/stop-ack", { robotId: request.robotId, jobId: request.jobId });
+        const body: Record<string, unknown> = { robotId: request.robotId, jobId: request.jobId };
+        if (silent) body.confirmedBy = "server-state";
+        const ack = await this.call("POST", "/jobs/stop-ack", body);
         if (ack.status === 200 || ack.status === 409) {
           // 409: nothing is open for it any more (answered by another way or already sent back): the robot is stopped all the same.
           this.settled.set(request.jobId, request.robotId);
@@ -242,7 +272,7 @@ export class JobStopRelay {
           }
           report.acknowledged.push(request.jobId);
           log(`[stop-relay] robot ${robotId} stopped for job ${request.jobId}; the dispatcher answered ${ack.status}`);
-          audit?.({ type: "job-stop-relay", outcome: "ok", robotId, detail: { jobId: request.jobId, dispatcherRobotId: request.robotId, answer: ack.status } });
+          audit?.({ type: "job-stop-relay", outcome: "ok", robotId, detail: { jobId: request.jobId, dispatcherRobotId: request.robotId, answer: ack.status, confirmedBy: silent ? "server-state" : "robot" } });
         } else {
           skip(`the acknowledgement was refused (${ack.status})`);
           audit?.({ type: "job-stop-relay", outcome: "failed", robotId, detail: { jobId: request.jobId, reason: "ack-refused", answer: ack.status } });

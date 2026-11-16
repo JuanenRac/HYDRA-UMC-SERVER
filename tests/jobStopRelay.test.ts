@@ -15,7 +15,7 @@ function settingsOf(extra: Record<string, unknown> = {}, env: Record<string, str
 
 interface Call { method: string; url: string; body?: unknown; auth?: string }
 
-function harness(options: { requests?: unknown; ackStatus?: number; ackThrows?: boolean; getStatus?: number; getThrows?: boolean; stopResult?: (id: number) => boolean; extra?: Record<string, unknown>; env?: Record<string, string> } = {}) {
+function harness(options: { requests?: unknown; ackStatus?: number; ackThrows?: boolean; getStatus?: number; getThrows?: boolean; stopResult?: (id: number) => boolean; news?: (id: number) => "live" | "stale" | "unknown" | undefined; extra?: Record<string, unknown>; env?: Record<string, string> } = {}) {
   const clock = { ms: 1_760_000_000_000 };
   const calls: Call[] = [];
   const stopped: number[] = [];
@@ -26,6 +26,7 @@ function harness(options: { requests?: unknown; ackStatus?: number; ackThrows?: 
     now: () => clock.ms,
     log: () => undefined,
     audit: (event) => audit.push(event),
+    robotNews: (id) => (state.news ? state.news(id) : "live"),
     stopRobot: (id) => {
       stopped.push(id);
       return state.stopResult ? state.stopResult(id) : true;
@@ -187,4 +188,49 @@ test("the loop runs on the timers it is given: first pass at once, then after th
   timers[1].fn();
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(timers.length, 2, "nothing is scheduled after stop()");
+});
+
+test("a robot that is silent here is stopped but its stop is not acknowledged by default", async () => {
+  const h = harness();
+  h.state.requests = [request("weld-42", "arm-1", h.clock)];
+  h.state.news = (id: number) => (id === 1 ? "stale" : "live");
+  const report = await h.relay.pass();
+  assert.deepEqual(h.stopped, [1], "the stop is still applied in the state of this server");
+  assert.deepEqual(report.acknowledged, []);
+  assert.deepEqual(h.calls.map((c) => c.method), ["GET"], "nothing was sent back to the dispatcher");
+  assert.equal(report.skipped[0].jobId, "weld-42");
+  assert.equal(h.audit.at(-1)?.outcome, "refused");
+  assert.equal(h.audit.at(-1)?.detail.reason, "robot-silent");
+  // the robot is heard again: the next pass acknowledges it (the request was not settled)
+  h.state.news = () => "live";
+  const again = await h.relay.pass();
+  assert.deepEqual(again.acknowledged, ["weld-42"]);
+  assert.deepEqual(h.calls.at(-1)?.body, { robotId: "arm-1", jobId: "weld-42" });
+});
+
+test("a robot never heard, or not in the roster, is silent too", async () => {
+  for (const news of ["unknown", undefined] as const) {
+    const h = harness();
+    h.state.requests = [request("weld-42", "arm-1", h.clock)];
+    h.state.news = () => news;
+    const report = await h.relay.pass();
+    assert.deepEqual(report.acknowledged, [], String(news));
+  }
+});
+
+test("with silentRobot server-state the stop of a silent robot is acknowledged and says what confirmed it", async () => {
+  const h = harness({ extra: { silentRobot: "server-state" } });
+  h.state.requests = [request("weld-42", "arm-1", h.clock), request("weld-43", "arm-2", h.clock)];
+  h.state.news = (id: number) => (id === 1 ? "stale" : "live");
+  const report = await h.relay.pass();
+  assert.deepEqual(report.acknowledged, ["weld-42", "weld-43"]);
+  const acks = h.calls.filter((c) => c.method === "POST");
+  assert.deepEqual(acks[0].body, { robotId: "arm-1", jobId: "weld-42", confirmedBy: "server-state" });
+  assert.deepEqual(acks[1].body, { robotId: "arm-2", jobId: "weld-43" });
+});
+
+test("the silent-robot policy is one of two words, and the default withholds", () => {
+  assert.equal(settingsOf().silentRobot, "withhold");
+  assert.ok(!resolveStopRelay(BASE, { silentRobot: "yes" }).ok);
+  assert.ok(!resolveStopRelay(BASE, { silentRobot: true }).ok);
 });
