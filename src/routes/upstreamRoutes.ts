@@ -47,6 +47,12 @@ export interface UpstreamDeps {
   opsAgentChannel?: () => OpsAgentChannel | null;
   /** The audit record: a change of the settings of the decision gate of the hub is written to it. */
   audit?: Pick<AuditLog, "record">;
+  /** Whether a firmware flash must carry its signature, its target board and its minimum bootloader (production.requireSignedFlash, off by default: a flash without them goes on as before). */
+  requireSignedFlash?: () => boolean;
+  /** Whether any robot of the roster is playing a trajectory or paused in one; a flash is refused (409) while it is true. Absent: nothing is known, so nothing is refused. */
+  anyRobotMoving?: () => boolean;
+  /** The limiter of the routes that take a code or reach a service (the same budget as the other sensitive routes); absent: none. */
+  sensitiveRateLimiter?: Middleware;
   /** Whether the erase and the self-test of the F-RAM of the brain are offered (safety.framErase, off by default: the routes then answer 403 and nothing leaves this server). */
   framEraseEnabled?: () => boolean;
   SPI_BRIDGE_URL: string;
@@ -74,6 +80,7 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
   const SAFETY_ZONES_URL = deps.SAFETY_ZONES_URL ?? "";
   const ATC_URL = deps.ATC_URL ?? "";
   const requireOperator: Middleware = deps.requireOperator ?? ((_req, _res, next) => (next as () => unknown)());
+  const sensitiveRateLimiter: Middleware = deps.sensitiveRateLimiter ?? ((_req, _res, next) => (next as () => unknown)());
 
   // Real, authenticated read-only proxy to HYDRA-UMC-DATALAKE's own /query
   // and /aggregate (see DATALAKE_URL's own comment above for why this is a
@@ -623,6 +630,18 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
       // The signature of the image (made on the machine that holds the private key; the CM5 holds none) and, for a downgrade, the version installed now.
       const signed = flashSigningQuery(req.query);
       if (!signed.ok) return res.status(400).json({ error: signed.error, code: "invalid-flash-signature" });
+      // With production.requireSignedFlash on, the flashing service is never asked to take an image that does not say what it is: the signature,
+      // the board it is for and the oldest bootloader that may take it all have to be there (the service checks nothing it is not given).
+      if (deps.requireSignedFlash?.() === true) {
+        const missing = ["signature", "target", "min_bootloader"].filter((field) => signed.params[field] === undefined);
+        if (missing.length > 0) {
+          return res.status(400).json({ error: `a firmware flash needs ${missing.join(", ")} (production.requireSignedFlash is on)`, code: "flash-signature-required", missing });
+        }
+      }
+      // A controller board is not rewritten under a robot that is playing a trajectory.
+      if (deps.anyRobotMoving?.() === true) {
+        return res.status(409).json({ error: "a robot is playing or paused in a trajectory: stop every robot before a firmware flash", code: "flash-robots-moving" });
+      }
       for (const [key, value] of Object.entries(signed.params)) qs.set(key, value);
       const username = (req as any).user?.username ?? "unknown";
       industrialLog(`[CANOTA] flash requested by=${username} tier=${qs.get("tier")} slot=${qs.get("slot")} bytes=${firmware.length}`);
@@ -698,7 +717,9 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
   // client-supplied host/port - an unauthenticated version would let
   // anyone use this server as a blind network-reachability oracle
   // against arbitrary hosts.
-  app.post("/api/integrations/test-connection", authenticate, async (req, res) => {
+  // Administrators only and under the limiter of the sensitive routes: it opens a connection to whatever address it is given (the loopback and the
+  // services of the family included), so it is not a tool of every account and not an unlimited one.
+  app.post("/api/integrations/test-connection", sensitiveRateLimiter, authenticate, requireAdmin, async (req, res) => {
     const { host, port } = req.body || {};
     // A conservative hostname/IPv4 allowlist pattern (letters/digits/dots/
     // hyphens only, max 253 chars per RFC 1035) - not full RFC validation,

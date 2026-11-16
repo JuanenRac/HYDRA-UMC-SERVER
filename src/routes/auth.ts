@@ -6,7 +6,7 @@
 // Login, token refresh and logout, moved out of server.ts unchanged.
 import express from "express";
 import { findUser, verifyPassword, NO_ACCOUNT_HASH, effectiveTokenVersion, effectiveId } from "../users";
-import { issueRefreshToken, consumeRefreshToken, revokeRefreshToken } from "../refresh_tokens";
+import { issueRefreshToken, consumeRefreshToken, peekRefreshToken, revokeRefreshToken } from "../refresh_tokens";
 import { authFailuresTotal } from "../metrics";
 import { totpStore } from "../totp";
 import { connectionTracker, identify, originOf, type Sighting } from "../connections";
@@ -168,6 +168,16 @@ export function registerAuthRoutes(app: express.Express, deps: AuthRouteDeps = {
     if (typeof refreshToken !== "string" || !refreshToken) {
       return res.status(400).json({ error: "refreshToken required" });
     }
+    // A renewal from outside is held to the same rule as a sign-in from outside, and it is judged BEFORE the token is used: a refusal here
+    // leaves the token as it was, so the same session renews once the client is back on the house network or has its second factor.
+    const networks = deps.trustedNetworks?.();
+    if (networks) {
+      const peeked = peekRefreshToken(refreshToken);
+      if (peeked.ok && outsideNeedsSecondFactor(networks, req.ip, totpStore().enabled(effectiveId(peeked.user)))) {
+        authFailuresTotal.inc({ reason: "outside_without_second_factor" });
+        return res.status(403).json(NEEDS_SECOND_FACTOR);
+      }
+    }
     const result = consumeRefreshToken(refreshToken);
     if (!result.ok) {
       authFailuresTotal.inc({ reason: `refresh_${result.reason}` });
@@ -176,12 +186,6 @@ export function registerAuthRoutes(app: express.Express, deps: AuthRouteDeps = {
         tell(() => connectionTracker().endedClient(clientId, "session_expired", sightingOf(req)));
       }
       return res.status(401).json({ error: "Invalid or expired refresh token" });
-    }
-    // A renewal from outside is held to the same rule as a sign-in from outside.
-    const networks = deps.trustedNetworks?.();
-    if (networks && outsideNeedsSecondFactor(networks, req.ip, totpStore().enabled(effectiveId(result.user)))) {
-      authFailuresTotal.inc({ reason: "outside_without_second_factor" });
-      return res.status(403).json(NEEDS_SECOND_FACTOR);
     }
     const claims = { username: result.user.username, role: result.user.role, tokenVersion: effectiveTokenVersion(result.user), id: effectiveId(result.user) };
     if (result.deviceId) {

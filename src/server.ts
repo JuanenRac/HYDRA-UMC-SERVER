@@ -68,7 +68,7 @@ import { registerAuthRoutes } from "./routes/auth";
 import { DeviceTokenStore, deviceTokenKey, type DeviceTokenLimits } from "./deviceTokens";
 import { registerDeviceRoutes } from "./routes/deviceRoutes";
 import { registerUpdateRoutes } from "./routes/updateRoutes";
-import { robotMotionOf } from "./atcReset";
+import { anyRobotMovingOf, robotMotionOf } from "./atcReset";
 import { registerMaintenanceRoutes } from "./routes/maintenanceRoutes";
 import { Maintenance, maintenanceSettings } from "./maintenance";
 import { registerSelfUpdateRoutes } from "./routes/selfUpdateRoutes";
@@ -121,9 +121,9 @@ import { createCameraSupervisor } from "./cameraSupervisor";
 import { createPlayback } from "./playback";
 import { createWsHub, attachWebSocketServer } from "./ws";
 import { createTelemetryProducer } from "./telemetryProducer";
-import { NODE_ENV, JWT_SECRET, authenticate, asyncHandler, requireAdmin, requireOperator, setRateLimitSettingsProvider } from "./auth";
+import { NODE_ENV, JWT_SECRET, authenticate, asyncHandler, requireAdmin, requireOperator, sensitiveRateLimiter, setRateLimitSettingsProvider } from "./auth";
 import { VOICE_UI_URL, VOICE_UI_TOKEN, VOICE_UI_TIMEOUT_MS, DATALAKE_URL, DATALAKE_TIMEOUT_MS, CONNECTOR_HUB_URL, CONNECTOR_HUB_GATE_URL, SEMANTIC_PLANNER_URL, HIL_BRIDGE_URL, ROS2_BRIDGE_URL, SAFETY_ZONES_URL, ATC_URL, TWIN_WS_URL, CONNECTOR_HUB_TIMEOUT_MS, SPI_BRIDGE_URL, SPI_BRIDGE_VERSION_TIMEOUT_MS, SPI_BRIDGE_FLASH_TIMEOUT_MS } from "./upstreamConfig";
-import { LOG_FILE, bonjour, setupDiscovery, loadServerConfig, saveServerConfig, resolvePort, industrialLog, setCurrentPort, getCurrentPort, closeLog, setLogRedaction } from "./runtime";
+import { LOG_FILE, bonjour, setupDiscovery, loadServerConfig, checkServerConfigAtStart, saveServerConfig, resolvePort, industrialLog, setCurrentPort, getCurrentPort, closeLog, setLogRedaction } from "./runtime";
 import { setSignatureRequirement } from "./voiceConfirm";
 
 // Bumped whenever the /api/hydra-info or /ws message contract changes in a
@@ -142,6 +142,8 @@ import { setSignatureRequirement } from "./voiceConfirm";
 const REMOTE_API_VERSION = 2;
 
 async function startServer() {
+  // Before anything reads or writes the saved options: a damaged file stops the start here (a copy is kept) rather than becoming "no options".
+  checkServerConfigAtStart();
   // TLS is the default of a new installation only (src/newInstallTls.ts); an existing one is left as it is.
   applyNewInstallTlsDefault({ env: process.env, dataDir: path.join(process.cwd(), "data"), load: loadServerConfig, save: saveServerConfig, log: industrialLog });
   sweepOrphanedTmpFiles(path.join(process.cwd(), "data"), industrialLog);
@@ -551,7 +553,7 @@ async function startServer() {
   // The one-use confirmation of a person for a flight or walking request (POST /api/operator/confirmations), off unless HYDRA_UMC_HUMAN_CONFIRMATION is a plain yes; the key is
   // a file (HYDRA_UMC_HUMAN_CONFIRMATION_KEY_FILE, by default ~/.hydra-umc-keys/human-confirmation.key) and is read for every request, so a new key applies at once.
   registerConfirmationRoutes(app, {
-    authenticate, requireOperator,
+    authenticate, requireOperator, rateLimiter: sensitiveRateLimiter,
     enabled: () => confirmationEnabled(),
     key: () => loadConfirmationKey(process.env.HYDRA_UMC_HUMAN_CONFIRMATION_KEY_FILE || path.join(os.homedir(), ".hydra-umc-keys", "human-confirmation.key")),
     audit,
@@ -664,7 +666,7 @@ async function startServer() {
     authenticate, requireAdmin, industrialLog, wsClients, DATALAKE_URL, DATALAKE_TIMEOUT_MS, CONNECTOR_HUB_URL,
     CONNECTOR_HUB_TIMEOUT_MS, SPI_BRIDGE_URL, SPI_BRIDGE_VERSION_TIMEOUT_MS, SPI_BRIDGE_FLASH_TIMEOUT_MS,
     CONNECTOR_HUB_GATE_URL, SEMANTIC_PLANNER_URL, HIL_BRIDGE_URL, ROS2_BRIDGE_URL, SAFETY_ZONES_URL, ATC_URL, requireOperator, audit, opsAgentChannel,
-    atcResetEnabled: () => security.atcResetEnabled(), robotMotion: robotMotionOf(getSettings), framEraseEnabled: () => security.framEraseEnabled(),
+    atcResetEnabled: () => security.atcResetEnabled(), robotMotion: robotMotionOf(getSettings), requireSignedFlash: () => security.productionRequireSignedFlash(), anyRobotMoving: anyRobotMovingOf(getSettings), sensitiveRateLimiter, framEraseEnabled: () => security.framEraseEnabled(),
   });
 
   registerInfoRoutes(app, {
