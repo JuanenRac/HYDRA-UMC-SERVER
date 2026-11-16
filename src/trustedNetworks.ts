@@ -119,7 +119,7 @@ export function classify(address: string | undefined, settings: TrustedNetworksS
 }
 
 /** The paths that administer the server or reach machines: never from outside while the option is on. */
-const ADMIN_PATH = /^\/api\/(admin|users|system|ecosystem\/service|integrations|upload-work|models\/submit|bridges\/[^/]+\/cmd)(\/|$)/;
+const ADMIN_PATH = /^\/api\/(admin|users|system|ecosystem\/service|integrations|upload-work|models\/submit|bridges\/[^/]+\/cmd|audit|stop-all\/release|hardware\/fram\/(erase|selftest)|telemetry\/downsample-plan|tool-arms\/reset|ops-agent|voice\/chain|(ros2-bridge|hil-bridge|droid-estop|semantic-planner|connector-hub\/gate)\/settings)(\/|$)/;
 /** What a person may always do from outside, even when the policy is `view`: sign in and out, their own second factor, tickets for pictures, their phone's push token. */
 const OWN_PATH = /^\/api\/(login|logout|refresh|totp|push\/devices|camera\/ticket)(\/|$)/;
 
@@ -129,8 +129,11 @@ export type OutsideVerdict = { allowed: true } | { allowed: false; reason: "admi
  * Whether a request that comes from outside may go on. `command` is the `command` of the body of a robot command
  * (a stop is always allowed: it is never held back).
  */
-export function outsideVerdict(settings: TrustedNetworksSettings, method: string, path: string, command?: unknown): OutsideVerdict {
-  if (ADMIN_PATH.test(path) || (method === "POST" && path === "/api/settings")) return { allowed: false, reason: "admin" };
+export function outsideVerdict(settings: TrustedNetworksSettings, method: string, rawPath: string, command?: unknown): OutsideVerdict {
+  // The router ignores the case and a closing slash, so the lists below must too.
+  const path = rawPath.toLowerCase().replace(/\/{2,}/g, "/").replace(/(.)\/+$/, "$1");
+  const writes = method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
+  if (ADMIN_PATH.test(path) || (writes && path === "/api/settings")) return { allowed: false, reason: "admin" };
   if (settings.outside === "operate") return { allowed: true };
   const reads = method === "GET" || method === "HEAD" || method === "OPTIONS";
   if (reads || OWN_PATH.test(path)) return { allowed: true };

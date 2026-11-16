@@ -84,6 +84,17 @@ test("from outside, administering is refused in both policies and operating only
   assert.equal(outsideVerdict(view, "POST", "/api/stop-all/release").allowed, false);
 });
 
+test("from outside, the case of the path, a closing slash and the method do not get round the administration list", () => {
+  const operate = resolveTrustedNetworks(true, { outside: "operate" });
+  const view = resolveTrustedNetworks(true, { outside: "view" });
+  for (const [method, path] of [["PUT", "/api/settings"], ["POST", "/api/settings/"], ["POST", "/api/Users"], ["PUT", "/api/Admin/server-config"], ["POST", "/api/Admin/restart"], ["GET", "/api/Admin/logs"], ["POST", "/api//users"], ["POST", "/api/stop-all/release"], ["POST", "/api/hardware/fram/erase"], ["PUT", "/api/telemetry/downsample-plan"], ["GET", "/api/audit"]]) {
+    assert.deepEqual(outsideVerdict(operate, method, path), { allowed: false, reason: "admin" }, `${method} ${path}`);
+    assert.deepEqual(outsideVerdict(view, method, path), { allowed: false, reason: "admin" }, `${method} ${path}`);
+  }
+  assert.equal(outsideVerdict(operate, "GET", "/api/settings").allowed, true);
+  assert.equal(outsideVerdict(view, "POST", "/API/STOP-ALL/").allowed, true, "a stop is still never held back");
+});
+
 test("the gate lets the house through, refuses outside with the code and records it", () => {
   const settings = resolveTrustedNetworks(true, { outside: "view", vpn: ["10.66.0.0/24"] });
   const recorded: any[] = [];
