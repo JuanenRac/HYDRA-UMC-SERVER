@@ -234,7 +234,7 @@ export class BridgeGateway {
     return this.windowCount <= this.options.getSettings().commandsPerSecond;
   }
 
-  /** Sends one command and waits for its answer. Answers 200 with `result: null` when the bridge said nothing in time; never throws. */
+  /** Sends one command and waits for its answer. Answers 200 with `result: null` (202 for a stop) when the bridge said nothing in time; never throws. */
   async command(name: string, verb: string, params: unknown): Promise<GatewayCommandResult> {
     const settings = this.options.getSettings();
     if (!validBridgeName(name)) return { status: 400, body: { error: "The name of the bridge is not valid.", code: "invalid-bridge" } };
@@ -275,7 +275,8 @@ export class BridgeGateway {
       return { status: 502, body: { error: "The command could not be published.", code: "publish-failed" } };
     }
     const result = await answer;
-    if (result.timedOut) return { status: 200, body: { accepted: true, result: null } };
+    // A stop that nobody answered was published but not confirmed: 202 tells the caller so (the body keeps its shape); the other verbs keep answering 200 with a null result.
+    if (result.timedOut) return { status: verb === "stop" ? 202 : 200, body: { accepted: true, result: null } };
     return { status: 200, body: { accepted: true, result: result.value ?? null } };
   }
 

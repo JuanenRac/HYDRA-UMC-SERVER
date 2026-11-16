@@ -5015,6 +5015,16 @@
               }
             }
           },
+          "202": {
+            "description": "Accepted. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BridgeCommandAccepted"
+                }
+              }
+            }
+          },
           "400": {
             "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
             "content": {

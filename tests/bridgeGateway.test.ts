@@ -166,7 +166,7 @@ test("the pace is limited but a stop is never held back", async () => {
   const statuses: number[] = [];
   for (let i = 0; i < 4; i++) statuses.push((await gateway.command("cnc", "status", undefined)).status);
   assert.deepEqual(statuses, [200, 200, 429, 429]);
-  assert.equal((await gateway.command("cnc", "stop", undefined)).status, 200);
+  assert.equal((await gateway.command("cnc", "stop", undefined)).status, 202); // nobody answered: published, not confirmed
 });
 
 test("without a connection nothing is published", async () => {
@@ -232,7 +232,7 @@ test("a stop that the bridge never answered is audited as failed, not as correct
   const s = await serve(() => true);
   try {
     const answer = await s.call("/api/bridges/cnc/cmd/stop", { method: "POST", body: "{}" });
-    assert.equal(answer.status, 200);
+    assert.equal(answer.status, 202);
     assert.deepEqual(await answer.json(), { accepted: true, result: null });
     assert.equal(s.audits.at(-1).outcome, "failed");
   } finally {

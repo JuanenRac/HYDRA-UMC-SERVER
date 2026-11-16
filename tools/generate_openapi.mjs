@@ -42,6 +42,7 @@ const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 const STATUS_TEXT = {
   200: "Success",
   201: "Created",
+  202: "Accepted",
   204: "No content",
   400: "Invalid request",
   401: "Not signed in or token rejected",
@@ -157,7 +158,7 @@ function buildDocument() {
     for (const [code, response] of Object.entries(operation.responses)) {
       if (Number(code) >= 400 && (EMPTY_BODY_STATUSES[key] ?? []).includes(Number(code))) response.description = `${STATUS_TEXT[Number(code)] ?? "Response"}. No body.`;
       else if (Number(code) >= 400) response.content = jsonContent(errorResponse);
-      else if (code === "200" && RESPONSES[key]) response.content = jsonContent(RESPONSES[key]);
+      else if ((code === "200" || code === "202") && RESPONSES[key]) response.content = jsonContent(RESPONSES[key]);
     }
     for (const name of r.query) params.push({ name, in: "query", required: false, schema: { type: "string" } });
     if (params.length) operation.parameters = params;

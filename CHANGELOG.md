@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- **A stop that the bridge never answered is answered `202` instead of `200`:** `POST /api/bridges/{name}/cmd/stop` still publishes the command and still answers `{ "accepted": true, "result": null }`, but with the status `202` (published, not confirmed), so a client that only looks at the status no longer reads it as a stop that was carried out; the audit record already said `failed`. The other verbs keep `200` with a null result. The inventory in `docs/openapi.json` lists the `202` and the gateway section of `docs/REMOTE_API.md` says so.
+
+- **The start-up no longer stops a process only because its number is in the camera process file:** the file now keeps the boot identifier and the start time of every camera process (`src/cameraPidFile.ts`), and on Linux a process is sent the stop signal only when both are still the ones that were written, so after a power cut the same numbers, which belong to other processes by then, are left alone; a file from the earlier format, which held numbers only, stops nothing there. Where there is no `/proc` the numbers are used as before. Tests with a `/proc` of their own for a reused number, a reboot, the old format and a command name with brackets.
+
 - **A restart from the administration page works with the unit that ships here, and a stop that the bridge never answered is not recorded as correct:** `POST /api/admin/restart` exits with code 75 and `systemd/hydra-umc-server.service` lists it in `RestartForceExitStatus` (a clean exit 0 left the server down under `Restart=on-failure`); the audit record of a bridge `stop` with no answer says `failed`; and a `safety-limits.json` that holds a setting this version does not know ignores that setting only, instead of dropping every saved limit to the defaults.
 
 - **A sign-in for an account that does not exist takes as long as one for an account that does:** the password is checked against a hash that belongs to nobody, so the time of the answer no longer tells whether a user name exists. `tests/users.test.ts` covers the hash.

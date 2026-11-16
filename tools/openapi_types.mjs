@@ -266,7 +266,7 @@ export const EXTRA_STATUSES = {
   // 404 while bridgeGateway.enabled is off (as if the routes did not exist), 403 for a viewer on the command.
   "GET /api/bridges": [404],
   "GET /api/bridges/{name}/state": [404, 503],
-  "POST /api/bridges/{name}/cmd/{verb}": [200, 403, 404, 409, 413, 429, 502, 503],
+  "POST /api/bridges/{name}/cmd/{verb}": [200, 202, 403, 404, 409, 413, 429, 502, 503],
 };
 
 // "METHOD /path" -> status codes whose answer has no body at all (a switch that is off answers a bare 404).
