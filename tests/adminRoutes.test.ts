@@ -357,7 +357,7 @@ test("the restart answers first, records who asked and only then exits", async (
     const end = Date.now() + 3000;
     while (exit.mock.callCount() === 0 && Date.now() < end) await new Promise((r) => setTimeout(r, 20));
     assert.equal(exit.mock.callCount(), 1);
-    assert.deepEqual(exit.mock.calls[0].arguments, [0]);
+    assert.deepEqual(exit.mock.calls[0].arguments, [75]);
   } finally {
     exit.mock.restore();
   }

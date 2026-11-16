@@ -55,7 +55,7 @@ export function registerBridgeRoutes(app: express.Express, deps: BridgeRouteDeps
     const who = { userId: req.user?.id, username: req.user?.username, ip: req.ip };
     if (!validBridgeName(name) || !validBridgeVerb(verb)) return res.status(400).json({ error: "The name of the bridge or the command is not valid." });
     const outcome = await gateway.command(name, verb, req.body && Object.keys(req.body).length > 0 ? req.body : undefined);
-    audit?.record({ type: "bridge-command", outcome: outcome.status >= 200 && outcome.status < 300 ? "ok" : outcome.status >= 500 ? "failed" : "refused", ...who, detail: { bridge: name, verb, status: outcome.status } });
+    audit?.record({ type: "bridge-command", outcome: verb === "stop" && outcome.status === 200 && (outcome.body as any)?.result === null ? "failed" : outcome.status >= 200 && outcome.status < 300 ? "ok" : outcome.status >= 500 ? "failed" : "refused", ...who, detail: { bridge: name, verb, status: outcome.status } });
     res.status(outcome.status).json(outcome.body);
   });
 }

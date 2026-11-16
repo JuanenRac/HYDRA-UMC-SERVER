@@ -242,6 +242,7 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
     res.json({ success: true });
     audit?.record({ type: "server-restart", outcome: "ok", userId: (req as any).user?.id, username: (req as any).user?.username, ip: req.ip });
     industrialLog("[ADMIN] Restart requested via admin UI - exiting for the process supervisor to restart.");
-    setTimeout(() => process.exit(0), 250);
+    // Exit code 75 is declared in the unit (RestartForceExitStatus), so the restart also works with Restart=on-failure.
+    setTimeout(() => process.exit(75), 250);
   });
 }

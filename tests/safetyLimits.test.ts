@@ -60,6 +60,17 @@ test("the limits are saved through the store and survive a restart; the defaults
   assert.equal(logs.length, 1);
 });
 
+test("a setting this version does not know is ignored and the known ones keep their saved values", () => {
+  const dir = tmp();
+  fs.writeFileSync(path.join(dir, "safety-limits.json"), JSON.stringify({ jog: { armRequired: true, newerSetting: 1, default: { maxAmount: 7, other: 2 } }, extra: {} }));
+  const logs: string[] = [];
+  const s = new SafetyLimits(dir, (m) => logs.push(m));
+  assert.equal(s.jogFor("x").maxAmount, 7);
+  assert.equal(logs.length, 3);
+  fs.writeFileSync(path.join(dir, "safety-limits.json"), JSON.stringify({ jog: { default: { maxAmount: 99999 } } }));
+  assert.equal(new SafetyLimits(dir, () => undefined).jogFor("x").maxAmount, 100);
+});
+
 test("a heated-bed target above the limit of its model is lowered", async () => {
   const s = new SafetyLimits(tmp());
   await s.update({ temperature: { models: { parol6: { bedMaxC: 70 } } } }, "root");

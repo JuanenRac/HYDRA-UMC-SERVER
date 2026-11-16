@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **A restart from the administration page works with the unit that ships here, and a stop that the bridge never answered is not recorded as correct:** `POST /api/admin/restart` exits with code 75 and `systemd/hydra-umc-server.service` lists it in `RestartForceExitStatus` (a clean exit 0 left the server down under `Restart=on-failure`); the audit record of a bridge `stop` with no answer says `failed`; and a `safety-limits.json` that holds a setting this version does not know ignores that setting only, instead of dropping every saved limit to the defaults.
+
 - **A sign-in for an account that does not exist takes as long as one for an account that does:** the password is checked against a hash that belongs to nobody, so the time of the answer no longer tells whether a user name exists. `tests/users.test.ts` covers the hash.
 
 - **The list of administration paths that are refused from outside cannot be got round by the case of the path, a closing slash or the method, and an account cannot be made with a role that was written wrongly:** the trusted-networks gate now compares the path in lower case and without a closing slash, refuses every method but a read on `/api/settings`, and also lists the audit trail, the release of the global stop, the F-RAM erase and self-test, the telemetry plan, the tool-arm reset, the operations agent, the voice chain and the settings of the bridges whose routes need an administrator. `POST /api/users` answers 400 for a `role` that is given and is not `admin`, `operator` or `viewer` (no role at all still makes an administrator). `tests/trustedNetworks.test.ts` and `tests/adminRoutes.test.ts` cover it.

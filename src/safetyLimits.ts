@@ -152,12 +152,35 @@ export function loadSafetyConfig(file: string, log: (m: string) => void = () => 
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") log(`[SAFETY] ${file} could not be read (${(error as Error).message}); the default limits are used.`);
     return defaults;
   }
-  try {
-    return mergeSafetyConfig(defaults, raw);
-  } catch (error) {
-    log(`[SAFETY] ${file} holds an invalid value (${(error as Error).message}); the default limits are used.`);
-    return defaults;
+  // A setting this version does not know (written by a newer version, then rolled back) is ignored
+  // on its own: the settings it does know keep their saved values instead of all falling back.
+  for (let attempt = 0; attempt < 64; attempt++) {
+    try {
+      return mergeSafetyConfig(defaults, raw);
+    } catch (error) {
+      const unknown = /^unknown setting "(.+)"$/.exec((error as Error).message);
+      if (unknown && dropKey(raw, unknown[1].split(".")[0] === "body" ? unknown[1].split(".").slice(1) : unknown[1].split("."))) {
+        log(`[SAFETY] ${file} holds a setting this version does not know ("${unknown[1]}"); it is ignored.`);
+        continue;
+      }
+      log(`[SAFETY] ${file} holds an invalid value (${(error as Error).message}); the default limits are used.`);
+      return defaults;
+    }
   }
+  return defaults;
+}
+
+/** Removes the key at `path` (below the body) from the parsed file; false when the path does not lead to one. */
+function dropKey(root: unknown, path: string[]): boolean {
+  let node: any = root;
+  for (const part of path.slice(0, -1)) {
+    if (typeof node !== "object" || node === null || !(part in node)) return false;
+    node = node[part];
+  }
+  const last = path[path.length - 1];
+  if (typeof node !== "object" || node === null || !(last in node)) return false;
+  delete node[last];
+  return true;
 }
 
 export class SafetyLimits {
