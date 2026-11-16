@@ -226,6 +226,7 @@ test("the bridge publishes the SafetyState retained on <prefix>/safety/estop, an
 
 test("motion is held back by the global stop only when safety.latchGlobalStop is on: off by default, only the exact word 1 in the environment, saved from Server Admin, locked by the environment", () => {
   const { config, stored, logs } = makeConfig();
+  const bad400 = (e: unknown) => e instanceof SecurityConfigError && e.status === 400;
   assert.equal(config.globalStopLatched(), false);
   assert.deepEqual(config.snapshot().safety.latchGlobalStop, { value: false, source: "default" });
   assert.equal(makeConfig({ safetyLatchStop: "1" }).config.globalStopLatched(), true);
