@@ -123,6 +123,12 @@ test("an account that cannot be made, changed or deleted answers 400 with the re
   const noBody = await call("POST", "/api/users", {});
   assert.equal(noBody.status, 400);
   assert.match(noBody.body.error, /username and password required/);
+  for (const role of ["Viewer", "operador", "read-only", 7]) {
+    const odd = await call("POST", "/api/users", { username: "wall", password: "long-enough-password", role });
+    assert.equal(odd.status, 400, `role ${String(role)}`);
+    assert.match(odd.body.error, /role must be/);
+  }
+  assert.equal((await call("GET", "/api/users")).body.users.some((u: any) => u.username === "wall"), false, "nothing was created");
   assert.equal((await call("POST", "/api/users", { username: 5, password: "long-enough-password" })).status, 400);
   assert.equal((await call("POST", "/api/users", { username: "short", password: "x" })).status, 400);
   assert.equal((await call("POST", "/api/users", { username: "  ", password: "long-enough-password" })).status, 400);
