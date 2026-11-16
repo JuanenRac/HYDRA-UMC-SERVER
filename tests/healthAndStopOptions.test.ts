@@ -223,3 +223,25 @@ test("the bridge publishes the SafetyState retained on <prefix>/safety/estop, an
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });
+
+test("motion is held back by the global stop only when safety.latchGlobalStop is on: off by default, only the exact word 1 in the environment, saved from Server Admin, locked by the environment", () => {
+  const { config, stored, logs } = makeConfig();
+  assert.equal(config.globalStopLatched(), false);
+  assert.deepEqual(config.snapshot().safety.latchGlobalStop, { value: false, source: "default" });
+  assert.equal(makeConfig({ safetyLatchStop: "1" }).config.globalStopLatched(), true);
+  for (const word of ["true", "yes", "on", "0", ""]) assert.equal(makeConfig({ safetyLatchStop: word }).config.globalStopLatched(), false, word);
+  const on = config.update({ safety: { latchGlobalStop: true } }, "root");
+  assert.deepEqual(on.warnings, []);
+  assert.equal(config.globalStopLatched(), true);
+  assert.deepEqual(stored().safety, { latchGlobalStop: true });
+  assert.match(logs.at(-1)!, /motion commands are refused while the global stop is on/);
+  config.update({ safety: { latchGlobalStop: false } }, "root");
+  assert.equal(config.globalStopLatched(), false);
+  assert.match(logs.at(-1)!, /not held back by the global stop/);
+  for (const value of ["yes", 1, null, "true"]) assert.throws(() => config.update({ safety: { latchGlobalStop: value } }, "root"), bad400, String(value));
+  assert.throws(() => makeConfig({ safetyLatchStop: "0" }).config.update({ safety: { latchGlobalStop: true } }, "root"), (e: unknown) => e instanceof SecurityConfigError && e.status === 409 && /HYDRA_UMC_SAFETY_LATCH_STOP/.test(e.message));
+  // the other safety options are left alone by a patch of this one
+  config.update({ safety: { publishGlobalStop: true } }, "root");
+  config.update({ safety: { latchGlobalStop: true } }, "root");
+  assert.deepEqual(stored().safety, { latchGlobalStop: true, publishGlobalStop: true });
+});

@@ -15,9 +15,9 @@ function makeConfig(env: any = {}, initial: SecurityFile = {}) {
   return { config, stored: () => stored };
 }
 
-test("the fifteen switches are exactly the ones the server reports, each on its conservative value by default", () => {
+test("the sixteen switches are exactly the ones the server reports, each on its conservative value by default", () => {
   const states = readSwitches(makeConfig().config.snapshot());
-  assert.equal(states.length, 15);
+  assert.equal(states.length, 16);
   assert.deepEqual(states.map((s) => s.def.id), SWITCHES.map((s) => s.id));
   for (const state of states) {
     assert.equal(state.source, "default", state.def.id);
@@ -186,9 +186,9 @@ test("the request limits: the tab reads the numbers, sends only what changed and
   assert.deepEqual(rateLimitsPatch(state, { ...texts, loginMax: " 8 ", apiMax: "1000" }), { rateLimits: { loginMax: 8 } });
   for (const bad of ["", "2", "101", "1.5", "-3", "abc", "1e2"]) assert.equal(rateLimitsPatch(state, { ...texts, loginMax: bad }), null, bad);
   assert.equal(parseRateLimitText("100", state.loginMax), 100);
-  const sent = rateLimitsPatch(state, { ...texts, loginMax: "8", stopAllMax: "90" })!;
+  const sent = rateLimitsPatch(state, { ...texts, loginMax: "8", sensitiveMax: "90" })!;
   const answer = config.update(sent, "root");
-  assert.deepEqual([answer.snapshot.rateLimits.loginMax.value, answer.snapshot.rateLimits.stopAllMax.value], [8, 90]);
+  assert.deepEqual([answer.snapshot.rateLimits.loginMax.value, answer.snapshot.rateLimits.sensitiveMax.value], [8, 90]);
   assert.deepEqual(warningKeys(config.update({ rateLimits: { enabled: false } }, "root").warnings), ["warn_rate_limits_off"]);
   assert.deepEqual(warningKeys(["rate_limits_loose"]), ["warn_rate_limits_loose"]);
 });

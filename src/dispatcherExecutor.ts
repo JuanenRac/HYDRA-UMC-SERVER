@@ -161,6 +161,14 @@ export interface ExecutorDeps {
   startRobot: (robotId: number) => boolean | Promise<boolean>;
   /** Stops the robot, like the command "stop". */
   stopRobot: (robotId: number) => boolean | Promise<boolean>;
+  /**
+   * The attempts ("jobId#attempt") this executor started before and that were kept on disk, so that a restart never starts the same attempt again.
+   * null means the record is there but can not be read: nothing is started until the server is restarted with a readable (or removed) record.
+   * Without it nothing is remembered across a restart (tests).
+   */
+  loadStartedAttempts?: () => string[] | null;
+  /** Writes the started attempts to disk; false when it could not. An attempt is only started after this said true. */
+  saveStartedAttempts?: (attempts: string[]) => boolean;
   log: (line: string) => void;
   audit?: (event: { type: string; outcome: "ok" | "failed" | "refused"; robotId?: number; detail: Record<string, unknown> }) => void;
 }
@@ -196,8 +204,15 @@ export class DispatcherExecutor {
   private readonly wouldSeen = new Set<string>();
   /** The attempts already reported as done: the list of the dispatcher can still show them for a moment, and they must not be started again. */
   private readonly reported = new Set<string>();
+  /** Every attempt this executor started, kept on disk: after a restart `runs` is empty, and this is what keeps a still-assigned attempt from being started again. */
+  private readonly started = new Set<string>();
+  private attemptsUnknown = false;
 
-  constructor(private readonly deps: ExecutorDeps) {}
+  constructor(private readonly deps: ExecutorDeps) {
+    const kept = deps.loadStartedAttempts?.();
+    if (kept === null) this.attemptsUnknown = true;
+    else for (const key of kept ?? []) this.started.add(key);
+  }
 
   private async call(method: string, path: string, body?: unknown): Promise<{ status: number; json: unknown }> {
     const { settings } = this.deps;
@@ -253,6 +268,12 @@ export class DispatcherExecutor {
     const ambiguous = new Set(robotIdConflicts(this.deps.getSettings()).map((conflict) => String(conflict.robotId)));
     const listed = new Set(jobs.map((job) => DispatcherExecutor.key(job)));
     for (const key of [...this.reported]) if (!listed.has(key)) this.reported.delete(key);
+    // An attempt that left the assigned list is forgotten (the dispatcher numbers a new attempt differently), which also keeps the record on disk short.
+    const forgotten = [...this.started].filter((key) => !listed.has(key));
+    if (forgotten.length > 0) {
+      for (const key of forgotten) this.started.delete(key);
+      this.deps.saveStartedAttempts?.([...this.started]);
+    }
 
     // 1. the runs whose job is no longer assigned: a robot still moving for a job that is gone is stopped
     for (const [key, run] of [...this.runs]) {
@@ -276,6 +297,10 @@ export class DispatcherExecutor {
         continue;
       }
       if (this.reported.has(key)) continue;
+      if (this.started.has(key)) {
+        report.skipped.push({ jobId: job.id, reason: "this attempt was already tried (before a restart, or it did not start); it is not started again" });
+        continue;
+      }
       const reason = this.refusal(job, map, ambiguous);
       if (reason !== null) {
         report.skipped.push({ jobId: job.id, reason });
@@ -289,6 +314,14 @@ export class DispatcherExecutor {
           audit?.({ type: "job-executor", outcome: "ok", robotId, detail: { jobId: job.id, attempt: job.attempt, action: "would-start", dryRun: true } });
         }
         report.would.push(job.id);
+        continue;
+      }
+      // The attempt is written down BEFORE the robot moves: if the write fails nothing starts, and if the server dies right after, the attempt is not started again.
+      this.started.add(key);
+      if (this.deps.saveStartedAttempts && !this.deps.saveStartedAttempts([...this.started])) {
+        this.started.delete(key);
+        report.skipped.push({ jobId: job.id, reason: "the record of started attempts could not be written" });
+        audit?.({ type: "job-executor", outcome: "failed", robotId, detail: { jobId: job.id, attempt: job.attempt, action: "start", reason: "record-not-written" } });
         continue;
       }
       let started = false;
@@ -317,6 +350,7 @@ export class DispatcherExecutor {
     if (!Object.prototype.hasOwnProperty.call(map, job.robot)) return "the robot of the job is not in the robot map";
     const robotId = map[job.robot] as number;
     if (ambiguous.has(String(robotId))) return "the robot id is shared with another robot";
+    if (this.attemptsUnknown) return "the record of started attempts can not be read";
     const gate = this.deps.gate();
     if (gate !== null) return gate;
     const state = this.deps.robotState(robotId);

@@ -53,11 +53,11 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
 
   app.post("/api/users", authenticate, requireAdmin, asyncHandler(async (req, res) => {
     const { username, password, role } = req.body || {};
-    // No role asked keeps the account an administrator; a role that is written wrongly is refused, not turned into one.
+    // No role asked makes the account a viewer (read only); a role that is written wrongly is refused, not turned into one. An administrator is only made on request.
     if (role !== undefined && role !== null && !isUserRole(role)) {
       return res.status(400).json({ error: "role must be admin, operator or viewer" });
     }
-    const safeRole: UserRole = isUserRole(role) ? role : "admin";
+    const safeRole: UserRole = isUserRole(role) ? role : "viewer";
     if (typeof username !== "string" || typeof password !== "string") {
       return res.status(400).json({ error: "username and password required" });
     }

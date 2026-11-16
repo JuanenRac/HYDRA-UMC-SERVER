@@ -326,6 +326,8 @@ export interface LoggingFile {
 export interface SafetyFile {
   /** Whether a global stop is also announced on the MQTT bridge as a retained SafetyState (default: no). */
   publishGlobalStop?: boolean;
+  /** Whether, while the global stop is on, the server refuses every motion command with 423 (stop and disable still pass) until an administrator releases the stop (default: no). */
+  latchGlobalStop?: boolean;
   /** Whether the erase and the self-test of the F-RAM of the kinematic brain are offered (default: no). Also needs the bridge started with --enable-fram-erase and a firmware built for it. */
   framErase?: boolean;
   /** Every how many milliseconds the physical emergency stop is read from the SPI bridge: 0 (off, the default) or 500 to 60000. */
@@ -370,13 +372,11 @@ export interface RateLimitsFile {
   sensitiveMax?: number;
   /** The API window, in seconds. */
   apiWindowSeconds?: number;
-  /** Global stop requests allowed per address in the global stop window. */
-  stopAllMax?: number;
-  /** The global stop window, in seconds. */
-  stopAllWindowSeconds?: number;
 }
 
-export const RATE_LIMIT_KEYS = ["loginMax", "loginWindowSeconds", "refreshMax", "apiMax", "sensitiveMax", "apiWindowSeconds", "stopAllMax", "stopAllWindowSeconds"] as const;
+export const RATE_LIMIT_KEYS = ["loginMax", "loginWindowSeconds", "refreshMax", "apiMax", "sensitiveMax", "apiWindowSeconds"] as const;
+/** The two numbers of the old limiter of the global stop. The global stop is never limited now; a saved value or a client that still sends them is dropped without an error. */
+export const RETIRED_RATE_LIMIT_KEYS = ["stopAllMax", "stopAllWindowSeconds"] as const;
 export type RateLimitKey = (typeof RATE_LIMIT_KEYS)[number];
 /** Default and whole-number range of every number: the lowest values cannot lock an administrator out for good, the highest cannot turn a limiter into a formality. */
 export const RATE_LIMIT_BOUNDS: Record<RateLimitKey, { def: number; min: number; max: number }> = {
@@ -386,8 +386,6 @@ export const RATE_LIMIT_BOUNDS: Record<RateLimitKey, { def: number; min: number;
   apiMax: { def: 600, min: 60, max: 100000 },
   sensitiveMax: { def: 30, min: 5, max: 10000 },
   apiWindowSeconds: { def: 60, min: 10, max: 3600 },
-  stopAllMax: { def: 60, min: 10, max: 10000 },
-  stopAllWindowSeconds: { def: 60, min: 10, max: 3600 },
 };
 /** The environment variable that still fixes each number (the names the server has always read) and the switch. */
 export const RATE_LIMIT_ENV_NAMES: Record<RateLimitKey, string> = {
@@ -397,8 +395,6 @@ export const RATE_LIMIT_ENV_NAMES: Record<RateLimitKey, string> = {
   apiMax: "API_RATE_LIMIT_MAX",
   sensitiveMax: "SENSITIVE_RATE_LIMIT_MAX",
   apiWindowSeconds: "API_RATE_LIMIT_WINDOW_MS",
-  stopAllMax: "STOP_ALL_RATE_LIMIT_MAX",
-  stopAllWindowSeconds: "STOP_ALL_RATE_LIMIT_WINDOW_MS",
 };
 export const RATE_LIMITS_ENV_SWITCH = "HYDRA_UMC_RATE_LIMITS";
 
@@ -489,6 +485,7 @@ export interface SecurityEnv {
   trustedNetworks?: string;
   rul?: string;
   safetyPublishStop?: string;
+  safetyLatchStop?: string;
   framErase?: string;
   estopWatch?: string;
   cameraAuth?: string;
@@ -544,6 +541,7 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     trustedNetworks: env.HYDRA_UMC_TRUSTED_NETWORKS,
     rul: env.HYDRA_UMC_RUL,
     safetyPublishStop: env.HYDRA_UMC_SAFETY_PUBLISH_STOP,
+    safetyLatchStop: env.HYDRA_UMC_SAFETY_LATCH_STOP,
     framErase: env.HYDRA_UMC_FRAM_ERASE,
     estopWatch: env.HYDRA_UMC_ESTOP_WATCH_MS,
     cameraAuth: env.HYDRA_UMC_CAMERA_AUTH,
@@ -892,6 +890,13 @@ export function resolveSafetyPublishStop(env: string | undefined, file: Security
   return { value: false, source: "default" };
 }
 
+/** Refusing motion while the global stop is on: only the exact word "1" in the environment switches it on; the default is off (the stop does not hold back the commands of the server). */
+export function resolveSafetyLatchStop(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.safety?.latchGlobalStop === "boolean") return { value: file.safety.latchGlobalStop, source: "config" };
+  return { value: false, source: "default" };
+}
+
 /** Do the camera pictures need a ticket or a signed-in client? Yes, unless the environment says open/off/false/0/no/allow or an administrator opened them. */
 export function resolveCameraOpen(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
   if (isSet(env)) return { value: ["open", "off", "false", "0", "no", "allow"].includes(env.trim().toLowerCase()), source: "env" };
@@ -1046,8 +1051,6 @@ export interface RateLimitSettings {
   apiMax: number;
   sensitiveMax: number;
   apiWindowMs: number;
-  stopAllMax: number;
-  stopAllWindowMs: number;
 }
 
 /** The limiter settings in force (the window in milliseconds, as express-rate-limit takes it). */
@@ -1061,8 +1064,6 @@ export function rateLimitSettings(env: SecurityEnv, file: SecurityFile): RateLim
     apiMax: n("apiMax"),
     sensitiveMax: n("sensitiveMax"),
     apiWindowMs: n("apiWindowSeconds") * 1000,
-    stopAllMax: n("stopAllMax"),
-    stopAllWindowMs: n("stopAllWindowSeconds") * 1000,
   };
 }
 
@@ -1097,7 +1098,7 @@ export interface SecuritySnapshot {
   /** The switch, and what the configuration file says about the rest (read only here: the ranges are edited in the file). */
   trustedNetworks: { enabled: { value: boolean; source: Source }; outside: "operate" | "view"; outsideRequiresSecondFactor: boolean; localRanges: number; vpnRanges: number; invalidEntries: number };
   rul: { enabled: { value: boolean; source: Source } };
-  safety: { publishGlobalStop: { value: boolean; source: Source }; framErase: { value: boolean; source: Source }; estopWatchMs: { value: number; source: Source } };
+  safety: { publishGlobalStop: { value: boolean; source: Source }; latchGlobalStop: { value: boolean; source: Source }; framErase: { value: boolean; source: Source }; estopWatchMs: { value: number; source: Source } };
   jobDispatcher: {
     stopRelay: { enabled: { value: boolean; source: Source }; robotMap: Record<string, number>; activeEnabled: boolean; appliesOnRestart: boolean };
     /** The execution of the assigned jobs: `enabled` switches it on (a dry run), `live` lets it move the robots. Both apply on the next start. */
@@ -1425,6 +1426,11 @@ export class SecurityConfig {
     return resolveSafetyPublishStop(this.options.env.safetyPublishStop, this.file).value;
   }
 
+  /** Whether motion commands are refused while the global stop is on (off unless an administrator turned it on). */
+  globalStopLatched(): boolean {
+    return resolveSafetyLatchStop(this.options.env.safetyLatchStop, this.file).value;
+  }
+
   /** Whether the erase and the self-test of the F-RAM of the brain are offered (off unless an administrator turned it on). */
   framEraseEnabled(): boolean {
     return resolveFramErase(this.options.env.framErase, this.file).value;
@@ -1514,6 +1520,7 @@ export class SecurityConfig {
       rul: { enabled: resolveRul(this.options.env.rul, this.file) },
       safety: {
         publishGlobalStop: resolveSafetyPublishStop(this.options.env.safetyPublishStop, this.file),
+        latchGlobalStop: resolveSafetyLatchStop(this.options.env.safetyLatchStop, this.file),
         framErase: resolveFramErase(this.options.env.framErase, this.file),
         estopWatchMs: resolveEstopWatchMs(this.options.env.estopWatch, this.file),
       },
@@ -2130,6 +2137,11 @@ export class SecurityConfig {
         if (resolveSafetyPublishStop(this.options.env.safetyPublishStop, this.file).source === "env") throw lockedBy("HYDRA_UMC_SAFETY_PUBLISH_STOP");
         merged.publishGlobalStop = safetyPatch.publishGlobalStop;
       }
+      if (safetyPatch.latchGlobalStop !== undefined) {
+        if (typeof safetyPatch.latchGlobalStop !== "boolean") throw new SecurityConfigError(400, "safety.latchGlobalStop must be true or false");
+        if (resolveSafetyLatchStop(this.options.env.safetyLatchStop, this.file).source === "env") throw lockedBy("HYDRA_UMC_SAFETY_LATCH_STOP");
+        merged.latchGlobalStop = safetyPatch.latchGlobalStop;
+      }
       if (safetyPatch.framErase !== undefined) {
         if (typeof safetyPatch.framErase !== "boolean") throw new SecurityConfigError(400, "safety.framErase must be true or false");
         if (resolveFramErase(this.options.env.framErase, this.file).source === "env") throw lockedBy("HYDRA_UMC_FRAM_ERASE");
@@ -2265,9 +2277,11 @@ export class SecurityConfig {
     if (patch.rateLimits !== undefined) {
       const limitsPatch = patch.rateLimits;
       if (typeof limitsPatch !== "object" || limitsPatch === null || Array.isArray(limitsPatch)) throw new SecurityConfigError(400, "rateLimits must be an object");
-      const known = new Set<string>(["enabled", ...RATE_LIMIT_KEYS]);
+      const known = new Set<string>(["enabled", ...RATE_LIMIT_KEYS, ...RETIRED_RATE_LIMIT_KEYS]);
       for (const field of Object.keys(limitsPatch)) if (!known.has(field)) throw new SecurityConfigError(400, `rateLimits.${field} is not a known option`);
       const merged: RateLimitsFile = { ...(next.rateLimits ?? {}) };
+      // The numbers of the retired limiter of the global stop are dropped from what is saved (a client that still sends them is not refused).
+      for (const retired of RETIRED_RATE_LIMIT_KEYS) delete (merged as unknown as Record<string, unknown>)[retired];
       if (limitsPatch.enabled !== undefined) {
         if (typeof limitsPatch.enabled !== "boolean") throw new SecurityConfigError(400, "rateLimits.enabled must be true or false");
         if (resolveRateLimitsEnabled(this.options.env.rateLimits, this.file).source === "env") throw lockedBy(RATE_LIMITS_ENV_SWITCH);
@@ -2356,7 +2370,7 @@ export class SecurityConfig {
     }
     if (patch.rateLimits !== undefined) {
       const r = snapshot.rateLimits;
-      log(`[SECURITY] ${actor} set the request limits per address: ${r.enabled.value ? "ON" : "OFF"}; sign-in ${r.loginMax.value} failed per ${r.loginWindowSeconds.value} s, renewals ${r.refreshMax.value}, API ${r.apiMax.value} and code/service routes ${r.sensitiveMax.value} per ${r.apiWindowSeconds.value} s, global stop ${r.stopAllMax.value} per ${r.stopAllWindowSeconds.value} s.`);
+      log(`[SECURITY] ${actor} set the request limits per address: ${r.enabled.value ? "ON" : "OFF"}; sign-in ${r.loginMax.value} failed per ${r.loginWindowSeconds.value} s, renewals ${r.refreshMax.value}, API ${r.apiMax.value} and code/service routes ${r.sensitiveMax.value} per ${r.apiWindowSeconds.value} s; the global stop is never limited.`);
     }
     if (patch.bridges !== undefined) {
       const changed = Object.entries(patch.bridges as Record<string, Record<string, unknown>>).flatMap(([b, o]) => Object.entries(o).map(([k, v]) => `${b}.${k}=${String(v)}`));
@@ -2421,7 +2435,7 @@ export class SecurityConfig {
       log(`[SECURITY] ${actor} turned the remaining-useful-life relay for operators (POST /api/ai/anomaly-detector/rul) ${snapshot.rul.enabled.value ? "on" : "off"}.`);
     }
     if (patch.safety !== undefined) {
-      log(`[SECURITY] ${actor} ${snapshot.safety.publishGlobalStop.value ? "allowed" : "forbade"} announcing a global stop on the MQTT bridge; the F-RAM erase of the brain is ${snapshot.safety.framErase.value ? "on" : "off"}; the emergency stop watch is ${snapshot.safety.estopWatchMs.value ? `every ${snapshot.safety.estopWatchMs.value} ms` : "off"}.`);
+      log(`[SECURITY] ${actor} ${snapshot.safety.publishGlobalStop.value ? "allowed" : "forbade"} announcing a global stop on the MQTT bridge; motion commands are ${snapshot.safety.latchGlobalStop.value ? "refused while the global stop is on" : "not held back by the global stop"}; the F-RAM erase of the brain is ${snapshot.safety.framErase.value ? "on" : "off"}; the emergency stop watch is ${snapshot.safety.estopWatchMs.value ? `every ${snapshot.safety.estopWatchMs.value} ms` : "off"}.`);
     }
     if (patch.jobDispatcher !== undefined) {
       const jd = snapshot.jobDispatcher;

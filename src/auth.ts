@@ -270,12 +270,8 @@ export const refreshRateLimiter = configurableLimiter(
   tooMany("Too many refresh attempts - please wait before trying again."),
 );
 
-// The global stop (POST /api/stop-all) is a safety function: it has its own, much higher budget than the login (an emergency stop must not be starved by
-// anything else), but it is still bounded, per address, so a loop of calls cannot saturate the server.
-export const stopAllRateLimiter = configurableLimiter(
-  (s) => ({ limit: s.stopAllMax, windowMs: s.stopAllWindowMs }),
-  tooMany("Too many global stop requests from this address - the robots were not touched by this call, use the per-robot stop meanwhile."),
-);
+// The global stop (POST /api/stop-all) has no limiter on purpose: an emergency stop must never answer 429, whoever else shares the address (a NAT, a proxy).
+// Only its secondary work (the audit record, the push) is bounded, in src/routes/commandRoutes.ts.
 
 // The general budget per address for the API routes that read or change things: generous (a kiosk, a phone and a browser behind one address all poll),
 // so only a loop that hammers the server is stopped.

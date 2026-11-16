@@ -9065,8 +9065,7 @@
           {
             "bearerAuth": []
           }
-        ],
-        "x-rate-limited": true
+        ]
       }
     },
     "/api/stop-all/release": {
@@ -9084,6 +9083,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/GlobalStopReleased"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -10135,8 +10144,7 @@
                 "type": "object",
                 "required": [
                   "username",
-                  "password",
-                  "role"
+                  "password"
                 ],
                 "properties": {
                   "username": {

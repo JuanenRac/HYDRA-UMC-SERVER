@@ -24,6 +24,8 @@ export interface StopStateSnapshot {
   source: "brain-telemetry" | "none";
   /** Milliseconds since the epoch of the last change of `state`, `physical` or `software`; 0 before the first. */
   changedAt: number;
+  /** Present (true) only while the global stop was read back from disk when the server started and nobody has released it yet: the server is stopped because it restarted while stopped. */
+  restoredAfterRestart?: true;
 }
 
 export interface BridgeEstop {
@@ -55,6 +57,17 @@ export function unify(physical: PhysicalStop, software: SoftwareStop): StopState
   return physical === "ready" ? "READY" : "UNKNOWN";
 }
 
+/**
+ * Why nothing may be started on its own now (the gate of the job executor), or null. A stop holds it back; so does a state that is not known while the
+ * watch of the physical stop is on (a silent bridge is never read as a released stop). With the watch off the physical part is always unknown, so
+ * `UNKNOWN` then means "not watched" and does not hold anything back.
+ */
+export function holdsBack(snapshot: Pick<StopStateSnapshot, "state">, watchOn: boolean): string | null {
+  if (snapshot.state === "STOPPED") return "the server is stopped";
+  if (snapshot.state === "UNKNOWN" && watchOn) return "the state of the emergency stop is not known";
+  return null;
+}
+
 export interface StopStateOptions {
   /** Asks the bridge; returns the parsed answer or null when it could not be asked or answered something unusable. */
   fetchPhysical: () => Promise<BridgeEstop | null>;
@@ -69,6 +82,7 @@ export class StopState {
   private linkOk: boolean | null = null;
   private source: "brain-telemetry" | "none" = "none";
   private changedAt = 0;
+  private restored = false;
   private timer: ReturnType<typeof setInterval> | null = null;
   private polling = false;
   private readonly now: () => number;
@@ -86,12 +100,20 @@ export class StopState {
       physicalLinkOk: this.linkOk,
       source: this.source,
       changedAt: this.changedAt,
+      ...(this.restored && this.software === "stopped" ? { restoredAfterRestart: true as const } : {}),
     };
   }
 
   /** The global stop of the server was applied (true) or released (false). */
   setSoftware(stopped: boolean): void {
+    this.restored = false;
     this.apply(this.physical, stopped ? "stopped" : "ready", this.linkOk, this.source);
+  }
+
+  /** At start-up: the global stop was on when the server went down, so it is on again and stays on until an administrator releases it. */
+  restoreSoftware(): void {
+    this.restored = true;
+    this.apply(this.physical, "stopped", this.linkOk, this.source);
   }
 
   /** One reading of the bridge. A reading that fails or is not understood turns the physical part to `unknown`: a silent bridge is never read as a released stop. */

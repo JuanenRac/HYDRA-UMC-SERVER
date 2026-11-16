@@ -4,15 +4,19 @@ import { registerCommandRoutes } from "../src/routes/commandRoutes.ts";
 
 type Handler = (req: any, res: any) => Promise<void>;
 
-function setup(options: { settings: any; stopThrows?: number[]; saveRejects?: boolean; broadcastThrows?: boolean; withLimiter?: boolean }) {
+function setup(options: { settings: any; stopThrows?: number[]; saveRejects?: boolean; broadcastThrows?: boolean; deps?: Record<string, unknown> }) {
   let handler: Handler | undefined;
+  let releaseHandler: ((req: any, res: any) => unknown) | undefined;
   let chain: unknown[] = [];
-  const app: any = { post(route: string, ...handlers: unknown[]) { if (route === "/api/stop-all") { chain = handlers; handler = handlers[handlers.length - 1] as Handler; } } };
+  const app: any = { post(route: string, ...handlers: unknown[]) {
+    if (route === "/api/stop-all") { chain = handlers; handler = handlers[handlers.length - 1] as Handler; }
+    if (route === "/api/stop-all/release") releaseHandler = handlers[handlers.length - 1] as (req: any, res: any) => unknown;
+  } };
   const logs: string[] = [];
+  const audits: any[] = [];
   const stopped: number[] = [];
   const deltas: any[] = [];
   const authenticate = () => undefined;
-  const limiter = () => undefined;
   registerCommandRoutes(app, {
     authenticate,
     getSettings: () => options.settings,
@@ -22,7 +26,8 @@ function setup(options: { settings: any; stopThrows?: number[]; saveRejects?: bo
     broadcastRobotDelta: (batch: any[]) => { if (options.broadcastThrows) throw new Error("socket gone"); deltas.push(...batch); },
     startServerPlayback: () => undefined,
     stopServerPlayback: (id: number) => { if (options.stopThrows?.includes(id)) throw new Error("timer broken"); stopped.push(id); },
-    ...(options.withLimiter ? { stopAllRateLimiter: limiter } : {}),
+    audit: { record: (event: any) => { audits.push(event); } },
+    ...(options.deps ?? {}),
   } as any);
   const call = async (user: any = { id: "u1", username: "alice", role: "operator" }) => {
     let body: any;
@@ -30,7 +35,14 @@ function setup(options: { settings: any; stopThrows?: number[]; saveRejects?: bo
     await handler!({ user, ip: "10.0.0.7" }, res);
     return body;
   };
-  return { call, logs, stopped, deltas, chain: () => chain, authenticate, limiter };
+  const release = async (user: any = { id: "a1", username: "root", role: "admin" }) => {
+    let status = 200;
+    let body: any;
+    const res: any = { status(code: number) { status = code; return res; }, json(value: any) { body = value; return res; } };
+    await releaseHandler!({ user, ip: "10.0.0.8" }, res);
+    return { status, body };
+  };
+  return { call, release, logs, audits, stopped, deltas, chain: () => chain, authenticate };
 }
 
 const fixture = () => ({
@@ -108,11 +120,71 @@ test("global stop survives a broadcast that fails", async () => {
   assert.match(t.logs[1], /broadcast failed \(socket gone\)/);
 });
 
-test("global stop is signed-in only and runs the bounded limiter after the sign-in check", () => {
-  const withLimiter = setup({ settings: fixture(), withLimiter: true });
-  const chain = withLimiter.chain();
-  assert.equal(chain.length, 3);
-  assert.equal(chain[0], withLimiter.authenticate);
-  assert.equal(chain[1], withLimiter.limiter);
-  assert.equal(setup({ settings: fixture() }).chain().length, 3, "without a limiter a pass-through keeps the chain the same");
+test("global stop is signed-in only and has no rate limiter in front of it", () => {
+  const t = setup({ settings: fixture() });
+  const chain = t.chain();
+  assert.equal(chain.length, 2, "the sign-in check and the handler: nothing between them can answer 429");
+  assert.equal(chain[0], t.authenticate);
+});
+
+test("a thousand global stops in a row never answer 429 and every one applies the stop", async () => {
+  // the response object has no status(): a 429 (or any error status) would throw here instead of passing
+  const t = setup({ settings: fixture() });
+  for (let i = 0; i < 1000; i++) {
+    const body = await t.call();
+    assert.equal(body.success, true, `call ${i + 1}`);
+    assert.equal(body.stoppedCount, 3);
+  }
+  assert.equal(t.stopped.length, 3000, "every call stopped every robot");
+  assert.equal(t.deltas.length, 3000, "every call was broadcast");
+});
+
+test("repeated global stops of one account write one audit record and one log line per pause, another account is always recorded", async () => {
+  let now = 1_000_000;
+  const t = setup({ settings: fixture(), deps: { now: () => now, secondaryWorkGapMs: 1000 } });
+  await t.call();
+  await t.call();
+  await t.call();
+  assert.equal(t.audits.length, 1);
+  assert.equal(t.logs.filter((line) => line.startsWith("GLOBAL STOP by")).length, 1);
+  await t.call({ id: "u9", username: "bob", role: "operator" });
+  assert.equal(t.audits.length, 2, "a stop from another account is never folded into the first one");
+  now += 1500;
+  await t.call();
+  assert.equal(t.audits.length, 3);
+  assert.deepEqual(t.audits[2].detail.repeatedCalls, 2, "the record says how many calls it stands for");
+});
+
+test("the stop is written to disk once and before the answer; a write that fails is audited and tried again", async () => {
+  const written: string[] = [];
+  let ok = false;
+  let answered = false;
+  const t = setup({ settings: fixture(), deps: { persistGlobalStop: (by: string) => { written.push(`${by}:${answered ? "after" : "before"}`); return ok; } } });
+  const first = await t.call();
+  answered = true;
+  assert.equal(first.success, true, "a stop that could not be written is still applied");
+  assert.deepEqual(written, ["alice:before"]);
+  assert.equal(t.audits[0].outcome, "failed");
+  assert.equal(t.audits[0].detail.statePersisted, false);
+  assert.ok(t.logs.some((line) => /could not be written to disk/.test(line)));
+  ok = true;
+  await t.call();
+  await t.call();
+  assert.equal(written.length, 2, "once the stop is written the next calls do not write it again");
+});
+
+test("the release removes the written stop first and is refused, leaving the server stopped, when it can not", async () => {
+  const changes: boolean[] = [];
+  let cleared = false;
+  const t = setup({ settings: fixture(), deps: { clearGlobalStop: () => cleared, onGlobalStopChanged: (stopped: boolean) => { changes.push(stopped); } } });
+  const refused = await t.release();
+  assert.equal(refused.status, 500);
+  assert.equal(refused.body.code, "release-failed");
+  assert.deepEqual(changes, [], "the state of the apps is not touched by a refused release");
+  assert.equal(t.audits.at(-1).outcome, "failed");
+  cleared = true;
+  const done = await t.release();
+  assert.equal(done.status, 200);
+  assert.equal(done.body.success, true);
+  assert.deepEqual(changes, [false]);
 });

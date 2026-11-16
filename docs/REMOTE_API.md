@@ -263,8 +263,10 @@ file-backed (`data/users.json`) store.
 - `GET /api/users` -> `{ "users": [{ "username", "role", "createdAt" }, ...] }`
   (never includes password hashes).
 - `POST /api/users` (body: `{ "username", "password", "role" }`, role
-  `"admin"`, `"operator"` or `"viewer"`) creates a new account. `400` on a duplicate
-  username or a password under 4 characters.
+  `"admin"`, `"operator"` or `"viewer"`) creates a new account. Without a `role` the
+  account is a `"viewer"` (read only); an administrator is made only when `"admin"` is
+  asked for. `400` on a role that is none of the three, a duplicate username or a
+  password under 4 characters.
 - `PUT /api/users/:username` (body: any of `{ "newUsername", "password",
   "role" }`) renames the account, changes its password, and/or changes its
   role. Refuses to demote or delete the *last* remaining `admin` account
@@ -394,6 +396,9 @@ a separate one.
     no `If-Match`, and it is recorded in the audit record (`robot-disable`). From then on every
     command of the robot except `stop`, `disable` and `enable` is refused with `423` and
     `robot-disabled`, and the robot cannot be armed (`POST /api/robot/{id}/jog-arm`).
+  - With the option `safety.latchGlobalStop` on, a global stop holds back every command of every robot
+    (`423`, `code: "global-stop-latched"`, recorded in the audit record as refused) except `stop` and `disable`,
+    until an administrator releases the stop with `POST /api/stop-all/release`. Off by default.
   - `enable` brings it back and restarts nothing: it stays stopped and the jog has to be armed
     again. It is the risky direction, so it is off by default: it answers `403` with
     `enable-not-allowed` until an administrator turns on `robots.allowEnable` (Server Admin >
@@ -419,10 +424,13 @@ a separate one.
   file could not be written. Calling it again is harmless; an installation with no robots
   answers `200` with an empty list. `401`/`403` for a missing or invalid token. Every call is written to
   the server log (who, role, address, counts) and counted in
-  `hydra_robot_commands_total{command="stop-all"}`. It has its own rate limit,
-  separate from the login's and much higher (default 60 per minute per address,
-  `STOP_ALL_RATE_LIMIT_MAX` / `STOP_ALL_RATE_LIMIT_WINDOW_MS`); over it the answer is
-  `429` and the per-robot `"stop"` keeps working. Unsigned calls do not spend the budget.
+  `hydra_robot_commands_total{command="stop-all"}`. It has **no rate limit** and never
+  answers `429`, whoever else shares the address (a NAT, a proxy): every call applies the
+  stop. Only the secondary work is bounded: repeated calls of one account write one audit
+  record and one log line per second (the record says how many calls it stands for). The stop
+  is written to `data/global-stop.json` before the answer, so a restart of the server does not
+  undo it: the server comes back stopped until an administrator calls
+  `POST /api/stop-all/release`. Unsigned calls are refused with `401`.
 
 - `POST /api/robot/:id/claim` (body: `{ "ttlMs"?: number, "force"?: boolean, "reason"?: string }`,
   default `ttlMs` 5 minutes, capped at 30) and `POST /api/robot/:id/release`
@@ -1015,7 +1023,6 @@ Environment variables, read once at start (see `docs/PRODUCTION_BOOTSTRAP.md`):
 | `JWT_SECRET` | Required in production, at least 32 characters, not an example value. |
 | `HYDRA_UMC_CAMERA_AUTH` | **Required by default**: the live camera streams and the saved photos and recordings demand a ticket (`POST /api/camera/ticket`, `?ticket=` in the address) or a signed-in client (`Authorization: Bearer`) (`401` otherwise). `HYDRA_UMC_CAMERA_AUTH=open` is the opt-out for clients that do not ask for tickets yet; the server warns at every start while it is set. |
 | `HYDRA_UMC_WS_QUERY_TOKEN` | **Refused by default**: `/ws?token=` gets an error message and a close with `1008`; the token travels as the `hydra.bearer` subprotocol. `HYDRA_UMC_WS_QUERY_TOKEN=allow` is the opt-out for clients that have not moved yet (it keeps the token in proxy and server logs); the server warns at every start while it is set. |
-| `STOP_ALL_RATE_LIMIT_MAX`, `STOP_ALL_RATE_LIMIT_WINDOW_MS` | Budget of `POST /api/stop-all` per address (default 60 per 60 000 ms), separate from the login's. |
 | `HYDRA_UMC_INFO_AUTH=required` | `GET /metrics`, `/api/system/metrics`, `/api/system/supervisor`, `/api/ecosystem/status` and `/api/models` demand a signed-in client. Off by default so that a client that does not send its token on those routes yet keeps working. |
 | `HYDRA_UMC_INFO_TICKETS=1` | With the information routes closed (`HYDRA_UMC_INFO_AUTH=required`), a signed ticket opens them for a client that cannot send a token (a Prometheus scrape, a dashboard): `POST /api/info/ticket` (any signed-in account; body `{ "ttlSeconds": 600 }` optional) answers `{ "ticket", "expiresInSeconds" }` and the ticket goes in the address (`GET /metrics?ticket=...`). It opens `/metrics`, `/api/system/metrics`, `/api/system/supervisor`, `/api/ecosystem/status` and `/api/models` and nothing else, is signed with a key of its own (a camera ticket opens none of these, nor the reverse), says who asked and until when, and stops working the moment the option is turned off. The life is 300 seconds; only an administrator may ask for longer, up to `infoTickets.maxTtlSeconds` of `data/server-config.json` (30 to 2592000; 300 by default, so nothing lives longer until it is raised), and `infoTickets.ttlSeconds` changes the default life. Off by default: the route answers `404` and a ticket in an address is ignored. Also `infoTickets.enabled` of `PUT /api/admin/server-config`; an environment variable locks the switch. |
 | `HYDRA_UMC_DEVICE_TOKENS=1` | Signed tokens of one device (the screen of a Compute Module): see section 2x. Only the exact word `1` turns it on; off by default, and then `POST /api/admin/device-tokens`, `GET /api/admin/device-tokens`, `DELETE /api/admin/device-tokens/{id}` and `POST /api/device/login` answer `404`. The variable wins over the Server Admin option `deviceTokens.enabled`. |
@@ -1027,6 +1034,7 @@ Environment variables, read once at start (see `docs/PRODUCTION_BOOTSTRAP.md`):
 | `HYDRA_UMC_CONNECTION_RECORD_ADDRESS=1` | The history of connections (`/api/connections/*`) also keeps the address and user agent of each client, shown to administrators only. Off by default: they are personal data and the history works without them. |
 | `HYDRA_UMC_MQTT_HOME_ASSISTANT=1` | The MQTT bridge also publishes, retained, the discovery configs of each robot under `<discoveryPrefix>/<component>/<node>/<object>/config` (default prefix `homeassistant`, `mqtt.homeAssistant.discoveryPrefix`): one device per robot with its online flag, tool, playback state and joints and, only in `commands` mode, a stop button. Off by default; it applies on the next start. Also `mqtt.homeAssistant.enabled` of `PUT /api/admin/server-config`. See `docs/MQTT_BRIDGE.md`. |
 | `HYDRA_UMC_PRODUCTION_RDP_LEVEL` | The read-out protection level a production flash of the controller boards sets: `0` (off, the default: nothing is protected) or `1`; any other word is ignored. Level 2 is permanent and is never offered. Also `production.rdpLevel` of `PUT /api/admin/server-config` (an integer, `400` for any other value); the variable locks it. It only records the choice: no flashing tool reads it yet. |
+| `HYDRA_UMC_SAFETY_LATCH_STOP=1` | While the global stop is on, `POST /api/robot/{id}/command` answers `423` (`global-stop-latched`) to every command except `stop` and `disable`, until an administrator calls `POST /api/stop-all/release`. Off by default (the stop then does not hold back the commands of the server). Also `safety.latchGlobalStop` of `PUT /api/admin/server-config`. |
 | `HYDRA_UMC_HEALTH_OPEN=1` | `GET /health` answers without a sign-in with a bare health report (no version, host or counts). Off by default: the route then answers `404`, as if it did not exist. Also `health.open` of `PUT /api/admin/server-config`. |
 | `HYDRA_UMC_RATE_LIMITS=off` | Switches off the request limits per address (sign-in, renewals, API, code and service routes, global stop). On by default. Also `rateLimits.enabled` of `PUT /api/admin/server-config`, which asks for a confirmation in Server Admin and answers the warning `rate_limits_off`. |
 | Server Admin: `rateLimits.loginMax`, `loginWindowSeconds`, `refreshMax`, `apiMax`, `sensitiveMax`, `apiWindowSeconds`, `stopAllMax`, `stopAllWindowSeconds` | The numbers of the limiters (the variables `LOGIN_RATE_LIMIT_MAX`, `LOGIN_RATE_LIMIT_WINDOW_MS`, `REFRESH_RATE_LIMIT_MAX`, `API_RATE_LIMIT_MAX`, `API_RATE_LIMIT_WINDOW_MS`, `SENSITIVE_RATE_LIMIT_MAX`, `STOP_ALL_RATE_LIMIT_MAX`, `STOP_ALL_RATE_LIMIT_WINDOW_MS` win over them). Whole numbers: `loginMax` 3-100 (5), `loginWindowSeconds` 60-86400 (900), `refreshMax` 10-10000 (120), `apiMax` 60-100000 (600), `sensitiveMax` 5-10000 (30), `apiWindowSeconds` 10-3600 (60), `stopAllMax` 10-10000 (60), `stopAllWindowSeconds` 10-3600 (60); anything else is a `400`, a value fixed by a variable a `409`. A change applies at once and restarts the counters; `GET /api/admin/server-config` reports `rateLimits.<name>` as `{ value, source, min, max }`. The change is in the audit record as `rate-limits-options`. |
@@ -1123,7 +1131,7 @@ The server keeps a list of the clients that sign in (a Studio or Suite session, 
 - `GET /health` (no sign-in, but only once an administrator turned on `health.open`; until then `404`) answers the `HealthReport` contract of the SDK and nothing else: `{ "schema_version": "1.0", "state": "READY", "timestamp_utc": "...", "checks": { "process": "ok" }, "service": "hydra-umc-server" }`. It is meant for a supervisor or a load balancer that cannot sign in; the authenticated information stays in `/api/hydra-info`, `/api/system/metrics` and `/api/ecosystem/status`.
 - `GET /api/robots/liveness` (any signed-in account): `{ "schema_version": "1.0", "stale_after_s": 30, "robots": [ { "controller_id": "c1", "robot_id": 1, "state": "live", "last_update_utc": "...", "age_s": 4, "source": "state" } ] }`. `state` is `live` when the server had news of the robot within `stale_after_s`, `stale` when the last news is older, and `unknown` when there has been none since the server started (then there is no `last_update_utc`). News is a command the server carried out, a change of the robot's state that went out to the clients (`source: "state"`) or a heartbeat (`source: "heartbeat"`). It is **not** the `online` flag of the settings, which only records what an operator switched on, and it is not a measurement of the hardware: a robot nobody commands and no bridge reports is `stale` or `unknown`, not live. The limit is `liveness.staleAfterS` of `data/server-config.json` (whole seconds, 1 to 3600, 30 by default; anything else gives the default).
 - `POST /api/robot/:id/heartbeat` (no body; `admin` or `operator`, so a bridge or controller account with real news of a robot can keep it live): `{ "success": true }`, or `404` for a robot that is not in the roster.
-- `POST /api/stop-all/release` (admin only, no body): says the global stop is over, `{ "success": true, "announced": true }`. It publishes the retained `READY` when announcing is configured (`announced: false` otherwise or when the broker is not connected), moves no robot and is written to the audit record (`stop-all-release`). The announcement of the stop itself, and what a bridge does with it, are in `docs/GLOBAL_STOP.md`.
+- `POST /api/stop-all/release` (admin only, no body): says the global stop is over, `{ "success": true, "announced": true }`. It first removes the stop that was written to `data/global-stop.json`: if that fails the answer is `500` (`code: "release-failed"`) and the server stays stopped. It publishes the retained `READY` when announcing is configured (`announced: false` otherwise or when the broker is not connected), moves no robot and is written to the audit record (`stop-all-release`). The announcement of the stop itself, and what a bridge does with it, are in `docs/GLOBAL_STOP.md`.
 
 ### 2p2. Health of a controller board: `GET /api/ecosystem/node-health?slot=N`
 
@@ -1272,8 +1280,8 @@ values today:
   { "schema": 1, "state": "STOPPED" | "READY" | "UNKNOWN", "physical": "latched" | "ready" | "unknown", "software": "stopped" | "ready", "physicalLinkOk": boolean | null,
   "source": "brain-telemetry" | "none", "changedAt": ms }`. It is sent right after the first `settings` message and again at every change. The physical stop is the frame on identifier `0x001` of the
   stack bus as the kinematic brain holds it, read through the SPI bridge of the CM5 (`GET /estop`) every `HYDRA_UMC_ESTOP_WATCH_MS` milliseconds (500 to 60000; `0` or unset: off, the
-  default, and the physical part stays `unknown`; Server Admin sets it too, as `safety.estopWatchMs`, and a change applies on restart); `software` is the global stop of this server (`POST /api/stop-all`, released by `POST /api/stop-all/release`; kept in memory, so it is
-  `ready` again after a restart). `STOPPED` when either is on, `READY` only when the physical stop is known to be released and the global stop is not on, otherwise `UNKNOWN`. A bridge that
+  default, and the physical part stays `unknown`; Server Admin sets it too, as `safety.estopWatchMs`, and a change applies on restart); `software` is the global stop of this server (`POST /api/stop-all`, released by `POST /api/stop-all/release`; it is written to disk before the answer
+  and read back at start-up, so a restart does not undo it: the server comes back `stopped` with `"restoredAfterRestart": true` in the message until the release). `STOPPED` when either is on, `READY` only when the physical stop is known to be released and the global stop is not on, otherwise `UNKNOWN`. A bridge that
   does not answer is never read as a released stop. The server only reads: the message can not cause or release a stop.
 - `"canota_progress"` - real, live per-page flash progress from `POST
   /api/hardware/canota/flash` (section 2h), sent to every connected
