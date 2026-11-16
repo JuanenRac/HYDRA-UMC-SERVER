@@ -9,7 +9,7 @@ import { apiRateLimiter } from "../auth";
 import path from "path";
 import fs from "fs";
 import { realSettings, slugify, isPathInside } from "../serverPolicy";
-import { RESERVED_DATA_FILENAMES } from "./staticRoutes";
+import { RESERVED_DATA_FILENAMES, staticDataRoots } from "./staticRoutes";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
 
@@ -47,6 +47,12 @@ export function registerWorksRoutes(app: express.Express, deps: WorksRouteDeps):
       if (!isPathInside(dataPath, absoluteFolderPath)) {
         return res.status(403).json({ error: "Access denied: Path traversal detected" });
       }
+      // A work file goes under WORKS or under the folder of a path in `settings.worksPaths`, never into the root of data/ or into a folder that
+      // holds the state of the server (the audit record, the second factor, a transaction), and no part of the path may be hidden (start with a dot).
+      const folderParts = path.relative(path.resolve(dataPath), absoluteFolderPath).split(path.sep).filter(Boolean);
+      if (folderParts.length === 0 || folderParts.some((part) => part.startsWith(".")) || !staticDataRoots(getSettings()).has(folderParts[0].toLowerCase())) {
+        return res.status(403).json({ error: "Access denied: folder not allowed for work files" });
+      }
 
       // fileName only ever needed the SAME guard folderPath gets above, but
       // never got it - it was joined into the write path as-is, so a value
@@ -78,6 +84,9 @@ export function registerWorksRoutes(app: express.Express, deps: WorksRouteDeps):
       // which folder they'd land in closes this without restricting the
       // legitimate use case (arbitrary folderPath values under dataPath,
       // including settings.worksPaths).
+      if (safeFileName.startsWith(".")) {
+        return res.status(400).json({ error: "Invalid file name" });
+      }
       if (RESERVED_DATA_FILENAMES.has(safeFileName.toLowerCase())) {
         return res.status(403).json({ error: "Access denied: reserved file name" });
       }

@@ -12,7 +12,25 @@ import fs from "fs";
 /** Bare filenames of the sensitive files in data/ that no static mount and no upload may touch. */
 export const RESERVED_DATA_FILENAMES = new Set(["settings.json", "users.json", "model_submissions.json", "refresh_tokens.json", "server-config.json", "store-meta.json", "safety-limits.json"]);
 
-export function registerStaticRoutes(app: express.Express, deps: { dataPath: string }): void {
+/** The names of the folders of data/ (lower case, first segment only) that the static mount may serve: WORKS and the first folder of every path in `settings.worksPaths`. Anything else in data/ (the audit record, the second factor store, the tokens, the camera media, an uploaded page) is never served by name. */
+export function staticDataRoots(settings: unknown): Set<string> {
+  const roots = new Set<string>(["works"]);
+  const paths = (settings as { worksPaths?: unknown } | null | undefined)?.worksPaths;
+  if (paths && typeof paths === "object") {
+    for (const value of Object.values(paths as Record<string, unknown>)) {
+      if (typeof value !== "string") continue;
+      const segments = path.posix.normalize(value.replace(/\\/g, "/")).split("/").filter((segment) => segment && segment !== ".");
+      const first = (segments[0] ?? "").toLowerCase();
+      if (first && first !== ".." && !first.startsWith(".")) roots.add(first);
+    }
+  }
+  return roots;
+}
+
+/** Extensions a browser would run or render as a page: served as plain text, so a file saved under WORKS can never become a page of this origin. */
+const ACTIVE_CONTENT = /\.(html?|xhtml|svg|xml|js|mjs)$/i;
+
+export function registerStaticRoutes(app: express.Express, deps: { dataPath: string; getSettings?: () => unknown }): void {
   const { dataPath } = deps;
   // Serve static data files (like WORKS/, and any custom worksPaths a
   // robot is configured to use, which can point anywhere under data/, not
@@ -79,7 +97,35 @@ export function registerStaticRoutes(app: express.Express, deps: { dataPath: str
     }
     next();
   });
-  app.use(express.static(dataPath));
+  // Only the folders of the works are served (an allow-list: a new file the server writes to data/ is private until somebody decides otherwise), never a dot file, and never as
+  // something a browser would run.
+  const dataStatic = express.static(dataPath, {
+    dotfiles: "ignore",
+    setHeaders: (res, filePath) => {
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      if (ACTIVE_CONTENT.test(filePath)) res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    },
+  });
+  app.use((req, res, next) => {
+    let first = "";
+    try {
+      first = (path.posix.normalize(decodeURIComponent(req.path)).toLowerCase().split("/").filter(Boolean)[0]) ?? "";
+    } catch {
+      res.status(400).end();
+      return;
+    }
+    let roots: Set<string>;
+    try {
+      roots = staticDataRoots(deps.getSettings ? deps.getSettings() : undefined);
+    } catch {
+      roots = staticDataRoots(undefined);
+    }
+    if (first && roots.has(first)) {
+      dataStatic(req, res, next);
+      return;
+    }
+    next();
+  });
 
   // The AI dashboard (served at /dashboard-ai, below) may be shown inside a panel of STUDIO (an iframe of /dashboard-ai/?embed=1) and by nobody
   // else: only a page of this same origin may frame it (it shares the login of that origin, so a frame from another origin would have nothing

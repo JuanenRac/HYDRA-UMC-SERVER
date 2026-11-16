@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -154,5 +155,32 @@ test("the plain mode writes file by file as before and the options come from the
     assert.deepEqual(settingsStoreOptionsFromEnv({ HYDRA_UMC_SETTINGS_STORE: "PLAIN", HYDRA_UMC_SETTINGS_BACKUPS: "0", HYDRA_UMC_SETTINGS_BACKUP_INTERVAL_S: "5" }), { mode: "plain", backups: 0, backupIntervalMs: 5000 });
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a transaction that is not the server's own is discarded: a forged name or a target outside the data folder is never applied", () => {
+  const dir = tempDir();
+  const outside = tempDir();
+  try {
+    const content = "forged";
+    const sha = crypto.createHash("sha256").update(content).digest("hex");
+    const forge = (name: string, target: string) => {
+      const folder = path.join(dir, ".txn", name);
+      fs.mkdirSync(folder, { recursive: true });
+      fs.writeFileSync(path.join(folder, "0.new"), content);
+      fs.writeFileSync(path.join(folder, "manifest.json"), JSON.stringify({ version: 1, files: [{ target, sha256: sha }] }));
+    };
+    forge("x", path.join(dir, "users.json"));                              // a name the server never gives
+    forge("1700000000000-1-abc123", path.join(outside, "owned.json"));      // a target outside the data folder
+    forge("1700000000001-1-abc123", path.join(dir, "..", "escape.json"));   // a target that climbs out
+    const report = recoverTransactions(path.join(dir, ".txn"));
+    assert.equal(report.rolledForward, 0);
+    assert.equal(report.rolledBack, 3);
+    assert.equal(fs.existsSync(path.join(dir, "users.json")), false);
+    assert.equal(fs.existsSync(path.join(outside, "owned.json")), false);
+    assert.deepEqual(fs.readdirSync(path.join(dir, ".txn")), []);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(outside, { recursive: true, force: true });
   }
 });

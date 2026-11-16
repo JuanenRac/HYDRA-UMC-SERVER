@@ -665,7 +665,7 @@ deployment, keep Voice UI on `127.0.0.1:8091` and do not expose its port.
   spec-shaped stream to render against before a real camera pipeline
   lands. No auth required.
 - `POST /api/upload-work` (body: `{ "folderPath", "fileName", "content" }`)
-  - **any authenticated token, `admin` or `operator`**. Writes `content`
+  - **any authenticated token, `admin` or `operator`**. The folder has to be `WORKS` or the first folder of a path of `settings.worksPaths` (anything else, the root of `data/` included, and any path with a part that starts with a dot is `403`; a file name that starts with a dot is `400`): the same folders are the only ones the static mount serves, as plain text when a browser would run the file, with `X-Content-Type-Options: nosniff`. Writes `content`
   as JSON under `data/<folderPath>/<fileName>` (creating the folder if
   needed) and appends `fileName` to that folder's own `index.json`. Real
   path-traversal hardening: `folderPath` has `..` stripped and the

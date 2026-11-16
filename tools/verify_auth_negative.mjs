@@ -141,10 +141,18 @@ async function main() {
     const workFile = await request(port, "/api/upload-work", {
       method: "POST",
       headers: { authorization: `Bearer ${operatorToken}` },
-      body: JSON.stringify({ folderPath: "contract-check", fileName: "operator.json", content: { ok: true } }),
+      body: JSON.stringify({ folderPath: "WORKS/contract-check", fileName: "operator.json", content: { ok: true } }),
     });
     assert.equal(workFile.response.status, 200);
     assert.equal(workFile.body.success, true);
+    for (const [folderPath, fileName] of [["", "index.html"], [".", "audit.jsonl"], [".txn/x", "manifest.json"], ["camera-media", "x.json"], ["WORKS/.hidden", "x.json"], ["WORKS", ".x.json"]]) {
+      const refused = await request(port, "/api/upload-work", {
+        method: "POST",
+        headers: { authorization: `Bearer ${operatorToken}` },
+        body: JSON.stringify({ folderPath, fileName, content: { ok: true } }),
+      });
+      assert.ok(refused.response.status === 403 || refused.response.status === 400, `an operator must not write ${folderPath}/${fileName}: ${refused.response.status}`);
+    }
 
     // An exact-string check against req.path must not be what guards
     // settings.json/users.json/etc. under express.static(dataPath) - real,
@@ -169,7 +177,7 @@ async function main() {
       const { response } = await fetch(`http://127.0.0.1:${port}${bypass}`, { redirect: "manual" }).then((r) => ({ response: r }));
       assert.equal(response.status, 404, `static bypass ${bypass} must not serve settings.json`);
     }
-    const legitimateWorkFile = await fetch(`http://127.0.0.1:${port}/contract-check/operator.json`);
+    const legitimateWorkFile = await fetch(`http://127.0.0.1:${port}/WORKS/contract-check/operator.json`);
     assert.equal(legitimateWorkFile.status, 200, "this fix must not block legitimate WORKS file access");
     const legitimateBody = await legitimateWorkFile.json();
     assert.equal(legitimateBody.ok, true);

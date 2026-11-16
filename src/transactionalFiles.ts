@@ -116,6 +116,20 @@ export function recoverTransactions(root: string): RecoveryReport {
       continue;
     }
     let complete = true;
+    // A transaction is made by the server itself, in a folder with the name it gives (`<ms>-<pid>-<hex>`), and only for files inside the data folder this one belongs to.
+    // Anything else (a folder somebody else left, a target that points outside) is discarded, never applied.
+    const dataRoot = path.resolve(path.dirname(root));
+    const inside = (target: unknown): target is string => {
+      if (typeof target !== "string" || !target || target.includes("\0")) return false;
+      const relation = path.relative(dataRoot, path.resolve(target));
+      return relation !== "" && !relation.startsWith("..") && !path.isAbsolute(relation);
+    };
+    if (!/^[0-9]+-[0-9]+-[0-9a-f]+$/.test(entry.name) || !manifest.files.every((file) => file && inside(file.target) && typeof file.sha256 === "string")) {
+      fs.rmSync(dir, { recursive: true, force: true });
+      report.rolledBack++;
+      report.problems.push(`${entry.name}: not a transaction of this server; discarded`);
+      continue;
+    }
     manifest.files.forEach((file, index) => {
       const staged = path.join(dir, `${index}.new`);
       if (!fs.existsSync(staged)) return; // already applied before the cut

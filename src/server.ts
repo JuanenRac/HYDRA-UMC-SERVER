@@ -370,7 +370,7 @@ async function startServer() {
   // Ids repeated by a configuration of an older version: the server starts, the routes by those ids answer 409 (see src/robotIds.ts) and the log says so.
   for (const line of ambiguousRobotLogLines(getSettings())) industrialLog(line);
 
-  registerStaticRoutes(app, { dataPath });
+  registerStaticRoutes(app, { dataPath, getSettings });
 
   // The signed tokens of one device (off by default: deviceTokens.enabled). The sign-in of a device and the renewal of its session live with the other sign-in routes.
   const deviceTokens = new DeviceTokenStore({ file: path.join(dataPath, "device-tokens.json"), key: deviceTokenKey(JWT_SECRET) });

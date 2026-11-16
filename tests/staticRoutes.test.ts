@@ -13,7 +13,7 @@ import os from "node:os";
 import path from "node:path";
 import type { AddressInfo } from "node:net";
 import express from "express";
-import { RESERVED_DATA_FILENAMES, registerStaticRoutes } from "../src/routes/staticRoutes";
+import { RESERVED_DATA_FILENAMES, registerStaticRoutes, staticDataRoots } from "../src/routes/staticRoutes";
 
 const originalCwd = process.cwd();
 
@@ -35,7 +35,7 @@ function raw(port: number, target: string): Promise<{ status: number; headers: h
   });
 }
 
-async function withServer(work: (port: number, root: string) => Promise<void>, frontends: boolean): Promise<void> {
+async function withServer(work: (port: number, root: string) => Promise<void>, frontends: boolean, options: { settings?: unknown } = {}): Promise<void> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "static-routes-"));
   const dataPath = path.join(root, "data");
   write(path.join(dataPath, "WORKS", "a.json"), '{"ok":true}');
@@ -44,6 +44,17 @@ async function withServer(work: (port: number, root: string) => Promise<void>, f
   write(path.join(dataPath, "points", "p.json"), "points");
   write(path.join(dataPath, "backups", "b.json"), "backup");
   write(path.join(dataPath, ".txn", "t.json"), "transaction");
+  write(path.join(dataPath, "audit.jsonl"), '{"user":"x"}');
+  write(path.join(dataPath, "audit-0000000001.jsonl"), '{"user":"x"}');
+  write(path.join(dataPath, "totp.json"), "{}");
+  write(path.join(dataPath, "connections.json"), "{}");
+  write(path.join(dataPath, "device-tokens.json"), "{}");
+  write(path.join(dataPath, "camera-media", "1", "snapshots", "a.jpg"), "jpg");
+  write(path.join(dataPath, "models", "submitted", "m.stl"), "stl");
+  write(path.join(dataPath, "index.html"), "<script>stolen()</script>");
+  write(path.join(dataPath, "WORKS", "page.html"), "<script>x()</script>");
+  write(path.join(dataPath, "WORKS", ".hidden.json"), "{}");
+  write(path.join(dataPath, "custom", "robot1", "b.json"), '{"ok":true}');
   if (frontends) {
     write(path.join(root, "public", "index.html"), "<title>studio</title>");
     write(path.join(root, "public", "dashboard-ai", "index.html"), "<title>ai</title>");
@@ -51,7 +62,7 @@ async function withServer(work: (port: number, root: string) => Promise<void>, f
   }
   process.chdir(root);
   const app = express();
-  registerStaticRoutes(app, { dataPath });
+  registerStaticRoutes(app, { dataPath, getSettings: () => options.settings });
   const server = http.createServer(app);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   try {
@@ -115,4 +126,40 @@ test("the list of reserved files holds only bare names in lower case", () => {
     assert.equal(name, name.toLowerCase());
     assert.ok(!name.includes("/") && !name.includes("\\"), name);
   }
+});
+
+test("only the folders of the works are served: the state of the server in data/ is private, whatever its name", async () => {
+  await withServer(async (port) => {
+    for (const target of ["/audit.jsonl", "/audit-0000000001.jsonl", "/totp.json", "/connections.json", "/device-tokens.json", "/camera-media/1/snapshots/a.jpg", "/models/submitted/m.stl", "/%61udit.jsonl", "/AUDIT.JSONL"]) {
+      assert.equal((await raw(port, target)).status, 404, target);
+    }
+    assert.equal((await raw(port, "/WORKS/a.json")).status, 200);
+    assert.equal((await raw(port, "/custom/robot1/b.json")).status, 404, "a folder that no worksPaths names is not served");
+  }, false);
+});
+
+test("a page left in data/ does not become the home page, and a file of the works that a browser would run is served as plain text", async () => {
+  await withServer(async (port) => {
+    assert.equal((await raw(port, "/")).status, 404, "data/index.html is not served at the root");
+    assert.equal((await raw(port, "/index.html")).status, 404);
+    const page = await raw(port, "/WORKS/page.html");
+    assert.equal(page.status, 200);
+    assert.match(String(page.headers["content-type"]), /^text\/plain/);
+    assert.equal(page.headers["x-content-type-options"], "nosniff");
+    assert.equal((await raw(port, "/WORKS/a.json")).headers["x-content-type-options"], "nosniff");
+    assert.equal((await raw(port, "/WORKS/.hidden.json")).status, 404, "a dot file is never served");
+  }, false);
+});
+
+test("the folders of settings.worksPaths are served too, and nothing that tries to leave them", async () => {
+  await withServer(async (port) => {
+    assert.equal((await raw(port, "/custom/robot1/b.json")).status, 200);
+    assert.equal((await raw(port, "/audit.jsonl")).status, 404);
+  }, false, { settings: { worksPaths: { "1": "custom/robot1", "2": "../outside", "3": ".hidden/x", "4": 7 } } });
+});
+
+test("the roots that may be served come from WORKS and the first folder of each path of the settings, never from a dot or a parent folder", () => {
+  assert.deepEqual([...staticDataRoots(undefined)], ["works"]);
+  assert.deepEqual([...staticDataRoots({ worksPaths: { a: "Custom/robot1", b: "/other/x", c: "../up", d: ".h", e: "", f: 3, g: "a\\b" } })].sort(), ["a", "custom", "other", "works"]);
+  assert.deepEqual([...staticDataRoots({ worksPaths: "no" })], ["works"]);
 });
