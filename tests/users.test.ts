@@ -31,6 +31,7 @@ import {
   updateUser,
   deleteUser,
   verifyPassword,
+  NO_ACCOUNT_HASH,
   type StoredUser,
 } from "../src/users";
 
@@ -397,4 +398,12 @@ test("ensureSeedUser - tokenVersion seeding", async (t) => {
       assert.equal(listUsers()[0].username, "existing-admin");
     });
   });
+});
+
+test("the hash of nobody is well formed and never matches, so a sign-in for a missing account does the same work as one for a real account", async () => {
+  const [salt, hash] = NO_ACCOUNT_HASH.split(":");
+  assert.equal(salt.length, 32);
+  assert.equal(hash.length, 128);
+  assert.equal(await verifyPassword("", NO_ACCOUNT_HASH), false);
+  assert.equal(await verifyPassword("anything at all", NO_ACCOUNT_HASH), false);
 });

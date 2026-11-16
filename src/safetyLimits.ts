@@ -159,7 +159,7 @@ export function loadSafetyConfig(file: string, log: (m: string) => void = () => 
       return mergeSafetyConfig(defaults, raw);
     } catch (error) {
       const unknown = /^unknown setting "(.+)"$/.exec((error as Error).message);
-      if (unknown && dropKey(raw, unknown[1].split(".").slice(1))) {
+      if (unknown && dropKey(raw, unknown[1].split(".")[0] === "body" ? unknown[1].split(".").slice(1) : unknown[1].split("."))) {
         log(`[SAFETY] ${file} holds a setting this version does not know ("${unknown[1]}"); it is ignored.`);
         continue;
       }

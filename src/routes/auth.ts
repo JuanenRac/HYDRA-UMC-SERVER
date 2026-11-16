@@ -5,7 +5,7 @@
 // =============================================================================
 // Login, token refresh and logout, moved out of server.ts unchanged.
 import express from "express";
-import { findUser, verifyPassword, effectiveTokenVersion, effectiveId } from "../users";
+import { findUser, verifyPassword, NO_ACCOUNT_HASH, effectiveTokenVersion, effectiveId } from "../users";
 import { issueRefreshToken, consumeRefreshToken, revokeRefreshToken } from "../refresh_tokens";
 import { authFailuresTotal } from "../metrics";
 import { totpStore } from "../totp";
@@ -68,7 +68,9 @@ export function registerAuthRoutes(app: express.Express, deps: AuthRouteDeps = {
     // other concurrent HTTP/WebSocket connection (including real-time
     // robot command/telemetry traffic) keeps being served while a login
     // is being verified.
-    if (!user || !(await verifyPassword(password, user.passwordHash))) {
+    // An account that does not exist is checked against a hash of nobody, so the answer does not come sooner than for one that does.
+    const passwordOk = await verifyPassword(password, user ? user.passwordHash : NO_ACCOUNT_HASH);
+    if (!user || !passwordOk) {
       authFailuresTotal.inc({ reason: "invalid_credentials" });
       tell(() => connectionTracker().refused(sightingOf(req, user ? user.username : undefined), "login_failed", Boolean(user)));
       return res.status(401).json({ error: "Invalid credentials" });
