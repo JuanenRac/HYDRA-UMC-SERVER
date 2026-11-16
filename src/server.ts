@@ -56,7 +56,8 @@ import { SecurityConfig, certFingerprint, resolveBleMode, resolveTls, securityEn
 import { applyNewInstallTlsDefault } from "./newInstallTls";
 import { resolveMqttMode, type MqttBridge } from "./mqttBridge";
 import { startMqttBridge } from "./mqttStart";
-import { StopState, bridgeFetcher } from "./stopState";
+import { StopState, bridgeFetcher, holdsBack } from "./stopState";
+import { persistGlobalStop, readGlobalStop, clearGlobalStop, loadExecutorAttempts, saveExecutorAttempts } from "./restartSafety";
 import { upstreamHeaders } from "./upstreamAuth";
 import { readSecret } from "./mqttBridge";
 import { startBle } from "./ble/start";
@@ -120,7 +121,7 @@ import { createCameraSupervisor } from "./cameraSupervisor";
 import { createPlayback } from "./playback";
 import { createWsHub, attachWebSocketServer } from "./ws";
 import { createTelemetryProducer } from "./telemetryProducer";
-import { NODE_ENV, JWT_SECRET, authenticate, asyncHandler, requireAdmin, requireOperator, stopAllRateLimiter, setRateLimitSettingsProvider } from "./auth";
+import { NODE_ENV, JWT_SECRET, authenticate, asyncHandler, requireAdmin, requireOperator, setRateLimitSettingsProvider } from "./auth";
 import { VOICE_UI_URL, VOICE_UI_TOKEN, VOICE_UI_TIMEOUT_MS, DATALAKE_URL, DATALAKE_TIMEOUT_MS, CONNECTOR_HUB_URL, CONNECTOR_HUB_GATE_URL, SEMANTIC_PLANNER_URL, HIL_BRIDGE_URL, ROS2_BRIDGE_URL, SAFETY_ZONES_URL, ATC_URL, TWIN_WS_URL, CONNECTOR_HUB_TIMEOUT_MS, SPI_BRIDGE_URL, SPI_BRIDGE_VERSION_TIMEOUT_MS, SPI_BRIDGE_FLASH_TIMEOUT_MS } from "./upstreamConfig";
 import { LOG_FILE, bonjour, setupDiscovery, loadServerConfig, saveServerConfig, resolvePort, industrialLog, setCurrentPort, getCurrentPort, closeLog, setLogRedaction } from "./runtime";
 import { setSignatureRequirement } from "./voiceConfirm";
@@ -319,6 +320,15 @@ async function startServer() {
     fetchPhysical: bridgeFetcher(SPI_BRIDGE_URL, () => upstreamHeaders("spi-bridge"), SPI_BRIDGE_VERSION_TIMEOUT_MS),
     onChange: (snapshot) => hub.broadcastStopState(snapshot),
   });
+  // A global stop that was on when the server went down is on again: the server stays stopped until an administrator releases it (POST /api/stop-all/release).
+  // A record that is there but can not be read counts as a stop too. The apps are told it is "stopped after a restart" (restoredAfterRestart).
+  {
+    const kept = readGlobalStop(dataPath);
+    if (kept.stopped) {
+      stopState.restoreSoftware();
+      industrialLog(`GLOBAL STOP: the server came back STOPPED ${kept.damaged ? "(the written stop could not be read, so it is treated as on)" : `(stopped by ${kept.by ?? "unknown"} ${kept.since ?? ""})`}; an administrator has to release it.`);
+    }
+  }
 
   const playback = createPlayback({ getSettings, queueSettingsWrite, broadcastRobotDelta });
   const {
@@ -463,7 +473,6 @@ async function startServer() {
     broadcastRobotDelta,
     startServerPlayback,
     stopServerPlayback,
-    stopAllRateLimiter,
     safety,
     arming,
     audit,
@@ -474,6 +483,11 @@ async function startServer() {
     announceGlobalStop: () => (security.globalStopPublished() ? mqttBridge?.publishSafety("SAFE_STOP", "global stop") ?? false : undefined),
     announceGlobalStopReleased: () => (security.globalStopPublished() ? mqttBridge?.publishSafety("READY", "global stop released") ?? false : false),
     onGlobalStopChanged: (stopped) => stopState.setSoftware(stopped),
+    // The global stop is written to data/ before the answer and read back at start-up; only the release removes it.
+    persistGlobalStop: (by) => persistGlobalStop(dataPath, by),
+    clearGlobalStop: () => clearGlobalStop(dataPath),
+    // With safety.latchGlobalStop on, the commands of a person (and of MQTT/BLE, which enter the same route) are refused while the global stop is on.
+    motionLatched: () => security.globalStopLatched() && stopState.snapshot().software === "stopped",
     requireAdmin,
   });
 
@@ -839,7 +853,11 @@ async function startServer() {
         robotMap: () => security.jobStopRobotMap(),
         now: () => Date.now(),
         // The same things that hold back a person: the read-only mode and a stop (the global one or the physical one the brain reports).
-        gate: () => (security.readOnlyOn() ? "the server is in read-only mode" : stopState.snapshot().state === "STOPPED" ? "the server is stopped" : null),
+        // An unknown state of the emergency stop holds it back too while the watch of the physical stop is on.
+        gate: () => (security.readOnlyOn() ? "the server is in read-only mode" : holdsBack(stopState.snapshot(), security.estopWatchMs() > 0)),
+        // The attempts it started are kept in data/ so that a restart never plays a trajectory again on its own.
+        loadStartedAttempts: () => loadExecutorAttempts(dataPath),
+        saveStartedAttempts: (attempts) => saveExecutorAttempts(dataPath, attempts),
         robotState: (robotId) => {
           const found = findRobot(robotId);
           if (!found) return null;

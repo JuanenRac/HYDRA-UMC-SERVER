@@ -37,8 +37,19 @@ export interface CommandRouteDeps {
   ) => void;
   startServerPlayback: (robotId: number) => void;
   stopServerPlayback: (robotId: number) => void;
-  /** Bounded budget of the global stop (its own, generous limiter, never the login one). */
-  stopAllRateLimiter?: Middleware;
+  /**
+   * Writes the global stop to disk (called before the answer of POST /api/stop-all, so a restart can not undo it). Returns whether it was written.
+   * Without it nothing is written (tests).
+   */
+  persistGlobalStop?: (by: string) => boolean;
+  /** Removes the written global stop (the release). Returns false when it could not be removed: the release is then refused and the server stays stopped. */
+  clearGlobalStop?: () => boolean;
+  /** Whether motion commands must be refused right now: the option safety.latchGlobalStop is on and the global stop is on. Without it nothing is held back. */
+  motionLatched?: () => boolean;
+  /** The clock (milliseconds), for the pause between the secondary work of repeated global stops. */
+  now?: () => number;
+  /** Least milliseconds between two audit records / push notifications of the global stop (the stop itself is applied on every call). Default 1000. */
+  secondaryWorkGapMs?: number;
   /** The limits every client is held to (size of a jog, arming of the jog). Without it the built-in hard cap of the jog applies. */
   safety?: SafetyLimits;
   arming?: JogArming;
@@ -122,7 +133,6 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     broadcastRobotDelta,
     startServerPlayback,
     stopServerPlayback,
-    stopAllRateLimiter,
     safety,
     arming,
     audit,
@@ -140,7 +150,33 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
   // (same rule as the single-robot "stop"), needs no confirmation and no parameters, and is open to every signed-in account: the role model only has "admin"
   // and "operator" and both drive robots, so there is no narrower set that would still let any logged-in operator stop (a future read-only role would be refused
   // by requiring one of the two). The in-memory state is changed and the playback timers are stopped before anything is awaited, so a slow disk never delays the stop.
-  app.post("/api/stop-all", authenticate, stopAllRateLimiter ?? ((_req: any, _res: any, next: any) => next()), async (req, res) => {
+  // It is NEVER rate limited: a stop must not answer 429 whoever else shares the address. Every call applies the stop; only the secondary work is bounded
+  // (the audit record, the log line and the push at most once per secondaryWorkGapMs; one write of the settings at a time, joined by the next calls).
+  const clock = deps.now ?? Date.now;
+  const secondaryGap = deps.secondaryWorkGapMs ?? 1000;
+  // Per account: a loop of calls of one account is bounded, a stop from another account is always recorded.
+  const secondaryByAccount = new Map<string, { at: number; suppressed: number }>();
+  let stopFileWritten = false;
+  let stopWrite: Promise<void> | null = null;
+  let stopWriteAgain = false;
+  const writeSettingsCoalesced = (): Promise<void> => {
+    if (stopWrite) {
+      stopWriteAgain = true;
+      return stopWrite;
+    }
+    stopWrite = (async () => {
+      try {
+        do {
+          stopWriteAgain = false;
+          await queueSettingsWrite(getSettings());
+        } while (stopWriteAgain);
+      } finally {
+        stopWrite = null;
+      }
+    })();
+    return stopWrite;
+  };
+  app.post("/api/stop-all", authenticate, async (req, res) => {
     const user = (req as any).user;
     const results: {
       robotId: number;
@@ -179,19 +215,42 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     const stoppedCount = results.filter((r) => r.stopped).length;
     const failedCount = results.length - stoppedCount;
     const reservedByOthers = results.filter((r) => r.reservedBy !== undefined).length;
-    industrialLog(
-      `GLOBAL STOP by ${user?.username ?? "unknown"} (${user?.role ?? "unknown"}) from ${req.ip ?? "unknown"}: ${stoppedCount}/${results.length} robot(s) stopped, ` +
-      `${results.reduce((n, r) => n + r.valvesOff, 0)} valve(s) and ${results.reduce((n, r) => n + r.pumpsOff, 0)} pump(s) switched off, ${reservedByOthers} reserved by another account` +
-      (failedCount ? `, ${failedCount} FAILED` : ""),
-    );
     robotCommandsTotal.inc({ command: "stop-all" });
-    emitPush("global-stop");
-    audit?.record({
-      type: "stop-all", outcome: failedCount === 0 ? "ok" : "failed", userId: user?.id, username: user?.username, ip: req.ip,
-      detail: { stoppedCount, failedCount, reservedByOthers },
-    });
     onClaimsChanged?.();
     try { deps.onGlobalStopChanged?.(true); } catch { /* the stop state of the apps must never break the stop */ }
+    // The stop is written to disk BEFORE the answer: a restart (a crash, an update, a power cut) brings the server back stopped, and only the release ends it.
+    // A write that fails does not undo the stop (it is applied in memory); it is logged, audited and tried again on the next call.
+    let statePersisted = true;
+    if (!stopFileWritten) {
+      try {
+        statePersisted = deps.persistGlobalStop?.(String(user?.username ?? "unknown")) ?? true;
+      } catch {
+        statePersisted = false;
+      }
+      stopFileWritten = statePersisted;
+      if (!statePersisted) industrialLog("GLOBAL STOP: the stop could not be written to disk; it is applied in memory, but a restart would not keep it.");
+    }
+    const startedAt = clock();
+    const accountKey = String(user?.id ?? user?.username ?? "unknown");
+    const secondary = secondaryByAccount.get(accountKey);
+    const doSecondary = secondary === undefined || startedAt - secondary.at >= secondaryGap;
+    if (doSecondary) {
+      const repeated = secondary?.suppressed ?? 0;
+      if (secondaryByAccount.size >= 256) for (const [key, entry] of secondaryByAccount) if (startedAt - entry.at >= secondaryGap) secondaryByAccount.delete(key);
+      secondaryByAccount.set(accountKey, { at: startedAt, suppressed: 0 });
+      industrialLog(
+        `GLOBAL STOP by ${user?.username ?? "unknown"} (${user?.role ?? "unknown"}) from ${req.ip ?? "unknown"}: ${stoppedCount}/${results.length} robot(s) stopped, ` +
+        `${results.reduce((n, r) => n + r.valvesOff, 0)} valve(s) and ${results.reduce((n, r) => n + r.pumpsOff, 0)} pump(s) switched off, ${reservedByOthers} reserved by another account` +
+        (failedCount ? `, ${failedCount} FAILED` : "") + (repeated > 0 ? `; ${repeated} more call(s) since the last record` : ""),
+      );
+      emitPush("global-stop");
+      audit?.record({
+        type: "stop-all", outcome: failedCount === 0 && statePersisted ? "ok" : "failed", userId: user?.id, username: user?.username, ip: req.ip,
+        detail: { stoppedCount, failedCount, reservedByOthers, ...(statePersisted ? {} : { statePersisted: false }), ...(repeated > 0 ? { repeatedCalls: repeated } : {}) },
+      });
+    } else if (secondary) {
+      secondary.suppressed += 1;
+    }
     // Outside announcement (optional, behind a switch): after the stop is applied in memory, never before, and never able to break it.
     let announced: boolean | undefined;
     if (deps.announceGlobalStop) {
@@ -204,7 +263,7 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     }
     let persisted = true;
     try {
-      await queueSettingsWrite(getSettings());
+      await writeSettingsCoalesced();
     } catch (error) {
       persisted = false;
       industrialLog(`GLOBAL STOP: the settings could not be saved (${error instanceof Error ? error.message : "unknown error"}); the stop is applied in memory and broadcast.`);
@@ -221,6 +280,19 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
   // it moves no robot (a robot is brought back by its own commands) and it is recorded in the audit record.
   app.post("/api/stop-all/release", authenticate, deps.requireAdmin ?? ((_req: any, _res: any, next: any) => next()), (req: any, res: any) => {
     const user = req.user;
+    // The written stop is removed first: if it can not be removed the server stays stopped (and says so), because a stop that comes back after a restart is worse than a release that must be repeated.
+    let cleared = true;
+    try {
+      cleared = deps.clearGlobalStop?.() ?? true;
+    } catch {
+      cleared = false;
+    }
+    if (!cleared) {
+      industrialLog(`GLOBAL STOP: the release by ${user?.username ?? "unknown"} was refused because the written stop could not be removed; the server stays stopped.`);
+      audit?.record({ type: "stop-all-release", outcome: "failed", userId: user?.id, username: user?.username, ip: req.ip, detail: { reason: "stop-record-not-removed" } });
+      return res.status(500).json({ error: "the written global stop could not be removed; the server stays stopped", code: "release-failed" });
+    }
+    stopFileWritten = false;
     let announced = false;
     try {
       announced = deps.announceGlobalStopReleased?.(`released by ${user?.username ?? "unknown"}`) ?? false;
@@ -240,6 +312,12 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
 
     if (typeof command !== "string" || !KNOWN_COMMANDS.has(command)) {
       return res.status(400).json({ error: "unknown command" });
+    }
+
+    // With safety.latchGlobalStop on, a global stop holds every command back (stop and disable still pass) until an administrator releases it.
+    if (command !== "stop" && command !== "disable" && deps.motionLatched?.()) {
+      audit?.record({ type: "robot-command", outcome: "refused", userId: (req as any).user?.id, username: (req as any).user?.username, ip: req.ip, robotId, detail: { command, reason: "global-stop-latched" } });
+      return res.status(423).json({ error: "the global stop is on: only an administrator can release it before robots move again", code: "global-stop-latched" });
     }
 
     if (!getSettings().controllers) {

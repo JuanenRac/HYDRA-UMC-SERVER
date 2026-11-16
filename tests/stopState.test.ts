@@ -170,3 +170,23 @@ describe("asking the bridge", () => {
     assert.equal(await bridgeFetcher("http://x", () => ({}), 100, fakeFetch(() => { throw new Error("refused"); }))(), null);
   });
 });
+
+describe("restored after a restart", () => {
+  it("restoreSoftware puts the server back to STOPPED, flagged, and the release clears both", () => {
+    const { state, seen } = make([ready]);
+    state.restoreSoftware();
+    assert.deepEqual([state.snapshot().state, state.snapshot().software, state.snapshot().restoredAfterRestart], ["STOPPED", "stopped", true]);
+    assert.equal(seen.length, 1);
+    state.setSoftware(false);
+    assert.equal(state.snapshot().software, "ready");
+    assert.equal("restoredAfterRestart" in state.snapshot(), false);
+  });
+
+  it("a stop pressed after the restart is a fresh one, not a restored one", () => {
+    const { state } = make([ready]);
+    state.restoreSoftware();
+    state.setSoftware(true);
+    assert.equal("restoredAfterRestart" in state.snapshot(), false);
+    assert.equal(state.snapshot().state, "STOPPED");
+  });
+});

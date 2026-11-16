@@ -119,6 +119,16 @@ test("an account is created with the role that was asked for, listed without its
   assert.equal((await call("DELETE", "/api/users/eyes")).status, 200);
 });
 
+test("an account created without a role is a viewer, never an administrator", async () => {
+  assert.equal((await call("POST", "/api/users", { username: "wallscreen", password: "long-enough-password" })).status, 200);
+  assert.equal((await call("POST", "/api/users", { username: "wallscreen2", password: "long-enough-password", role: null })).status, 200);
+  const users = (await call("GET", "/api/users")).body.users;
+  assert.equal(users.find((u: any) => u.username === "wallscreen").role, "viewer");
+  assert.equal(users.find((u: any) => u.username === "wallscreen2").role, "viewer");
+  assert.equal((await call("DELETE", "/api/users/wallscreen")).status, 200);
+  assert.equal((await call("DELETE", "/api/users/wallscreen2")).status, 200);
+});
+
 test("an account that cannot be made, changed or deleted answers 400 with the reason", async () => {
   const noBody = await call("POST", "/api/users", {});
   assert.equal(noBody.status, 400);
@@ -142,7 +152,7 @@ test("an account that cannot be made, changed or deleted answers 400 with the re
 });
 
 test("the last administrator can be neither deleted nor demoted, and another one can once there are two", async () => {
-  assert.equal((await call("POST", "/api/users", { username: "chief", password: "long-enough-password" })).status, 200, "no role asked: an administrator");
+  assert.equal((await call("POST", "/api/users", { username: "chief", password: "long-enough-password", role: "admin" })).status, 200, "an administrator is made only when it is asked for");
   const alone = (await call("GET", "/api/users")).body.users.filter((u: any) => u.role === "admin");
   assert.equal(alone.length, 1);
   const noDelete = await call("DELETE", "/api/users/chief");

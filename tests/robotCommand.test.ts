@@ -20,7 +20,7 @@ function makeSettings() {
   };
 }
 
-function setup(settings: any = makeSettings()) {
+function setup(settings: any = makeSettings(), extraDeps: Record<string, unknown> = {}) {
   let handler: Handler | undefined;
   const app: any = { post(route: string, ...handlers: unknown[]) { if (route === "/api/robot/:id/command") handler = handlers[handlers.length - 1] as Handler; } };
   const writes: any[] = [];
@@ -38,6 +38,7 @@ function setup(settings: any = makeSettings()) {
     startServerPlayback: (id: number) => { started.push(id); },
     stopServerPlayback: (id: number) => { stopped.push(id); },
     broadcastCommandLifecycle: (event: any) => { lifecycle.push(event); },
+    ...extraDeps,
   } as any);
   const call = async (id: string, body: any, user: any = { id: "alice-id", username: "alice", role: "operator" }) => {
     let status = 200;
@@ -276,4 +277,32 @@ test("a refused command announces nothing", async () => {
   assert.equal((await t.call("2", { command: "play" })).status, 409);
   assert.equal((await t.call("1", { command: "nope" })).status, 400);
   assert.equal(t.lifecycle.length, 0);
+});
+
+test("with the global stop latched every command except stop and disable is refused with 423 and changes nothing", async () => {
+  const audits: any[] = [];
+  const t = setup(makeSettings(), { motionLatched: () => true, audit: { record: (event: any) => { audits.push(event); } } });
+  const refused = ["play", "pause", "jog", "jogStep", "reset", "reset3D", "tool", "valve", "pump", "speed", "trajectory", "table", "vision", "enable", "points", "joints"];
+  for (const command of refused) {
+    const r = await t.call("1", { command, params: {} });
+    assert.equal(r.status, 423, command);
+    assert.equal(r.json.code, "global-stop-latched", command);
+  }
+  assert.deepEqual([t.started.length, t.writes.length, t.deltas.length, t.lifecycle.length], [0, 0, 0, 0], "nothing moved, nothing was written");
+  assert.equal(audits.length, refused.length);
+  assert.deepEqual(audits[0].detail, { command: "play", reason: "global-stop-latched" });
+  assert.equal(audits[0].outcome, "refused");
+  // a stop and a disable always pass, so the latch can never keep a robot from being made safe
+  assert.equal((await t.call("1", { command: "stop" })).status, 200);
+  assert.equal((await t.call("3", { command: "disable" })).status, 200);
+  assert.ok(t.stopped.includes(1));
+});
+
+test("without the latch (the default) the global stop does not hold the commands back, and an unknown command is still a 400 first", async () => {
+  const off = setup(makeSettings(), { motionLatched: () => false });
+  assert.notEqual((await off.call("1", { command: "play" })).status, 423);
+  const none = setup();
+  assert.notEqual((await none.call("1", { command: "play" })).status, 423);
+  const latched = setup(makeSettings(), { motionLatched: () => true });
+  assert.equal((await latched.call("1", { command: "nope" })).status, 400);
 });

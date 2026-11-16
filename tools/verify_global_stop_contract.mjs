@@ -142,16 +142,13 @@ async function main() {
     assert.match(metrics, /hydra_robot_commands_total\{command="stop-all"\} 2/, "the stop is counted");
   });
 
-  // --- the bounded limiter: its own budget, the login and the per-robot stop keep working
+  // --- the global stop is never limited: the old variable of its budget changes nothing, no call answers 429, the login and the per-robot stop keep working
   await withServer(tree(), { STOP_ALL_RATE_LIMIT_MAX: "3" }, async (port) => {
     const who = await accounts(port);
-    for (let i = 0; i < 3; i++) assert.equal((await request(port, "/api/stop-all", { method: "POST", headers: who.operator })).response.status, 200, `call ${i + 1} is inside the budget`);
-    const limited = await request(port, "/api/stop-all", { method: "POST", headers: who.operator });
-    assert.equal(limited.response.status, 429, "the fourth call is over the budget");
-    assert.match(limited.body.error, /per-robot stop/);
+    for (let i = 0; i < 60; i++) assert.equal((await request(port, "/api/stop-all", { method: "POST", headers: who.operator })).response.status, 200, `call ${i + 1} is never refused`);
     assert.equal((await request(port, "/api/robot/1/command", { method: "POST", headers: who.operator, body: JSON.stringify({ command: "stop" }) })).response.status, 200, "the per-robot stop still works");
     assert.equal((await request(port, "/api/login", { method: "POST", body: JSON.stringify(OPERATOR) })).response.status, 200, "the login is not starved");
-    assert.equal((await request(port, "/api/stop-all", { method: "POST" })).response.status, 401, "unsigned calls are refused before they spend the budget");
+    assert.equal((await request(port, "/api/stop-all", { method: "POST" })).response.status, 401, "unsigned calls are still refused");
   });
 
   // --- an installation without robots
@@ -162,7 +159,7 @@ async function main() {
     assert.deepEqual([empty.body.success, empty.body.stoppedCount, empty.body.robots.length], [true, 0, 0]);
   });
 
-  console.log("SERVER_GLOBAL_STOP_CONTRACT=PASS auth=2 reservation_ignored=1 valves_pumps_off=1 results=3 broadcast=1 audit=2 metric=1 idempotent=1 rate_limit=3 empty=1");
+  console.log("SERVER_GLOBAL_STOP_CONTRACT=PASS auth=2 reservation_ignored=1 valves_pumps_off=1 results=3 broadcast=1 audit=2 metric=1 idempotent=1 rate_limit=none empty=1");
 }
 
 main().catch((error) => { console.error(error); process.exitCode = 1; });

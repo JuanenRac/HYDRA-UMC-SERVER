@@ -184,7 +184,7 @@ export const REQUESTS = {
   "POST /api/admin/maintenance/prune": { required: ["component", "confirm"], fields: { component: str, keep: num, confirm: bool } },
   "POST /api/admin/device-tokens": { required: ["name", "username", "confirm"], fields: { name: str, username: str, ttlDays: num, confirm: bool } },
   "POST /api/logout": { required: [], fields: { refreshToken: str } },
-  "POST /api/users": { required: ["username", "password", "role"], fields: { username: str, password: str, role: str } },
+  "POST /api/users": { required: ["username", "password"], fields: { username: str, password: str, role: str } },
   "POST /api/upload-work": { required: ["folderPath", "fileName", "content"], fields: { folderPath: str, fileName: str, content: str } },
   "POST /api/models/submit": {
     required: ["name", "category", "urdfXml"],

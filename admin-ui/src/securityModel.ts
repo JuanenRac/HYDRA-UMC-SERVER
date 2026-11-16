@@ -32,6 +32,7 @@ export interface SwitchDef {
 export const SWITCHES: readonly SwitchDef[] = [
   { id: 'health.open', section: 'health', key: 'open', riskyWhen: true, label: 'sw_health_open', warning: 'warn_health_open', confirm: 'confirm_health_open', warningCode: 'health_open' },
   { id: 'safety.publishGlobalStop', section: 'safety', key: 'publishGlobalStop', riskyWhen: null, label: 'sw_publish_stop', warning: null, confirm: null, warningCode: 'global_stop_published' },
+  { id: 'safety.latchGlobalStop', section: 'safety', key: 'latchGlobalStop', riskyWhen: null, label: 'sw_latch_stop', warning: null, confirm: null, warningCode: null },
   { id: 'safety.framErase', section: 'safety', key: 'framErase', riskyWhen: true, label: 'sw_fram_erase', warning: 'warn_fram_erase', confirm: 'confirm_fram_erase', warningCode: 'fram_erase_on', sendsConfirm: true },
   { id: 'connections.recordAddress', section: 'connections', key: 'recordAddress', riskyWhen: true, label: 'sw_record_address', warning: 'warn_record_address', confirm: 'confirm_record_address', warningCode: 'connection_address_recorded' },
   { id: 'camera.open', section: 'camera', key: 'open', riskyWhen: true, label: 'sw_camera_open', warning: 'warn_camera_open', confirm: 'confirm_exposure', warningCode: 'camera_open' },
@@ -274,8 +275,6 @@ export const RATE_LIMIT_FIELDS = [
   { key: 'apiMax', label: 'rl_api_max' },
   { key: 'sensitiveMax', label: 'rl_sensitive_max' },
   { key: 'apiWindowSeconds', label: 'rl_api_window' },
-  { key: 'stopAllMax', label: 'rl_stopall_max' },
-  { key: 'stopAllWindowSeconds', label: 'rl_stopall_window' },
 ] as const;
 export type RateLimitKey = (typeof RATE_LIMIT_FIELDS)[number]['key'];
 

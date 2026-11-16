@@ -31,6 +31,8 @@ function harness(options: {
   gate?: string | null;
   robots?: Record<number, RobotRunState | null>;
   startOk?: boolean;
+  /** The attempts kept on disk across a restart (null: the record is there but unreadable). Without it nothing is remembered. */
+  store?: { attempts: string[] | null; saveOk?: boolean };
 } = {}) {
   const calls: Call[] = [];
   const audit: { type: string; outcome: string; detail: Record<string, unknown> }[] = [];
@@ -57,6 +59,14 @@ function harness(options: {
       if (robot) robot.playing = false;
       return true;
     },
+    ...(options.store ? {
+      loadStartedAttempts: () => options.store!.attempts,
+      saveStartedAttempts: (attempts: string[]) => {
+        if (options.store!.saveOk === false) return false;
+        options.store!.attempts = [...attempts];
+        return true;
+      },
+    } : {}),
     log: () => undefined,
     audit: (event) => audit.push(event),
     fetch: async (url, init) => {
@@ -269,4 +279,52 @@ test("the timers start and stop the loop", async () => {
   assert.equal(pending[1].ms, EXECUTOR_DEFAULTS.pollSeconds * 1000);
   executor.stop();
   assert.equal(cleared.length, 1);
+});
+
+test("a restart never starts an attempt again: the attempts that were started are kept and the same attempt is skipped", async () => {
+  const store: { attempts: string[] | null } = { attempts: [] };
+  const before = harness({ jobs: [job("J1", "arm-1")], store });
+  await before.executor.pass();
+  assert.deepEqual(before.started, [1]);
+  assert.deepEqual(store.attempts, ["J1#1"], "the attempt is written down");
+  // the server restarts: a new executor, the robot is idle again, the job is still assigned
+  const after = harness({ jobs: [job("J1", "arm-1")], store });
+  const report = await after.executor.pass();
+  assert.deepEqual(after.started, [], "nothing is played again on its own");
+  assert.match(report.skipped[0].reason, /already tried/);
+  // a new attempt of the same job is a new decision of the dispatcher and does start
+  const retried = harness({ jobs: [job("J1", "arm-1", { Attempt: 2 })], store });
+  await retried.executor.pass();
+  assert.deepEqual(retried.started, [1]);
+  assert.deepEqual(store.attempts, ["J1#2"], "the attempt that left the list is forgotten");
+});
+
+test("an attempt is written down before the robot moves, and nothing starts when it can not be written", async () => {
+  const store = { attempts: [] as string[] | null, saveOk: false };
+  const t = harness({ jobs: [job("J1", "arm-1")], store });
+  const report = await t.executor.pass();
+  assert.deepEqual(t.started, []);
+  assert.match(report.skipped[0].reason, /could not be written/);
+  assert.equal(t.audit.at(-1)?.outcome, "failed");
+});
+
+test("a record of attempts that is there but can not be read holds everything back", async () => {
+  const t = harness({ jobs: [job("J1", "arm-1")], store: { attempts: null } });
+  const report = await t.executor.pass();
+  assert.deepEqual(t.started, []);
+  assert.match(report.skipped[0].reason, /can not be read/);
+});
+
+test("a dry run writes nothing down and a finished job is not started again while the dispatcher still lists it", async () => {
+  const store: { attempts: string[] | null } = { attempts: [] };
+  const dry = harness({ jobs: [job("J1", "arm-1")], store, extra: { dryRun: true } });
+  await dry.executor.pass();
+  assert.deepEqual(store.attempts, []);
+  const live = harness({ jobs: [job("J1", "arm-1")], store });
+  await live.executor.pass();
+  live.state.robots[1] = { ...READY, finished: true };
+  await live.executor.pass();
+  live.state.robots[1] = { ...READY };
+  await live.executor.pass();
+  assert.deepEqual(live.started, [1], "started once");
 });
