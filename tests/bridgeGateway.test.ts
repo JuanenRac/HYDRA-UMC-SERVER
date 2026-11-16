@@ -228,6 +228,18 @@ test("with the switch on a signed-in client lists the bridges and reads one stat
   }
 });
 
+test("a stop that the bridge never answered is audited as failed, not as correct", async () => {
+  const s = await serve(() => true);
+  try {
+    const answer = await s.call("/api/bridges/cnc/cmd/stop", { method: "POST", body: "{}" });
+    assert.equal(answer.status, 200);
+    assert.deepEqual(await answer.json(), { accepted: true, result: null });
+    assert.equal(s.audits.at(-1).outcome, "failed");
+  } finally {
+    await s.close();
+  }
+});
+
 test("an operator sends a command; it is audited with the bridge and the verb and never the parameters", async () => {
   const s = await serve(() => true);
   try {
