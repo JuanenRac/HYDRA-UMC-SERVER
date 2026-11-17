@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { SecurityConfig, SecurityConfigError, type SecurityFile } from "../src/securityConfig.ts";
-import { messageSize, WS_MAX_ADMIN_BYTES, WS_MAX_MESSAGE_BYTES } from "../src/ws.ts";
+import { messageSize, WS_MAX_ADMIN_BYTES, WS_MAX_MESSAGE_BYTES } from "../src/wsLimits.ts";
 
 function makeConfig(env: any = {}, initial: SecurityFile = {}) {
   let stored: SecurityFile = { ...initial };

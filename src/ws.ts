@@ -12,15 +12,7 @@ import { realSettings, WS_TOKEN_SUBPROTOCOL, wsTokenFromSubprotocol, redactSetti
 import { findUser, effectiveTokenVersion, effectiveId } from "./users";
 import { authFailuresTotal, setWsClientsSource } from "./metrics";
 
-/** The size of a message that an account that is not an administrator may send, and the one nobody may pass (websocket.limitPayload of Server Admin). */
-export const WS_MAX_MESSAGE_BYTES = 1024 * 1024;
-export const WS_MAX_ADMIN_BYTES = 16 * 1024 * 1024;
-
-/** The size in bytes of what the library hands to the message handler (one buffer, a list of them, or an array buffer). */
-export function messageSize(raw: Buffer | ArrayBuffer | Buffer[]): number {
-  if (Array.isArray(raw)) return raw.reduce((sum, part) => sum + part.length, 0);
-  return raw instanceof ArrayBuffer ? raw.byteLength : raw.length;
-}
+import { messageSize, WS_MAX_ADMIN_BYTES, WS_MAX_MESSAGE_BYTES } from "./wsLimits";
 import { JWT_SECRET } from "./auth";
 import { verifyAccessToken } from "./jwtKeys";
 import { setupDiscovery } from "./runtime";
