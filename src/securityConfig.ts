@@ -354,6 +354,8 @@ export interface JobDispatcherFile {
     enabled?: boolean;
     /** The robot id the dispatcher uses -> the numeric id of the robot in this server. Other keys of this section (times, address) are kept as they are. */
     robotMap?: Record<string, number>;
+    /** What to do with the stop of a robot this server has not heard from: "withhold" (the default) or "server-state". */
+    silentRobot?: string;
     [other: string]: unknown;
   };
   replan?: {
@@ -812,6 +814,16 @@ export function resolvePresence(env: string | undefined, file: SecurityFile): { 
   return { value: false, source: "default" };
 }
 
+export const SILENT_ROBOT_VALUES = ["withhold", "server-state"] as const;
+export type SilentRobotValue = (typeof SILENT_ROBOT_VALUES)[number];
+const isSilentRobot = (value: unknown): value is SilentRobotValue => typeof value === "string" && (SILENT_ROBOT_VALUES as readonly string[]).includes(value);
+
+/** What the stop relay does with the stop of a robot this server has not heard from: only the exact words of the file count, anything else is the conservative "withhold". */
+export function resolveSilentRobot(file: SecurityFile): { value: SilentRobotValue; source: Source } {
+  const saved = file.jobDispatcher?.stopRelay?.silentRobot;
+  return isSilentRobot(saved) ? { value: saved, source: "config" } : { value: "withhold", source: "default" };
+}
+
 export const PRESENCE_ACTION_VALUES = ["slow", "pause", "notify", "stop"] as const;
 export type PresenceActionValue = (typeof PRESENCE_ACTION_VALUES)[number];
 const isPresenceAction = (value: unknown): value is PresenceActionValue => typeof value === "string" && (PRESENCE_ACTION_VALUES as readonly string[]).includes(value);
@@ -1161,7 +1173,7 @@ export interface SecuritySnapshot {
   rul: { enabled: { value: boolean; source: Source } };
   safety: { publishGlobalStop: { value: boolean; source: Source }; latchGlobalStop: { value: boolean; source: Source }; framErase: { value: boolean; source: Source }; estopWatchMs: { value: number; source: Source } };
   jobDispatcher: {
-    stopRelay: { enabled: { value: boolean; source: Source }; robotMap: Record<string, number>; activeEnabled: boolean; appliesOnRestart: boolean };
+    stopRelay: { enabled: { value: boolean; source: Source }; robotMap: Record<string, number>; silentRobot: { value: SilentRobotValue; source: Source }; activeEnabled: boolean; appliesOnRestart: boolean };
     /** The execution of the assigned jobs: `enabled` switches it on (a dry run), `live` lets it move the robots. Both apply on the next start. */
     executor: { enabled: { value: boolean; source: Source }; live: { value: boolean; source: Source }; activeEnabled: boolean; activeLive: boolean; appliesOnRestart: boolean };
     replan: {
@@ -1494,6 +1506,7 @@ export class SecurityConfig {
       stopRelay: {
         enabled: relay,
         robotMap: this.jobStopRobotMap(),
+        silentRobot: resolveSilentRobot(this.file),
         activeEnabled: this.options.jobStopRelayActive ?? false,
         appliesOnRestart: relay.value !== (this.options.jobStopRelayActive ?? false),
       },
@@ -2295,7 +2308,7 @@ export class SecurityConfig {
       if (jd.stopRelay !== undefined) {
         const sr = jd.stopRelay;
         if (typeof sr !== "object" || sr === null || Array.isArray(sr)) throw new SecurityConfigError(400, "jobDispatcher.stopRelay must be an object");
-        for (const key of Object.keys(sr)) if (key !== "enabled" && key !== "robotMap") throw new SecurityConfigError(400, `jobDispatcher.stopRelay.${key} cannot be changed here`);
+        for (const key of Object.keys(sr)) if (key !== "enabled" && key !== "robotMap" && key !== "silentRobot") throw new SecurityConfigError(400, `jobDispatcher.stopRelay.${key} cannot be changed here`);
         const relay = { ...(merged.stopRelay ?? {}) };
         if (sr.enabled !== undefined) {
           if (typeof sr.enabled !== "boolean") throw new SecurityConfigError(400, "jobDispatcher.stopRelay.enabled must be true or false");
@@ -2303,6 +2316,12 @@ export class SecurityConfig {
           relay.enabled = sr.enabled;
           appliesOnRestart = true;
           if (sr.enabled) warnings.push("job_stop_relay_on");
+        }
+        if (sr.silentRobot !== undefined) {
+          if (!isSilentRobot(sr.silentRobot)) throw new SecurityConfigError(400, 'jobDispatcher.stopRelay.silentRobot must be "withhold" or "server-state"');
+          relay.silentRobot = sr.silentRobot;
+          appliesOnRestart = true;
+          if (sr.silentRobot === "server-state") warnings.push("job_stop_silent_server_state");
         }
         if (sr.robotMap !== undefined) {
           const map = sr.robotMap;

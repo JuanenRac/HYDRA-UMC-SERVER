@@ -118,7 +118,7 @@ test("every sentence the tab uses exists in the eight languages, with no placeho
     if (def.warning) used.add(def.warning);
     if (def.confirm) used.add(def.confirm);
   }
-  for (const key of ["presence_action_title", "presence_action_slow", "presence_action_pause", "presence_action_notify", "presence_action_stop", "warn_presence_notify", "jd_title", "jd_relay_label", "jd_relay_help", "jd_map_label", "jd_map_placeholder", "jd_map_help", "jd_map_invalid", "jd_replan_title", "jd_allow_label", "jd_timeout_label", "jd_timeout_invalid", "jd_replan_help", "jd_not_editable", "jd_save", "jd_confirm", "jd_warning_relay", "jd_warning_replan", "jwt_algorithm_title", "jwt_algorithm_hs256", "jwt_algorithm_eddsa", "warn_jwt_eddsa", "jwt_keys_title", "jwt_key_active", "jwt_key_retired", "jwt_rotate", "jwt_rotate_confirm", "jwt_rotated", "jwt_rotate_error"]) used.add(key);
+  for (const key of ["presence_action_title", "presence_action_slow", "presence_action_pause", "presence_action_notify", "presence_action_stop", "warn_presence_notify", "jd_title", "jd_relay_label", "jd_relay_help", "jd_map_label", "jd_map_placeholder", "jd_map_help", "jd_map_invalid", "jd_replan_title", "jd_allow_label", "jd_timeout_label", "jd_timeout_invalid", "jd_replan_help", "jd_not_editable", "jd_save", "jd_confirm", "jd_warning_relay", "jd_warning_replan", "jwt_algorithm_title", "jwt_algorithm_hs256", "jwt_algorithm_eddsa", "warn_jwt_eddsa", "jwt_keys_title", "jwt_key_active", "jwt_key_retired", "jwt_rotate", "jwt_rotate_confirm", "jwt_rotated", "jwt_rotate_error", "jd_silent_label", "jd_silent_withhold", "jd_silent_server_state", "jd_silent_help", "jd_warning_silent"]) used.add(key);
   for (const language of LANGUAGES) {
     for (const key of used) {
       const text = MESSAGES[language][key];
@@ -127,6 +127,27 @@ test("every sentence the tab uses exists in the eight languages, with no placeho
     }
     assert.deepEqual(Object.keys(MESSAGES[language]), Object.keys(MESSAGES.en), `${language} has the keys of English, in the same order`);
   }
+});
+
+test("the choice for a silent robot: the tab reads it, sends it only when the server reports it, and the server saves and warns about it", () => {
+  const { config } = makeConfig();
+  const state = readJobDispatcher(config.snapshot())!;
+  assert.equal(state.silentRobot, "withhold");
+  const old = JSON.parse(JSON.stringify(config.snapshot()));
+  delete old.jobDispatcher.stopRelay.silentRobot;
+  assert.equal(readJobDispatcher(old)!.silentRobot, undefined);
+  const base = { relayEnabled: false, robotMapText: "", replanEditable: false, allowUnconfirmed: false, timeoutText: "" };
+  assert.deepEqual(jobDispatcherPatch(base), { jobDispatcher: { stopRelay: { enabled: false, robotMap: {} } } });
+  const patch = jobDispatcherPatch({ ...base, silentRobot: "server-state" })!;
+  assert.deepEqual(patch.jobDispatcher.stopRelay.silentRobot, "server-state");
+  const answer = config.update(patch, "root");
+  assert.equal(answer.snapshot.jobDispatcher.stopRelay.silentRobot.value, "server-state");
+  assert.equal(answer.snapshot.jobDispatcher.stopRelay.silentRobot.source, "config");
+  assert.ok(answer.appliesOnRestart);
+  assert.deepEqual(warningKeys(answer.warnings).filter((key) => key === "jd_warning_silent"), ["jd_warning_silent"]);
+  const back = config.update({ jobDispatcher: { stopRelay: { silentRobot: "withhold" } } }, "root");
+  assert.equal(back.snapshot.jobDispatcher.stopRelay.silentRobot.value, "withhold");
+  assert.deepEqual(warningKeys(back.warnings).filter((key) => key === "jd_warning_silent"), []);
 });
 
 test("the language is the saved one, else the browser's, else English", () => {

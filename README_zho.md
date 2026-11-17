@@ -204,6 +204,7 @@ CORS 通过一个可配置的白名单（`CORS_ALLOWED_ORIGINS`，见下文“�
 - `TLS_CERT_PATH` / `TLS_KEY_PATH`——**两者均**设置后，可将服务器（REST API + 共享同一监听器的 `/ws` WebSocket）从纯 HTTP/WS 切换为 HTTPS/WSS。详见下文“TLS / HTTPS”。任一未设置则保持当前的纯 HTTP 行为不变。
 - `HYDRA_UMC_CAMERA_AUTH`——摄像头画面(实时流、已保存的照片和录像)**默认**要求短时效 `?ticket=`(由 `POST /api/camera/ticket` 发给已登录客户端)或 Bearer 令牌;`HYDRA_UMC_CAMERA_AUTH=open` 是供尚未请求票据的客户端使用的临时退路。
 - `HYDRA_UMC_WS_QUERY_TOKEN`——`/ws?token=` **默认被拒绝**(令牌以 `hydra.bearer` 子协议传递);`HYDRA_UMC_WS_QUERY_TOKEN=allow` 是供尚未迁移的客户端使用的临时退路。只要设置了退路,服务器每次启动都会发出警告。
+- Server Admin 设置 `websocket.limitPayload` 和 `camera.limitRecordings`（默认均开启）：WebSocket 消息有大小限制（非管理员账户 1 MiB，任何人最多 16 MiB），摄像头录像会在 `camera.recordingMaxSeconds`（600 秒）之后、文件达到 `camera.recordingMaxBytes`（500 MB）时，或所有录像合计达到 `camera.recordingQuotaBytes`（5 GB）时停止。
 - `HYDRA_UMC_BLE_GATT`——蓝牙 LE 服务:`off`(默认)、`state`(手机读取状态)或 `commands`(并发送命令,每条命令都带有账户的访问令牌)。`HYDRA_UMC_BLE_ENCRYPTION=off` 不再要求加密链路(默认要求)。两者也可在服务器管理界面中设置;更改在下次启动时生效。主机上需要 BlueZ、`python3-dbus` 和 `python3-gi`。
 - `HYDRA_UMC_MQTT_BRIDGE`——连接单元 MQTT 代理的桥:`off`(默认)、`state`(每个机器人的状态发布到保留主题)或 `commands`(并且发布到某机器人主题上的命令,经与网络客户端相同的路由、使用由 `HYDRA_UMC_MQTT_COMMAND_USER` 指定的专用账户的令牌执行)。地址、主题前缀和用户名也可在 Server Admin 界面设置;密码只能通过环境变量设置。参见 [`docs/MQTT_BRIDGE.md`](docs/MQTT_BRIDGE.md)。
 - `HYDRA_UMC_INFO_AUTH=required`——要求已登录的客户端才能获取只读的主机信息(`/metrics`、`/api/system/metrics`、`/api/system/supervisor`、`/api/ecosystem/status`、`/api/models`)。默认关闭,以便尚未在这些路由上发送令牌的客户端继续可用;生产环境启动时在关闭期间会发出警告。
