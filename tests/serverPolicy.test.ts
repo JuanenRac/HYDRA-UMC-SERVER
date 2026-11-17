@@ -331,7 +331,7 @@ test("viewerMayCall: a read-only account reads and asks for a camera ticket, not
   assert.equal(viewerMayCall("POST", "/api/info/ticket"), true);
   assert.equal(viewerMayCall("PUT", "/api/info/ticket"), false);
   // What an account does to itself is open to a read-only one: turning the second factor on and registering its own phone.
-  for (const route of ["/api/totp/begin", "/api/totp/confirm", "/api/push/devices", "/api/totp/begin/", "/api/push/devices?x=1"]) assert.equal(viewerMayCall("POST", route), true, route);
+  for (const route of ["/api/totp/begin", "/api/totp/confirm", "/api/totp/recovery-codes", "/api/push/devices", "/api/totp/begin/", "/api/push/devices?x=1"]) assert.equal(viewerMayCall("POST", route), true, route);
   assert.equal(viewerMayCall("DELETE", "/api/push/devices/" + "ab".repeat(32)), true);
   // Turning it off, resetting another account's, and anything that names another path stay refused.
   for (const route of ["/api/totp/disable", "/api/users/ana/totp", "/api/totp/begin/x", "/api/push/devices/x", "/api/push/live-activities", "/api/push/devices/ab/cd"]) assert.equal(viewerMayCall("POST", route), false, route);

@@ -458,7 +458,7 @@ export function wsQueryTokenAllowed(value: string | undefined): boolean {
  * a viewer without having to remember it.
  *
  * The one other exception is what an account does to ITSELF: turn its own second factor on (POST /api/totp/begin and
- * /api/totp/confirm) and register or remove its own phone for notifications (POST /api/push/devices, DELETE
+ * /api/totp/confirm) and ask for new recovery codes for it (POST /api/totp/recovery-codes) and register or remove its own phone for notifications (POST /api/push/devices, DELETE
  * /api/push/devices/<token>). None of those routes takes an account name: each acts on the account of the token that calls it
  * (turning the second factor off, resetting someone else's and every other write stay refused), so a viewer cannot reach another account through them.
  */
@@ -471,7 +471,7 @@ export function viewerMayCall(method: string | undefined, path: string | undefin
 }
 
 /** The writes of a read-only account on its own account only: the first two steps of the second factor and the registration of its phone. */
-const VIEWER_OWN_ACCOUNT_POSTS = new Set(["/api/totp/begin", "/api/totp/confirm", "/api/push/devices"]);
+const VIEWER_OWN_ACCOUNT_POSTS = new Set(["/api/totp/begin", "/api/totp/confirm", "/api/totp/recovery-codes", "/api/push/devices"]);
 
 /**
  * The signing part of a firmware flash request: `signature` (the Ed25519 signature of the image, 128 hexadecimal digits)

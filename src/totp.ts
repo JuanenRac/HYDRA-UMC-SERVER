@@ -179,6 +179,16 @@ export class TotpStore {
     return good;
   }
 
+  /** New recovery codes for an account that has the factor on, given once; the ones left are no longer valid. Undefined when the account does not have it on. */
+  regenerateRecovery(userId: string): string[] | undefined {
+    const record = this.#records.get(userId);
+    if (!record || !record.secret) return undefined;
+    const codes = Array.from({ length: RECOVERY_CODES }, newRecoveryCode);
+    record.recovery = codes.map((code) => keyedRecoveryHash(code, this.#recoveryKey));
+    this.#persist();
+    return codes;
+  }
+
   recoveryLeft(userId: string): number { return this.#records.get(userId)?.recovery.length ?? 0; }
 
   /** How many of the recovery codes left are of the first kind (40 bits, kept as an unkeyed hash): the person is told to enrol again to get stronger ones. */

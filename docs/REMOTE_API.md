@@ -188,7 +188,8 @@ POST /api/login
   HMAC-SHA256 under a key of the server, so the codes cannot be searched for in a copy of `data/totp.json`; the codes
   that were issued before, of 10 digits, keep working until they are used or replaced by enrolling again); `GET /api/totp/status` answers
   `{ "enabled", "recoveryLeft" }`; `POST /api/totp/disable` `{ "password", "code" }` turns it off (a current code or an
-  unused recovery code). From then on `POST /api/login` also needs `"totp": "<code or recovery code>"`; without it the
+  unused recovery code); `POST /api/totp/recovery-codes` `{ "password", "code" }` (a current code or an unused recovery code) answers
+  ten new `recoveryCodes` and the codes left stop working, so an account whose codes are running out gets fresh ones without turning the factor off. From then on `POST /api/login` also needs `"totp": "<code or recovery code>"`; without it the
   answer is `401` with `{ "totpRequired": true }`, five wrong codes in a row make the next tries wait (`429` with
   `Retry-After`), and a code is accepted once. An administrator removes the factor of an account that lost the phone and the
   codes with `DELETE /api/users/:username/totp`. The secrets are kept encrypted in `data/totp.json` with a key derived

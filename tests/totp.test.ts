@@ -38,6 +38,27 @@ function newStore(now: { t: number }): { store: TotpStore; file: string; dir: st
   return { store: new TotpStore({ file, secret: "test-secret", now: () => now.t }), file, dir };
 }
 
+test("new recovery codes replace the old ones and need the factor to be on", () => {
+  const clock = { t: 1_700_000_000_000 };
+  const { store, dir } = newStore(clock);
+  try {
+    assert.equal(store.regenerateRecovery("u1"), undefined, "nothing to renew before the factor is on");
+    const { secret } = store.begin("u1", "ana");
+    assert.equal(store.regenerateRecovery("u1"), undefined, "a pending enrolment is not the factor on");
+    const first = store.confirm("u1", totpCode(fromBase32(secret), stepOf(clock.t)))!;
+    store.verify("u1", first[0]!);
+    assert.equal(store.recoveryLeft("u1"), RECOVERY_CODES - 1);
+    const second = store.regenerateRecovery("u1")!;
+    assert.equal(second.length, RECOVERY_CODES);
+    assert.equal(store.recoveryLeft("u1"), RECOVERY_CODES);
+    assert.equal(store.verify("u1", first[1]!), false);
+    assert.equal(store.verify("u1", second[0]!), true);
+    assert.equal(store.enabled("u1"), true);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  }
+});
+
 test("enrolment: not in force until confirmed, recovery codes once, replay refused", () => {
   const clock = { t: 1_700_000_000_000 };
   const { store, file, dir } = newStore(clock);
@@ -159,6 +180,19 @@ test("sign-in over HTTP: an account without the factor signs in as before, one w
     assert.ok(viaRecovery.body.token);
     // the recovery code is spent
     assert.equal((await call("POST", "/api/login", { username: "ana", password: "correct-horse-battery", totp: recovery[0] })).status, 401);
+
+    // new recovery codes: they need the password and a code, replace every old code and are shown once
+    assert.equal((await call("POST", "/api/totp/recovery-codes", { password: "correct-horse-battery", code: "000000" }, token)).status, 401);
+    assert.equal((await call("POST", "/api/totp/recovery-codes", { password: "wrong", code: recovery[1] }, token)).status, 401);
+    assert.equal((await call("POST", "/api/totp/recovery-codes", { password: "correct-horse-battery", code: recovery[1] }, undefined)).status, 401);
+    const renewed = await call("POST", "/api/totp/recovery-codes", { password: "correct-horse-battery", code: recovery[1] }, token);
+    assert.equal(renewed.status, 200);
+    const fresh = renewed.body.recoveryCodes as string[];
+    assert.equal(fresh.length, RECOVERY_CODES);
+    assert.equal(fresh.filter((item) => recovery.includes(item)).length, 0);
+    assert.equal((await call("GET", "/api/totp/status", undefined, token)).body.recoveryLeft, RECOVERY_CODES);
+    assert.equal((await call("POST", "/api/login", { username: "ana", password: "correct-horse-battery", totp: recovery[2] })).status, 401, "an old code no longer works");
+    assert.equal((await call("POST", "/api/login", { username: "ana", password: "correct-horse-battery", totp: fresh[0] })).status, 200);
 
     // turning it off needs the password and a code; an operator cannot reset someone else's
     assert.equal((await call("POST", "/api/totp/disable", { password: "correct-horse-battery" }, token)).status, 401);
