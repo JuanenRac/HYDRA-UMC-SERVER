@@ -57,7 +57,7 @@ Each line is one part of this repository and the light says how far it is today.
 | Area | State | What it means here |
 |---|---|---|
 | Software | 🟡 | Works for its main purpose; the honesty check of this README lists what is still missing |
-| Tests | 🟢 | 1144 automated tests, run on every change |
+| Tests | 🟡 | 1144 automated tests recorded; the exact count, or a workflow that runs them on every change, is not confirmed yet |
 | Real hardware | 🟡 | Run on a bench setup: the honesty check of this README says which parts ran on real hardware |
 | Interface and protocols | 🟡 | The routes or messages it offers are documented and tested with a client; not every client has used them yet |
 | Integration | 🟡 | It runs together with the other services on the CM5 test bench and its messages follow the shared contracts of the SDK |
