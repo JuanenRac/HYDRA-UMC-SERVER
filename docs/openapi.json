@@ -5648,6 +5648,16 @@
                 }
               }
             }
+          },
+          "507": {
+            "description": "Response. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           }
         },
         "parameters": [
