@@ -269,6 +269,45 @@ export function readJwtKeys(answer: unknown): JwtKeyRow[] {
   return rows;
 }
 
+// ------------------------------------------------------------------ the limits of a camera recording
+
+/** The numbers of the recording limits, in the order the screen shows them; `label` is the key of the text. */
+export const RECORDING_LIMIT_FIELDS = [
+  { key: 'recordingMaxSeconds', label: 'rec_max_seconds' },
+  { key: 'recordingMaxBytes', label: 'rec_max_bytes' },
+  { key: 'recordingQuotaBytes', label: 'rec_quota_bytes' },
+] as const;
+export type RecordingLimitKey = (typeof RECORDING_LIMIT_FIELDS)[number]['key'];
+export type RecordingLimitsState = Record<RecordingLimitKey, RateLimitNumber>;
+
+/** The numbers the server reports under `camera` (the switch is one of SWITCHES); null when the server predates them or reports one damaged. */
+export function readRecordingLimits(snapshot: unknown): RecordingLimitsState | null {
+  if (!isObject(snapshot) || !isObject(snapshot.camera)) return null;
+  const out: Partial<RecordingLimitsState> = {};
+  for (const { key } of RECORDING_LIMIT_FIELDS) {
+    const entry = snapshot.camera[key];
+    if (!isObject(entry) || !isSource(entry.source)) return null;
+    const { value, min, max } = entry;
+    if (typeof value !== 'number' || !Number.isFinite(value) || typeof min !== 'number' || typeof max !== 'number') return null;
+    out[key] = { value, source: entry.source, min, max };
+  }
+  return out as RecordingLimitsState;
+}
+
+/** The request body with only the numbers that changed; null when one typed number is not a whole number inside its range. */
+export function recordingLimitsPatch(current: RecordingLimitsState, texts: Record<RecordingLimitKey, string>): { camera: Partial<Record<RecordingLimitKey, number>> } | null {
+  const body: Partial<Record<RecordingLimitKey, number>> = {};
+  for (const { key } of RECORDING_LIMIT_FIELDS) {
+    const entry = current[key];
+    const trimmed = texts[key].trim();
+    if (!/^\d{1,15}$/.test(trimmed)) return null;
+    const n = Number(trimmed);
+    if (!Number.isSafeInteger(n) || n < entry.min || n > entry.max) return null;
+    if (n !== entry.value) body[key] = n;
+  }
+  return { camera: body };
+}
+
 // ------------------------------------------------------------------ the request limits per address
 
 /** The numbers of the limiters, in the order the screen shows them; `label` is the key of the text. */

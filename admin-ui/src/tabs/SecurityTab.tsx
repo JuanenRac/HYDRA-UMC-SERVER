@@ -17,6 +17,7 @@ import { detectLanguage, translate, type Language } from '../i18n';
 import {
   JWT_ALGORITHMS, PRESENCE_ACTIONS, isLocked, jwtAlgorithmPatch, readJwtAlgorithm, readJwtKeys, type JwtAlgorithm, type JwtAlgorithmState, type JwtKeyRow, jobDispatcherNeedsConfirmation, jobExecutorGoesLive, jobDispatcherPatch, needsConfirmation, parseRobotMapText, presenceActionPatch, readJobDispatcher,
   RATE_LIMIT_FIELDS, rateLimitsPatch, readRateLimits, type RateLimitKey, type RateLimitsState,
+  RECORDING_LIMIT_FIELDS, readRecordingLimits, recordingLimitsPatch, type RecordingLimitKey, type RecordingLimitsState,
   readPresenceAction, readSwitches, robotMapToText, switchPatch, warningKeys, type JobDispatcherState, type PresenceAction, type PresenceActionState, type SwitchState,
 } from '../securityModel';
 
@@ -39,6 +40,8 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
   const [jwtKeys, setJwtKeys] = useState<JwtKeyRow[]>([]);
   const [limits, setLimits] = useState<RateLimitsState | null>(null);
   const [limitTexts, setLimitTexts] = useState<Record<RateLimitKey, string> | null>(null);
+  const [recLimits, setRecLimits] = useState<RecordingLimitsState | null>(null);
+  const [recTexts, setRecTexts] = useState<Record<RecordingLimitKey, string> | null>(null);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
   const [relay, setRelay] = useState(false);
   const [execEnabled, setExecEnabled] = useState(false);
@@ -59,6 +62,9 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
     const rl = readRateLimits(snapshot);
     setLimits(rl);
     setLimitTexts(rl ? (Object.fromEntries(RATE_LIMIT_FIELDS.map(({ key }) => [key, String(rl[key].value)])) as Record<RateLimitKey, string>) : null);
+    const rec = readRecordingLimits(snapshot);
+    setRecLimits(rec);
+    setRecTexts(rec ? (Object.fromEntries(RECORDING_LIMIT_FIELDS.map(({ key }) => [key, String(rec[key].value)])) as Record<RecordingLimitKey, string>) : null);
     const algorithm = readJwtAlgorithm(snapshot);
     setJwt(algorithm);
     if (algorithm?.algorithm === 'EdDSA') void loadKeys();
@@ -143,6 +149,18 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
     void send(patch);
   };
 
+  const saveRecordingLimits = () => {
+    if (!recLimits || !recTexts) return;
+    const patch = recordingLimitsPatch(recLimits, recTexts);
+    if (!patch) {
+      setMessage('');
+      setError(t('rl_invalid'));
+      return;
+    }
+    if (Object.keys(patch.camera).length === 0) return;
+    void send(patch);
+  };
+
   const saveDispatcher = () => {
     if (!dispatcher) return;
     const patch = jobDispatcherPatch({ relayEnabled: relay, robotMapText: mapText, replanEditable: dispatcher.replanEditable, allowUnconfirmed: allow, timeoutText,
@@ -198,6 +216,21 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
             </div>
           ))}
           <button onClick={saveLimits} disabled={busy} className={button} data-testid="rl-save"><Save size={14} /> {t('rl_save')}</button>
+        </div>
+      )}
+
+      {recLimits && recTexts && (
+        <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 flex flex-col gap-3" data-testid="security-recording-limits">
+          <h3 className="text-xs font-bold text-slate-200">{t('rec_title')}</h3>
+          <p className="text-[10px] text-slate-500">{t('rec_help')}</p>
+          {RECORDING_LIMIT_FIELDS.map(({ key, label }) => (
+            <div key={key} className="flex flex-col gap-0.5">
+              <label className="text-xs font-bold text-slate-200" htmlFor={`rec-${key}`}>{t(label)}</label>
+              <input id={`rec-${key}`} data-testid={`rec-${key}`} type="text" inputMode="numeric" value={recTexts[key]} disabled={busy} onChange={e => setRecTexts({ ...recTexts, [key]: e.target.value })} className={`${input} w-48`} />
+              <span className="text-[10px] text-slate-500">{recLimits[key].min} - {recLimits[key].max} · {t(`source_${recLimits[key].source}`)}</span>
+            </div>
+          ))}
+          <button onClick={saveRecordingLimits} disabled={busy} className={button} data-testid="rec-save"><Save size={14} /> {t('rec_save')}</button>
         </div>
       )}
 

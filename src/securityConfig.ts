@@ -973,6 +973,14 @@ export function resolveCameraLimitRecordings(env: string | undefined, file: Secu
   return { value: true, source: "default" };
 }
 
+/** The three numbers of a recording (bounds and defaults), as Server Admin shows and checks them. */
+export const RECORDING_LIMIT_BOUNDS = {
+  recordingMaxSeconds: { def: 600, min: 1, max: 86_400 },
+  recordingMaxBytes: { def: 500_000_000, min: 1_000_000, max: 100_000_000_000 },
+  recordingQuotaBytes: { def: 5_000_000_000, min: 10_000_000, max: 10_000_000_000_000 },
+} as const;
+export type RecordingLimitKey = keyof typeof RECORDING_LIMIT_BOUNDS;
+
 /** A limit of a recording that is a whole number inside its bounds, else the default. */
 function recordingLimitValue(value: unknown, fallback: number, low: number, high: number): number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= low && value <= high ? value : fallback;
@@ -1171,7 +1179,7 @@ export interface SecuritySnapshot {
       appliesOnDispatcherRestart: boolean;
     };
   };
-  camera: { open: { value: boolean; source: Source }; credentialsViaEnv: { value: boolean; source: Source }; limitRecordings: { value: boolean; source: Source } };
+  camera: { open: { value: boolean; source: Source }; credentialsViaEnv: { value: boolean; source: Source }; limitRecordings: { value: boolean; source: Source } } & Record<RecordingLimitKey, { value: number; source: Source; min: number; max: number }>;
   install: { newInstallTls: { value: boolean; source: Source } };
   websocket: { allowQueryToken: { value: boolean; source: Source }; limitPayload: { value: boolean; source: Source }; closeOnExpiry: { value: boolean; source: Source } };
   logging: { redactSecrets: { value: boolean; source: Source } };
@@ -1417,10 +1425,18 @@ export class SecurityConfig {
     const camera = this.file.camera;
     return {
       enabled: resolveCameraLimitRecordings(this.options.env.cameraLimitRecordings, this.file).value,
-      maxSeconds: recordingLimitValue(camera?.recordingMaxSeconds, 600, 1, 86_400),
-      maxBytes: recordingLimitValue(camera?.recordingMaxBytes, 500_000_000, 1_000_000, 100_000_000_000),
-      quotaBytes: recordingLimitValue(camera?.recordingQuotaBytes, 5_000_000_000, 10_000_000, 10_000_000_000_000),
+      maxSeconds: this.recordingLimitNumber("recordingMaxSeconds").value,
+      maxBytes: this.recordingLimitNumber("recordingMaxBytes").value,
+      quotaBytes: this.recordingLimitNumber("recordingQuotaBytes").value,
     };
+  }
+
+  /** One number of a recording: the saved value when it is inside its bounds, else the default. */
+  private recordingLimitNumber(key: RecordingLimitKey): { value: number; source: Source; min: number; max: number } {
+    const bounds = RECORDING_LIMIT_BOUNDS[key];
+    const saved = this.file.camera?.[key];
+    const valid = typeof saved === "number" && Number.isSafeInteger(saved) && saved >= bounds.min && saved <= bounds.max;
+    return { value: valid ? saved : bounds.def, source: valid ? "config" : "default", min: bounds.min, max: bounds.max };
   }
 
   cameraCredentialsViaEnv(): boolean {
@@ -1602,7 +1618,7 @@ export class SecurityConfig {
         estopWatchMs: resolveEstopWatchMs(this.options.env.estopWatch, this.file),
       },
       jobDispatcher: this.jobDispatcherSnapshot(),
-      camera: { open: resolveCameraOpen(this.options.env.cameraAuth, this.file), credentialsViaEnv: resolveCameraCredentialsViaEnv(this.options.env.cameraCredentialsViaEnv, this.file), limitRecordings: resolveCameraLimitRecordings(this.options.env.cameraLimitRecordings, this.file) },
+      camera: { open: resolveCameraOpen(this.options.env.cameraAuth, this.file), credentialsViaEnv: resolveCameraCredentialsViaEnv(this.options.env.cameraCredentialsViaEnv, this.file), limitRecordings: resolveCameraLimitRecordings(this.options.env.cameraLimitRecordings, this.file), recordingMaxSeconds: this.recordingLimitNumber("recordingMaxSeconds"), recordingMaxBytes: this.recordingLimitNumber("recordingMaxBytes"), recordingQuotaBytes: this.recordingLimitNumber("recordingQuotaBytes") },
       install: { newInstallTls: resolveNewInstallTls(this.options.env.newInstallTls, this.file) },
       websocket: {
         allowQueryToken: resolveWsQueryToken(this.options.env.wsQueryToken, this.file),
@@ -2175,7 +2191,8 @@ export class SecurityConfig {
         if (resolveCameraLimitRecordings(this.options.env.cameraLimitRecordings, this.file).source === "env") throw lockedBy("HYDRA_UMC_CAMERA_LIMIT_RECORDINGS");
         merged.limitRecordings = cameraPatch.limitRecordings;
       }
-      for (const [key, low, high] of [["recordingMaxSeconds", 1, 86_400], ["recordingMaxBytes", 1_000_000, 100_000_000_000], ["recordingQuotaBytes", 10_000_000, 10_000_000_000_000]] as const) {
+      for (const key of Object.keys(RECORDING_LIMIT_BOUNDS) as RecordingLimitKey[]) {
+        const { min: low, max: high } = RECORDING_LIMIT_BOUNDS[key];
         const value = (cameraPatch as Record<string, unknown>)[key];
         if (value === undefined) continue;
         if (typeof value !== "number" || !Number.isSafeInteger(value) || value < low || value > high) throw new SecurityConfigError(400, `camera.${key} must be a whole number from ${low} to ${high}`);

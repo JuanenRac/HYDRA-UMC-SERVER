@@ -4,7 +4,7 @@ import { SecurityConfig, type SecurityFile } from "../src/securityConfig.ts";
 import { LANGUAGES, MESSAGES, detectLanguage, translate } from "../admin-ui/src/i18n.ts";
 import {
   SWITCHES, PRESENCE_ACTIONS, JWT_ALGORITHMS, isLocked, jwtAlgorithmPatch, readJwtAlgorithm, readJwtKeys, jobDispatcherNeedsConfirmation, jobExecutorGoesLive, jobDispatcherPatch, needsConfirmation, parseRobotMapText, presenceActionPatch, readJobDispatcher, readPresenceAction, readSwitches,
-  robotMapToText, switchPatch, warningKeys, RATE_LIMIT_FIELDS, parseRateLimitText, rateLimitsPatch, readRateLimits,
+  robotMapToText, switchPatch, warningKeys, RATE_LIMIT_FIELDS, parseRateLimitText, rateLimitsPatch, readRateLimits, RECORDING_LIMIT_FIELDS, readRecordingLimits, recordingLimitsPatch,
 } from "../admin-ui/src/securityModel.ts";
 
 // The Security tab of the admin UI: what it reads from GET /api/admin/server-config, what it sends and what it says, checked against the real SecurityConfig.
@@ -112,7 +112,7 @@ test("it asks first when the delivery is switched on or a job may move without a
 
 test("every sentence the tab uses exists in the eight languages, with no placeholder left over", () => {
   assert.deepEqual([...LANGUAGES], ["en", "es", "de", "fr", "it", "ja", "zh", "pt"]);
-  const used = new Set<string>(["tab", "intro", "admin_only", "save", "saved", "load_error", "switches_title", "source_env", "source_config", "source_default"]);
+  const used = new Set<string>(["tab", "intro", "admin_only", "save", "saved", "load_error", "switches_title", "rec_title", "rec_help", "rec_max_seconds", "rec_max_bytes", "rec_quota_bytes", "rec_save", "source_env", "source_config", "source_default"]);
   for (const def of SWITCHES) {
     used.add(def.label);
     if (def.warning) used.add(def.warning);
@@ -191,6 +191,24 @@ test("the request limits: the tab reads the numbers, sends only what changed and
   assert.deepEqual([answer.snapshot.rateLimits.loginMax.value, answer.snapshot.rateLimits.sensitiveMax.value], [8, 90]);
   assert.deepEqual(warningKeys(config.update({ rateLimits: { enabled: false } }, "root").warnings), ["warn_rate_limits_off"]);
   assert.deepEqual(warningKeys(["rate_limits_loose"]), ["warn_rate_limits_loose"]);
+});
+
+test("the recording limits: the tab reads the three numbers, sends only what changed and refuses what the server would refuse", () => {
+  const { config } = makeConfig();
+  const state = readRecordingLimits(config.snapshot())!;
+  assert.deepEqual(state.recordingMaxSeconds, { value: 600, source: "default", min: 1, max: 86_400 });
+  assert.deepEqual([state.recordingMaxBytes.value, state.recordingQuotaBytes.value], [500_000_000, 5_000_000_000]);
+  assert.equal(readRecordingLimits({}), null);
+  assert.equal(readRecordingLimits({ camera: { recordingMaxSeconds: { value: 5 } } }), null);
+  const texts = Object.fromEntries(RECORDING_LIMIT_FIELDS.map(({ key }) => [key, String(state[key].value)])) as any;
+  assert.deepEqual(recordingLimitsPatch(state, texts), { camera: {} });
+  const sent = recordingLimitsPatch(state, { ...texts, recordingMaxSeconds: " 120 ", recordingQuotaBytes: "20000000000" })!;
+  assert.deepEqual(sent, { camera: { recordingMaxSeconds: 120, recordingQuotaBytes: 20_000_000_000 } });
+  for (const bad of ["", "0", "86401", "1.5", "-3", "abc", "1e2"]) assert.equal(recordingLimitsPatch(state, { ...texts, recordingMaxSeconds: bad }), null, bad);
+  const answer = config.update(sent, "root");
+  assert.deepEqual([answer.snapshot.camera.recordingMaxSeconds.value, answer.snapshot.camera.recordingMaxSeconds.source], [120, "config"]);
+  assert.equal(config.cameraRecordingLimits().maxSeconds, 120);
+  assert.equal(config.cameraRecordingLimits().quotaBytes, 20_000_000_000);
 });
 
 test("the executor switches are read with their source and sent only when the environment does not lock them", () => {
