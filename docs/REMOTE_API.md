@@ -749,7 +749,8 @@ process" posture as the Voice UI relay above.
   `POST /fram/erase?confirm=ERASE` and `POST /fram/selftest`, which write zeros over the F-RAM of the kinematic
   brain (the FM24CL64B of the main board) and read them back, and test it with two patterns and put the old bytes
   back. An erase needs the body `{ "confirm": "ERASE" }` (the exact word; `400` with `code: "CONFIRMATION_REQUIRED"`
-  otherwise). The answer is the one of the bridge as it came: `{ "operation", "status", "ok", "board_id", "value" }`
+  otherwise). The request to the bridge carries the header `X-Hydra-Confirm: ERASE`, and the bridge erases only while the
+  emergency stop is latched (`409` when it is not). The answer is the one of the bridge as it came: `{ "operation", "status", "ok", "board_id", "value" }`
   with `status` one of `ok`, `disabled`, `no-chip`, `wrong-slot`, `busy`, `chip-error`, `verify-fail`; the bridge may
   also answer `403` (started without `--enable-fram-erase`), `409` (the link is busy) or `504` (the brain did not
   answer), and `503` is this server's own (no bridge configured, unreachable, timed out). Every attempt and its outcome
