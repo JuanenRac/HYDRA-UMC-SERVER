@@ -51,6 +51,26 @@ test("an administrator switches the delivery on and edits the robot map; it is s
   assert.equal(stored().jobDispatcher?.stopRelay?.enabled, true);
 });
 
+test("the stop of a silent robot is withheld unless the file says server-state, and only those two words are accepted", () => {
+  assert.deepEqual(makeConfig().config.snapshot().jobDispatcher.stopRelay.silentRobot, { value: "withhold", source: "default" });
+  const saved = makeConfig({}, { jobDispatcher: { stopRelay: { silentRobot: "server-state" } } });
+  assert.deepEqual(saved.config.snapshot().jobDispatcher.stopRelay.silentRobot, { value: "server-state", source: "config" });
+  // a damaged value in the file is the conservative one, not an error
+  const damaged = makeConfig({}, { jobDispatcher: { stopRelay: { silentRobot: "Server-State" } } });
+  assert.equal(damaged.config.snapshot().jobDispatcher.stopRelay.silentRobot.value, "withhold");
+  const { config, stored, logs } = makeConfig({}, { jobDispatcher: { stopRelay: { pollSeconds: 5 } as any } });
+  for (const bad of ["yes", "", true, 1, null, "WITHHOLD"]) refused(() => config.update({ jobDispatcher: { stopRelay: { silentRobot: bad as any } } }, "root"), 400, /silentRobot/);
+  assert.equal(stored().jobDispatcher?.stopRelay?.silentRobot, undefined);
+  const answer = config.update({ jobDispatcher: { stopRelay: { silentRobot: "server-state" } } }, "root");
+  assert.ok(answer.warnings.includes("job_stop_silent_server_state"));
+  assert.equal(answer.appliesOnRestart, true);
+  assert.equal(stored().jobDispatcher?.stopRelay?.silentRobot, "server-state");
+  assert.equal((stored().jobDispatcher?.stopRelay as any).pollSeconds, 5);
+  assert.ok(logs.length > 0);
+  const quiet = config.update({ jobDispatcher: { stopRelay: { silentRobot: "withhold" } } }, "root");
+  assert.ok(!quiet.warnings.includes("job_stop_silent_server_state"));
+});
+
 test("the switch is not pending a restart when the relay already runs as asked", () => {
   const { config } = makeConfig({}, { jobDispatcher: { stopRelay: { enabled: true } } }, { jobStopRelayActive: true });
   assert.equal(config.snapshot().jobDispatcher.stopRelay.appliesOnRestart, false);
