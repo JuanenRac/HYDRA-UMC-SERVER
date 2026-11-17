@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **A claim of a robot takes the clock once:** `claimedAt` and `expiresAt` were read from two calls of the clock, so a claim could last a millisecond more than its TTL; both now come from one reading, which also makes the test of the default TTL deterministic.
+
 - **A camera process no longer inherits the secrets of the server:** it is started with the environment of the server minus the variables whose names mark a secret (`JWT_SECRET`, the passwords, the tokens of the other services, signing keys), keeping the token of the streamer itself and the device variable of the spawn specification; the rest of the environment (`PATH`, `HOME`, the locale, the settings of GStreamer) is unchanged.
 
 - **The F-RAM erase sends the confirmation header the bridge now requires:** `POST /api/hardware/fram/erase` adds `X-Hydra-Confirm: ERASE` to its request to the SPI bridge, which also erases only while the emergency stop is latched and answers 409 otherwise (the answer comes back unchanged); the self-test is unchanged.

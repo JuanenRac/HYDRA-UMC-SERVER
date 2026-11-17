@@ -154,11 +154,12 @@ export function registerRobotRoutes(app: express.Express, deps: RobotRouteDeps):
       action = "claimed";
     }
 
+    const claimedAt = Date.now(); // one reading, so that the lifetime of the claim is exactly the TTL
     robot.reservation = {
       ownerId: user.id,
       ownerUsername: user.username,
-      claimedAt: Date.now(),
-      expiresAt: Date.now() + ttlMs,
+      claimedAt,
+      expiresAt: claimedAt + ttlMs,
       ...(presented !== undefined ? { controllerId: presented } : {}),
     };
     appendReservationHistory(robot, action, user.id, user.username, reason);
