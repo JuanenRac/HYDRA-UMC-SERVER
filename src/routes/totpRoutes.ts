@@ -62,6 +62,29 @@ export function registerTotpRoutes(app: express.Express): void {
     res.json({ success: true });
   }));
 
+  // New recovery codes for an account that has the factor on (the old ones stop working). It asks for the password and a current code
+  // (or an unused recovery code), like turning the factor off, so an open session alone cannot replace the codes.
+  app.post("/api/totp/recovery-codes", sensitiveRateLimiter, authenticate, asyncHandler(async (req: any, res) => {
+    const { password, code } = req.body || {};
+    const user = findUser(req.user.username);
+    if (typeof password !== "string" || !user || !(await verifyPassword(password, user.passwordHash))) {
+      authFailuresTotal.inc({ reason: "totp_recovery_bad_password" });
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+    const id = effectiveId(user);
+    const store = totpStore();
+    if (!store.enabled(id)) return res.status(409).json({ error: "The second factor is off; turn it on first" });
+    const wait = store.waitFor(id);
+    if (wait > 0) return res.status(429).set("Retry-After", String(wait)).json({ error: "Too many wrong codes; wait before trying again" });
+    if (!store.verify(id, code)) {
+      authFailuresTotal.inc({ reason: "totp_recovery_bad_code" });
+      return res.status(401).json({ error: "A current code or an unused recovery code is required" });
+    }
+    const codes = store.regenerateRecovery(id);
+    if (!codes) return res.status(409).json({ error: "The second factor is off; turn it on first" });
+    res.json({ success: true, recoveryCodes: codes });
+  }));
+
   // For an account that lost the phone and the recovery codes: the administrator removes its second factor (it can enrol again).
   app.delete("/api/users/:username/totp", sensitiveRateLimiter, authenticate, requireAdmin, (req, res) => {
     const user = findUser(String(req.params.username));
