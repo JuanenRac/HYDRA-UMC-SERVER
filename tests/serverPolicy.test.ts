@@ -23,6 +23,7 @@ import {
   isValidCameraId,
   redactDeviceCredentials,
   cameraSpawnSpec,
+  cameraChildEnvironment,
   deviceCarriesCredentials,
   MAX_CAMERAS,
   hi3510Action,
@@ -369,4 +370,15 @@ test("slugify keeps its result and stays fast on a long run of hyphens", () => {
 test("validCameraHost accepts host names and addresses only", () => {
   for (const ok of ["192.168.0.210", "cam-1.local", "camera", "[fe80::1]"]) assert.equal(validCameraHost(ok), true, ok);
   for (const bad of ["", " ", "a/b", "a?b", "user@host", "host#x", "a b", "host:80", "-x-", 5, null, "a".repeat(300)]) assert.equal(validCameraHost(bad as any), false, String(bad));
+});
+
+test("a camera process gets the environment of the server without its secrets and keeps the token of the streamer", () => {
+  const parent = {
+    PATH: "/usr/bin", HOME: "/home/hydra", LANG: "C.UTF-8",
+    JWT_SECRET: "a", HYDRA_UMC_BOOTSTRAP_ADMIN_PASSWORD: "b", HYDRA_UMC_MQTT_PASSWORD: "c", HYDRA_UMC_DATALAKE_TOKEN: "d",
+    HYDRA_UMC_SIGNING_KEY: "e", HYDRA_UMC_VISION_STREAMER_TOKEN: "streamer", UNSET: undefined,
+  };
+  const env = cameraChildEnvironment(parent, { HYDRA_CAMERA_DEVICE: "rtsp://camera/stream" });
+  assert.deepEqual(env, { PATH: "/usr/bin", HOME: "/home/hydra", LANG: "C.UTF-8", HYDRA_UMC_VISION_STREAMER_TOKEN: "streamer", HYDRA_CAMERA_DEVICE: "rtsp://camera/stream" });
+  assert.equal(parent.JWT_SECRET, "a", "the environment of the server itself is not touched");
 });
