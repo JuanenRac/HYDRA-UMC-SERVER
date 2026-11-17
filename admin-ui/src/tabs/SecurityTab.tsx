@@ -18,7 +18,7 @@ import {
   JWT_ALGORITHMS, PRESENCE_ACTIONS, isLocked, jwtAlgorithmPatch, readJwtAlgorithm, readJwtKeys, type JwtAlgorithm, type JwtAlgorithmState, type JwtKeyRow, jobDispatcherNeedsConfirmation, jobExecutorGoesLive, jobDispatcherPatch, needsConfirmation, parseRobotMapText, presenceActionPatch, readJobDispatcher,
   RATE_LIMIT_FIELDS, rateLimitsPatch, readRateLimits, type RateLimitKey, type RateLimitsState,
   RECORDING_LIMIT_FIELDS, readRecordingLimits, recordingLimitsPatch, type RecordingLimitKey, type RecordingLimitsState,
-  readPresenceAction, readSwitches, robotMapToText, switchPatch, warningKeys, type JobDispatcherState, type PresenceAction, type PresenceActionState, type SwitchState,
+  readPresenceAction, readSwitches, robotMapToText, switchPatch, warningKeys, type JobDispatcherState, SILENT_ROBOT_CHOICES, type SilentRobot, type PresenceAction, type PresenceActionState, type SwitchState,
 } from '../securityModel';
 
 function savedLanguage(): string | null {
@@ -35,6 +35,7 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
 
   const [switches, setSwitches] = useState<SwitchState[]>([]);
   const [dispatcher, setDispatcher] = useState<JobDispatcherState | null>(null);
+  const [silentRobot, setSilentRobot] = useState<SilentRobot>('withhold');
   const [presence, setPresence] = useState<PresenceActionState | null>(null);
   const [jwt, setJwt] = useState<JwtAlgorithmState | null>(null);
   const [jwtKeys, setJwtKeys] = useState<JwtKeyRow[]>([]);
@@ -74,6 +75,7 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
       setExecEnabled(jd.executor?.enabled ?? false);
       setExecLive(jd.executor?.live ?? false);
       setMapText(robotMapToText(jd.robotMap));
+      setSilentRobot(jd.silentRobot ?? 'withhold');
       setAllow(jd.allowUnconfirmed);
       setTimeoutText(String(jd.timeoutSeconds));
     }
@@ -164,6 +166,7 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
   const saveDispatcher = () => {
     if (!dispatcher) return;
     const patch = jobDispatcherPatch({ relayEnabled: relay, robotMapText: mapText, replanEditable: dispatcher.replanEditable, allowUnconfirmed: allow, timeoutText,
+      silentRobot: dispatcher.silentRobot !== undefined ? silentRobot : undefined,
       executorEnabled: dispatcher.executor && !isLocked(dispatcher.executor.enabledSource) ? execEnabled : undefined,
       executorLive: dispatcher.executor && !isLocked(dispatcher.executor.liveSource) ? execLive : undefined });
     if (!patch) {
@@ -284,6 +287,15 @@ export function SecurityTab({ onAuthError, isAdmin }: { onAuthError: (err: unkno
           <label className="text-xs font-bold text-slate-200" htmlFor="jd-map">{t('jd_map_label')}</label>
           <textarea id="jd-map" data-testid="jd-map" rows={4} value={mapText} placeholder={t('jd_map_placeholder')} disabled={busy} onChange={e => setMapText(e.target.value)} className={`${input} font-mono`} />
           <p className="text-[10px] text-slate-500">{t('jd_map_help')}</p>
+          {dispatcher.silentRobot !== undefined && (
+            <>
+              <label className="text-xs font-bold text-slate-200" htmlFor="jd-silent">{t('jd_silent_label')}</label>
+              <select id="jd-silent" data-testid="jd-silent" value={silentRobot} disabled={busy} onChange={e => setSilentRobot(e.target.value as SilentRobot)} className={input}>
+                {SILENT_ROBOT_CHOICES.map(choice => <option key={choice} value={choice}>{t(choice === 'withhold' ? 'jd_silent_withhold' : 'jd_silent_server_state')}</option>)}
+              </select>
+              <p className="text-[10px] text-slate-500">{t('jd_silent_help')}</p>
+            </>
+          )}
           {dispatcher.executor && (
             <>
               <h4 className="text-xs font-bold text-slate-200">{t('jd_exec_title')}</h4>
