@@ -9,7 +9,7 @@ import path from "path";
 import fs from "fs";
 import { spawn, type ChildProcess } from "child_process";
 import {
-  computeDeviceArg, cameraFingerprint, cameraStreamPort, redactDeviceCredentials, cameraSpawnSpec,
+  computeDeviceArg, cameraFingerprint, cameraStreamPort, redactDeviceCredentials, cameraSpawnSpec, cameraChildEnvironment,
   isValidCameraId,
 } from "./serverPolicy";
 import { visionStreamerExecutablePath } from "./ecosystemStatus";
@@ -170,7 +170,7 @@ export function createCameraSupervisor() {
       return;
     }
     const spec = cameraSpawnSpec(deviceArg, port);
-    const proc = spawn(exePath, spec.args, { stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, ...spec.extraEnv } });
+    const proc = spawn(exePath, spec.args, { stdio: ["ignore", "pipe", "pipe"], env: cameraChildEnvironment(process.env, spec.extraEnv) });
     industrialLog(`[CAMERA] starting ${key} on port ${port} (device=${redactDeviceCredentials(deviceArg)}) pid=${proc.pid}${restartAttempts > 0 ? ` (self-heal retry #${restartAttempts})` : ""}`);
     const state: CameraProcessState = { proc, port, fingerprint, status: "starting", lastError: null, recentOutput: [], restartAttempts };
     cameraProcesses.set(key, state);

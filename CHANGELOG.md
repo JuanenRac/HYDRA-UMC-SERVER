@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **A camera process no longer inherits the secrets of the server:** it is started with the environment of the server minus the variables whose names mark a secret (`JWT_SECRET`, the passwords, the tokens of the other services, signing keys), keeping the token of the streamer itself and the device variable of the spawn specification; the rest of the environment (`PATH`, `HOME`, the locale, the settings of GStreamer) is unchanged.
+
 - **The F-RAM erase sends the confirmation header the bridge now requires:** `POST /api/hardware/fram/erase` adds `X-Hydra-Confirm: ERASE` to its request to the SPI bridge, which also erases only while the emergency stop is latched and answers 409 otherwise (the answer comes back unchanged); the self-test is unchanged.
 
 - **A read-only account can turn on its own second factor and register its own phone, and only its own:** `POST /api/totp/begin`, `POST /api/totp/confirm`, `POST /api/push/devices` and `DELETE /api/push/devices/{token}` are no longer refused with `403` (`VIEWER_READ_ONLY`) for a `viewer`. None of them takes an account name: they act on the account of the token that calls them, so a viewer cannot reach another account, and turning the factor off (`POST /api/totp/disable`), resetting another account's factor and every other write stay refused. `viewer` is still read only apart from this. `tests/serverPolicy.test.ts` and `tests/totp.test.ts` cover the rule and a viewer enrolling next to another viewer who stays untouched.

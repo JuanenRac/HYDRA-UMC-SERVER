@@ -224,6 +224,22 @@ export function setCameraCredentialsViaEnv(source: () => boolean): void {
   cameraCredentialsViaEnvSource = source;
 }
 
+// Names of the variables of the server that a camera process has no use for: secrets of the server, passwords and the tokens of the other services. The
+// token of the streamer itself is the one exception.
+const CAMERA_ENV_SECRET_NAME = /(SECRET|PASSWORD|PASSPHRASE|TOKEN|PRIVATE|CREDENTIAL|COOKIE|^JWT_|_KEY(_|$))/i;
+const CAMERA_ENV_KEPT = new Set(["HYDRA_UMC_VISION_STREAMER_TOKEN"]);
+
+/** The environment of a camera process: the one of the server without its secrets, plus what the spawn specification adds (the device variable). */
+export function cameraChildEnvironment(parent: Record<string, string | undefined>, extra: Record<string, string>): Record<string, string> {
+  const kept: Record<string, string> = {};
+  for (const [name, value] of Object.entries(parent)) {
+    if (value === undefined) continue;
+    if (CAMERA_ENV_SECRET_NAME.test(name) && !CAMERA_ENV_KEPT.has(name)) continue;
+    kept[name] = value;
+  }
+  return { ...kept, ...extra };
+}
+
 export function cameraSpawnSpec(
   device: string,
   port: number,
