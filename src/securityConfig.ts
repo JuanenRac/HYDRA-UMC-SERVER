@@ -304,6 +304,12 @@ export interface CameraFile {
   open?: boolean;
   /** Whether the password of an IP camera is handed to its stream process through the environment instead of its command line (default: yes; with "no" it shows in the process table). */
   credentialsViaEnv?: boolean;
+  /** Whether a recording stops by itself at its limits and the saved pictures keep to a quota (default: yes). */
+  limitRecordings?: boolean;
+  /** The limits, as whole numbers: seconds of one recording, bytes of one recording, bytes of everything saved (defaults 600, 500000000, 5000000000). */
+  recordingMaxSeconds?: number;
+  recordingMaxBytes?: number;
+  recordingQuotaBytes?: number;
 }
 
 /** What a first start of a new installation does by itself (src/newInstallTls.ts). */
@@ -502,6 +508,7 @@ export interface SecurityEnv {
   logRedaction?: string;
   voiceRequireSignature?: string;
   cameraCredentialsViaEnv?: string;
+  cameraLimitRecordings?: string;
   newInstallTls?: string;
   /** HYDRA_UMC_RATE_LIMITS ("off" switches the limiters off) and the variables of the numbers (RATE_LIMIT_ENV_NAMES), as written. */
   rateLimits?: string;
@@ -561,6 +568,7 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     logRedaction: env.HYDRA_UMC_LOG_REDACTION,
     voiceRequireSignature: env.HYDRA_UMC_VOICE_CONFIRM_REQUIRE_SIGNATURE,
     cameraCredentialsViaEnv: env.HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV,
+    cameraLimitRecordings: env.HYDRA_UMC_CAMERA_LIMIT_RECORDINGS,
     newInstallTls: env.HYDRA_UMC_NEW_INSTALL_TLS,
     rateLimits: env[RATE_LIMITS_ENV_SWITCH],
     rateLimitNumbers: Object.fromEntries(RATE_LIMIT_KEYS.map((key) => [key, env[RATE_LIMIT_ENV_NAMES[key]]])) as Partial<Record<RateLimitKey, string>>,
@@ -958,6 +966,18 @@ export function resolveVoiceRequireSignature(env: string | undefined, file: Secu
   return { value: false, source: "default" };
 }
 
+/** Does a recording stop by itself at its limits? Yes, unless the environment says "off" or an administrator turned it off. */
+export function resolveCameraLimitRecordings(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim().toLowerCase() !== "off", source: "env" };
+  if (typeof file.camera?.limitRecordings === "boolean") return { value: file.camera.limitRecordings, source: "config" };
+  return { value: true, source: "default" };
+}
+
+/** A limit of a recording that is a whole number inside its bounds, else the default. */
+function recordingLimitValue(value: unknown, fallback: number, low: number, high: number): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= low && value <= high ? value : fallback;
+}
+
 /** Is the password of an IP camera handed over through the environment of its process? Yes, unless the environment says "off" or an administrator turned it off. */
 export function resolveCameraCredentialsViaEnv(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
   if (isSet(env)) return { value: env.trim().toLowerCase() !== "off", source: "env" };
@@ -1151,7 +1171,7 @@ export interface SecuritySnapshot {
       appliesOnDispatcherRestart: boolean;
     };
   };
-  camera: { open: { value: boolean; source: Source }; credentialsViaEnv: { value: boolean; source: Source } };
+  camera: { open: { value: boolean; source: Source }; credentialsViaEnv: { value: boolean; source: Source }; limitRecordings: { value: boolean; source: Source } };
   install: { newInstallTls: { value: boolean; source: Source } };
   websocket: { allowQueryToken: { value: boolean; source: Source }; limitPayload: { value: boolean; source: Source }; closeOnExpiry: { value: boolean; source: Source } };
   logging: { redactSecrets: { value: boolean; source: Source } };
@@ -1392,6 +1412,17 @@ export class SecurityConfig {
   }
 
   /** Whether the password of an IP camera goes to its process through the environment (on unless an administrator turned it off). */
+  /** The limits of a camera recording: the switch, and the values of Server Admin or their defaults (10 minutes, 500 MB, 5 GB). */
+  cameraRecordingLimits(): { enabled: boolean; maxSeconds: number; maxBytes: number; quotaBytes: number } {
+    const camera = this.file.camera;
+    return {
+      enabled: resolveCameraLimitRecordings(this.options.env.cameraLimitRecordings, this.file).value,
+      maxSeconds: recordingLimitValue(camera?.recordingMaxSeconds, 600, 1, 86_400),
+      maxBytes: recordingLimitValue(camera?.recordingMaxBytes, 500_000_000, 1_000_000, 100_000_000_000),
+      quotaBytes: recordingLimitValue(camera?.recordingQuotaBytes, 5_000_000_000, 10_000_000, 10_000_000_000_000),
+    };
+  }
+
   cameraCredentialsViaEnv(): boolean {
     return resolveCameraCredentialsViaEnv(this.options.env.cameraCredentialsViaEnv, this.file).value;
   }
@@ -1571,7 +1602,7 @@ export class SecurityConfig {
         estopWatchMs: resolveEstopWatchMs(this.options.env.estopWatch, this.file),
       },
       jobDispatcher: this.jobDispatcherSnapshot(),
-      camera: { open: resolveCameraOpen(this.options.env.cameraAuth, this.file), credentialsViaEnv: resolveCameraCredentialsViaEnv(this.options.env.cameraCredentialsViaEnv, this.file) },
+      camera: { open: resolveCameraOpen(this.options.env.cameraAuth, this.file), credentialsViaEnv: resolveCameraCredentialsViaEnv(this.options.env.cameraCredentialsViaEnv, this.file), limitRecordings: resolveCameraLimitRecordings(this.options.env.cameraLimitRecordings, this.file) },
       install: { newInstallTls: resolveNewInstallTls(this.options.env.newInstallTls, this.file) },
       websocket: {
         allowQueryToken: resolveWsQueryToken(this.options.env.wsQueryToken, this.file),
@@ -2139,7 +2170,19 @@ export class SecurityConfig {
         if (resolveCameraCredentialsViaEnv(this.options.env.cameraCredentialsViaEnv, this.file).source === "env") throw lockedBy("HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV");
         merged.credentialsViaEnv = cameraPatch.credentialsViaEnv;
       }
+      if (cameraPatch.limitRecordings !== undefined) {
+        if (typeof cameraPatch.limitRecordings !== "boolean") throw new SecurityConfigError(400, "camera.limitRecordings must be true or false");
+        if (resolveCameraLimitRecordings(this.options.env.cameraLimitRecordings, this.file).source === "env") throw lockedBy("HYDRA_UMC_CAMERA_LIMIT_RECORDINGS");
+        merged.limitRecordings = cameraPatch.limitRecordings;
+      }
+      for (const [key, low, high] of [["recordingMaxSeconds", 1, 86_400], ["recordingMaxBytes", 1_000_000, 100_000_000_000], ["recordingQuotaBytes", 10_000_000, 10_000_000_000_000]] as const) {
+        const value = (cameraPatch as Record<string, unknown>)[key];
+        if (value === undefined) continue;
+        if (typeof value !== "number" || !Number.isSafeInteger(value) || value < low || value > high) throw new SecurityConfigError(400, `camera.${key} must be a whole number from ${low} to ${high}`);
+        merged[key] = value;
+      }
       next.camera = merged;
+      if (cameraPatch.limitRecordings === false) warnings.push("camera_recordings_unlimited");
       if (cameraPatch.open === true) warnings.push("camera_open");
       if (cameraPatch.credentialsViaEnv === false) warnings.push("camera_credentials_in_arguments");
     }

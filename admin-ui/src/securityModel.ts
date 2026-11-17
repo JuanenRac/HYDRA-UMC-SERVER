@@ -42,6 +42,7 @@ export const SWITCHES: readonly SwitchDef[] = [
   { id: 'websocket.closeOnExpiry', section: 'websocket', key: 'closeOnExpiry', riskyWhen: false, label: 'sw_ws_expiry', warning: 'warn_ws_expiry', confirm: 'confirm_exposure', warningCode: 'ws_expiry_not_enforced' },
   { id: 'logging.redactSecrets', section: 'logging', key: 'redactSecrets', riskyWhen: false, label: 'sw_log_redaction', warning: 'warn_log_redaction', confirm: 'confirm_exposure', warningCode: 'log_redaction_off' },
   { id: 'voice.requireSignature', section: 'voice', key: 'requireSignature', riskyWhen: null, label: 'sw_voice_signature', warning: null, confirm: null, warningCode: null },
+  { id: 'camera.limitRecordings', section: 'camera', key: 'limitRecordings', riskyWhen: false, label: 'sw_camera_limit', warning: 'warn_camera_limit', confirm: 'confirm_exposure', warningCode: 'camera_recordings_unlimited' },
   { id: 'camera.credentialsViaEnv', section: 'camera', key: 'credentialsViaEnv', riskyWhen: false, label: 'sw_camera_env', warning: 'warn_camera_env', confirm: 'confirm_install', warningCode: 'camera_credentials_in_arguments' },
   { id: 'push.enabled', section: 'push', key: 'enabled', riskyWhen: null, label: 'sw_push', warning: 'warn_push', confirm: null, warningCode: 'push_enabled' },
   { id: 'presence.enabled', section: 'presence', key: 'enabled', riskyWhen: null, label: 'sw_presence', warning: 'warn_presence', confirm: null, warningCode: 'presence_on' },
