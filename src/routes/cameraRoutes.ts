@@ -18,6 +18,7 @@ import { discoverRtspPath, sendPtzCommand } from "../cameraProbe";
 import { visionStreamerExecutablePath } from "../ecosystemStatus";
 import { upstreamHeaders } from "../upstreamAuth";
 import { cameraStreamPort, isValidCameraId, MAX_CAMERAS, validCameraHost } from "../serverPolicy";
+import { DEFAULT_RECORDING_LIMITS, directorySize, MjpegFrameCounter, recordingStopReason, type RecordingLimits, type StopReason } from "../recordingLimits";
 
 const execFileAsync = promisify(execFile);
 
@@ -36,6 +37,8 @@ export interface CameraRouteDeps {
   resolveWithinDataDir: (...segments: string[]) => string | null;
   /** The running camera capture processes, keyed by camera. Read only here. */
   cameraProcesses: Map<string, { status: string; lastError: string | null; port: number }>;
+  /** The limits of a recording (camera.limitRecordings and the values of Server Admin); without it the defaults apply. */
+  recordingLimits?: () => RecordingLimits;
 }
 
 export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps): void {
@@ -174,6 +177,24 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
     return count;
   }
 
+  // The metadata beside a finished recording. The frames were counted while they were written; only when that count cannot be trusted (a part without
+  // Content-Length) is the file read once, as it always was. `rereadFrom` is the file to read in that case (null: leave the count out).
+  function writeRecordingSidecar(filePath: string, startedAt: string, stoppedAt: string, counter: MjpegFrameCounter, rereadFrom: string | null): void {
+    try {
+      let frameCount = counter.frames;
+      if (counter.broken) {
+        if (rereadFrom === null) return;
+        frameCount = countMjpegFrames(fs.readFileSync(rereadFrom));
+      }
+      const durationMs = Math.max(0, new Date(stoppedAt).getTime() - new Date(startedAt).getTime());
+      const metadata: RecordingMetadata = { startedAt, stoppedAt, durationMs, frameCount };
+      fs.writeFileSync(recordingSidecarPath(filePath), JSON.stringify(metadata));
+    } catch {
+      // A missing sidecar just means the player falls back to frame-only
+      // scrubbing (see GET /api/camera/media below) - never fatal.
+    }
+  }
+
   function recordingSidecarPath(filePath: string): string {
     return `${filePath}.json`;
   }
@@ -258,12 +279,18 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
   // ends any in-progress recording (the partial file on disk stays valid
   // and playable, since each written frame is already a complete
   // multipart part).
-  const activeCameraRecordings = new Map<number, { filePath: string; startedAt: string; reader: any; writeStream: fs.WriteStream; finished: Promise<void> }>();
+  const activeCameraRecordings = new Map<number, { filePath: string; startedAt: string; reader: any; writeStream: fs.WriteStream; finished: Promise<void>; counter: MjpegFrameCounter }>();
 
   app.post("/api/camera/:id/recording/start", apiRateLimiter, authenticate, async (req, res) => {
     const id = Number(req.params.id);
     if (!isValidCameraId(id)) return res.status(400).json({ error: "camera id must be an integer between 1 and " + MAX_CAMERAS });
     if (activeCameraRecordings.has(id)) return res.status(409).json({ error: `Camera ${id} is already recording.` });
+    const limits = deps.recordingLimits?.() ?? DEFAULT_RECORDING_LIMITS;
+    // the size of what is already saved, taken once: the recordings of the other cameras cannot grow to the quota unnoticed, and this one adds its own bytes below
+    const savedBytes = limits.enabled ? directorySize(CAMERA_MEDIA_ROOT) : 0;
+    if (limits.enabled && savedBytes >= limits.quotaBytes) {
+      return res.status(507).json({ error: "The saved pictures and recordings fill the quota; delete some before recording.", code: "RECORDING_QUOTA" });
+    }
     let upstream: Response;
     try {
       upstream = await connectToLocalCameraStream(id);
@@ -291,19 +318,34 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
     // "stopped" only ever means "truly stopped, file closed".
     let resolveFinished!: () => void;
     const finished = new Promise<void>(resolve => { resolveFinished = resolve; });
-    activeCameraRecordings.set(id, { filePath, startedAt, reader, writeStream, finished });
+    const counter = new MjpegFrameCounter();
+    activeCameraRecordings.set(id, { filePath, startedAt, reader, writeStream, finished, counter });
     (async () => {
+      let written = 0;
+      let reason: StopReason = "";
+      const startedMs = Date.now();
       try {
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
-          if (!writeStream.write(Buffer.from(value))) await new Promise<void>(r => writeStream.once("drain", () => r()));
+          const chunk = Buffer.from(value);
+          written += chunk.length;
+          counter.push(chunk);
+          if (!writeStream.write(chunk)) await new Promise<void>(r => writeStream.once("drain", () => r()));
+          reason = recordingStopReason(limits, Date.now() - startedMs, written, savedBytes);
+          if (reason) break; // the limit is reached: the recording ends here, with the file closed and playable
         }
       } catch {
         // Upstream closing (stop requested, or mjpeg_server.py restarting) ends the loop the same way.
       } finally {
+        reader.cancel().catch(() => {});
         writeStream.end();
         activeCameraRecordings.delete(id);
+        if (reason) {
+          console.warn(`[CAMERA] recording of camera ${id} stopped by its limit (${reason}); ${written} bytes written`);
+          // nobody calls stop after this, so the metadata a player needs is written here
+          writeRecordingSidecar(filePath, startedAt, new Date().toISOString(), counter, null);
+        }
         resolveFinished();
       }
     })();
@@ -331,16 +373,7 @@ export function registerCameraRoutes(app: express.Express, deps: CameraRouteDeps
     // actually on disk. A player needs frameCount/durationMs for a real
     // seek bar; nothing here is estimated - both come straight from the
     // real elapsed time and the real frame boundaries just counted.
-    try {
-      const buffer = fs.readFileSync(active.filePath);
-      const frameCount = countMjpegFrames(buffer);
-      const durationMs = Math.max(0, new Date(stoppedAt).getTime() - new Date(startedAt).getTime());
-      const metadata: RecordingMetadata = { startedAt, stoppedAt, durationMs, frameCount };
-      fs.writeFileSync(recordingSidecarPath(active.filePath), JSON.stringify(metadata));
-    } catch {
-      // A missing sidecar just means the player falls back to frame-only
-      // scrubbing (see GET /api/camera/media below) - never fatal.
-    }
+    writeRecordingSidecar(active.filePath, startedAt, stoppedAt, active.counter, active.filePath);
     res.json({ success: true, cameraId: id, filename, startedAt, stoppedAt });
   });
 

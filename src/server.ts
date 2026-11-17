@@ -595,7 +595,7 @@ async function startServer() {
   const issueMediaTicketFor = (username: string) => issueMediaTicket(MEDIA_KEY, username, Date.now());
   const { resolveWithinDataDir } = registerWorksRoutes(app, { authenticate, requireAdmin, infoAccess, dataPath, getSettings, audit });
 
-  registerCameraRoutes(app, { authenticate, requireAdmin, mediaAccess, issueMediaTicket: issueMediaTicketFor, dataPath, resolveWithinDataDir, cameraProcesses });
+  registerCameraRoutes(app, { recordingLimits: () => security.cameraRecordingLimits(), authenticate, requireAdmin, mediaAccess, issueMediaTicket: issueMediaTicketFor, dataPath, resolveWithinDataDir, cameraProcesses });
 
   if (security.aiAdminOnly()) console.log("[SECURITY] The local AI relay (/api/ai/*) answers administrators only.");
   const rulNow = () => rulSettings(security.rulEnabled(), (loadServerConfig() as { rul?: unknown }).rul);
@@ -742,7 +742,7 @@ async function startServer() {
   }
 
   attachWebSocketServer(httpServer, {
-    wsClients, getSettings, applySettingsUpdate, WS_QUERY_TOKEN_ALLOWED, twinWsUrl: () => (security.twinRelayEnabled() ? TWIN_WS_URL : ""), getStopState: () => stopState.snapshot(),
+    wsClients, getSettings, applySettingsUpdate, WS_QUERY_TOKEN_ALLOWED, WS_LIMIT_PAYLOAD: () => security.wsLimitPayloadEnabled(), WS_CLOSE_ON_EXPIRY: () => security.wsCloseOnExpiryEnabled(), twinWsUrl: () => (security.twinRelayEnabled() ? TWIN_WS_URL : ""), getStopState: () => stopState.snapshot(),
     readOnlyOn: () => security.readOnlyOn(),
     adminWriteAllowed: (address) => { const networks = security.trustedNetworks(); return !networks.enabled || classifyAddress(address, networks) === "local"; },
   });
