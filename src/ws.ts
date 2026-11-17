@@ -12,7 +12,7 @@ import { realSettings, WS_TOKEN_SUBPROTOCOL, wsTokenFromSubprotocol, redactSetti
 import { findUser, effectiveTokenVersion, effectiveId } from "./users";
 import { authFailuresTotal, setWsClientsSource } from "./metrics";
 
-import { messageSize, WS_MAX_ADMIN_BYTES, WS_MAX_MESSAGE_BYTES } from "./wsLimits";
+import { deviceSessionEnded, messageSize, WS_MAX_ADMIN_BYTES, WS_MAX_MESSAGE_BYTES } from "./wsLimits";
 import { JWT_SECRET } from "./auth";
 import { verifyAccessToken } from "./jwtKeys";
 import { setupDiscovery } from "./runtime";
@@ -187,6 +187,8 @@ export function attachWebSocketServer(
     WS_LIMIT_PAYLOAD?: () => boolean;
     /** Whether a socket is closed at its next heartbeat after its token expired; default yes (websocket.closeOnExpiry of Server Admin). */
     WS_CLOSE_ON_EXPIRY?: () => boolean;
+    /** Whether the device token that a connection signed in with is still active; a connection of a revoked token is closed at its next heartbeat. Optional: without it no device is checked. */
+    deviceTokenActive?: (deviceId: string) => boolean;
     /** Whether a connection from this address may overwrite the settings (false: the trusted networks keep that for the house and the VPN). Optional: without it every administrator may. */
     adminWriteAllowed?: (address: string | undefined) => boolean;
     /** Whether the server is in read-only mode (settings are not written from a connection then). Optional: without it the environment variable decides. */
@@ -299,6 +301,8 @@ export function attachWebSocketServer(
       // against the account's CURRENT one on every heartbeat tick below,
       // same reasoning as authTokenVersion above.
       (ws as any).authUserId = decoded?.id;
+      // The device token this sign-in came from (device sign-ins only), checked again at every heartbeat: revoking the token ends the connection.
+      (ws as any).authDeviceId = typeof decoded?.deviceId === "string" ? decoded.deviceId : undefined;
       // Heartbeat state for this connection - see the
       // setInterval below for why this exists.
       (ws as any).isAlive = true;
@@ -393,6 +397,12 @@ export function attachWebSocketServer(
       if (typeof expiresAt === "number" && (deps.WS_CLOSE_ON_EXPIRY ? deps.WS_CLOSE_ON_EXPIRY() : true) && Date.now() / 1000 > expiresAt) {
         authFailuresTotal.inc({ reason: "ws_token_expired" });
         ws.close(1008, "Access denied: token expired");
+        wsClients.delete(ws);
+        continue;
+      }
+      if (deviceSessionEnded((ws as any).authDeviceId, deps.deviceTokenActive)) {
+        authFailuresTotal.inc({ reason: "ws_device_token_ended" });
+        ws.close(1008, "Access denied: device token ended");
         wsClients.delete(ws);
         continue;
       }

@@ -144,7 +144,7 @@ export function registerAuthRoutes(app: express.Express, deps: AuthRouteDeps = {
       return res.status(403).json(NEEDS_SECOND_FACTOR);
     }
     const token = signDeviceLoginToken(
-      { username: user.username, role: user.role, tokenVersion: effectiveTokenVersion(user), id: effectiveId(user) },
+      { username: user.username, role: user.role, tokenVersion: effectiveTokenVersion(user), id: effectiveId(user), deviceId: checked.record.id },
       deviceSessionMinutes(devices.limits()),
     );
     let clientId: string | undefined;
@@ -187,7 +187,7 @@ export function registerAuthRoutes(app: express.Express, deps: AuthRouteDeps = {
       }
       return res.status(401).json({ error: "Invalid or expired refresh token" });
     }
-    const claims = { username: result.user.username, role: result.user.role, tokenVersion: effectiveTokenVersion(result.user), id: effectiveId(result.user) };
+    const claims = { username: result.user.username, role: result.user.role, tokenVersion: effectiveTokenVersion(result.user), id: effectiveId(result.user), ...(result.deviceId ? { deviceId: result.deviceId } : {}) };
     if (result.deviceId) {
       // A session opened with a device token lives only as long as that token: revoked, expired or switched off, it ends here.
       const devices = deps.devices;
