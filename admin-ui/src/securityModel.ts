@@ -38,6 +38,8 @@ export const SWITCHES: readonly SwitchDef[] = [
   { id: 'connections.recordAddress', section: 'connections', key: 'recordAddress', riskyWhen: true, label: 'sw_record_address', warning: 'warn_record_address', confirm: 'confirm_record_address', warningCode: 'connection_address_recorded' },
   { id: 'camera.open', section: 'camera', key: 'open', riskyWhen: true, label: 'sw_camera_open', warning: 'warn_camera_open', confirm: 'confirm_exposure', warningCode: 'camera_open' },
   { id: 'websocket.allowQueryToken', section: 'websocket', key: 'allowQueryToken', riskyWhen: true, label: 'sw_ws_token', warning: 'warn_ws_token', confirm: 'confirm_exposure', warningCode: 'ws_query_token_allowed' },
+  { id: 'websocket.limitPayload', section: 'websocket', key: 'limitPayload', riskyWhen: false, label: 'sw_ws_limit', warning: 'warn_ws_limit', confirm: 'confirm_exposure', warningCode: 'ws_payload_unlimited' },
+  { id: 'websocket.closeOnExpiry', section: 'websocket', key: 'closeOnExpiry', riskyWhen: false, label: 'sw_ws_expiry', warning: 'warn_ws_expiry', confirm: 'confirm_exposure', warningCode: 'ws_expiry_not_enforced' },
   { id: 'logging.redactSecrets', section: 'logging', key: 'redactSecrets', riskyWhen: false, label: 'sw_log_redaction', warning: 'warn_log_redaction', confirm: 'confirm_exposure', warningCode: 'log_redaction_off' },
   { id: 'voice.requireSignature', section: 'voice', key: 'requireSignature', riskyWhen: null, label: 'sw_voice_signature', warning: null, confirm: null, warningCode: null },
   { id: 'camera.credentialsViaEnv', section: 'camera', key: 'credentialsViaEnv', riskyWhen: false, label: 'sw_camera_env', warning: 'warn_camera_env', confirm: 'confirm_install', warningCode: 'camera_credentials_in_arguments' },

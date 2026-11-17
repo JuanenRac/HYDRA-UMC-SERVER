@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **The WebSocket limits the size of a message and closes a socket whose token expired, both with a switch in Server Admin (on by default):** a message of more than 1 MiB from an account that is not an administrator closes the socket (`1009`) before it is parsed, no message may be larger than 16 MiB (the library allowed 100 MiB), and at its next heartbeat a socket whose token has expired is closed (`1008`). `websocket.limitPayload` and `websocket.closeOnExpiry` (or `HYDRA_UMC_WS_LIMIT_PAYLOAD=off` and `HYDRA_UMC_WS_CLOSE_ON_EXPIRY=off`) turn them off, with the sentences of the switches in the eight languages. A revoked device token is not yet checked by the heartbeat.
+
 - **A claim of a robot takes the clock once:** `claimedAt` and `expiresAt` were read from two calls of the clock, so a claim could last a millisecond more than its TTL; both now come from one reading, which also makes the test of the default TTL deterministic.
 
 - **A camera process no longer inherits the secrets of the server:** it is started with the environment of the server minus the variables whose names mark a secret (`JWT_SECRET`, the passwords, the tokens of the other services, signing keys), keeping the token of the streamer itself and the device variable of the spawn specification; the rest of the environment (`PATH`, `HOME`, the locale, the settings of GStreamer) is unchanged.

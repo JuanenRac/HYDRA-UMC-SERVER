@@ -316,6 +316,10 @@ export interface InstallFile {
 export interface WebsocketFile {
   /** Whether a token in the address (/ws?token=) is accepted; it is then written in the logs of proxies and servers (default: no). */
   allowQueryToken?: boolean;
+  /** Whether a message from a socket that is not an administrator's is limited to 1 MiB (an administrator's to 16 MiB); default: yes. */
+  limitPayload?: boolean;
+  /** Whether a socket is closed at its next heartbeat once the token it connected with has expired; default: yes. */
+  closeOnExpiry?: boolean;
 }
 
 /** The log of the server (src/runtime.ts). */
@@ -493,6 +497,8 @@ export interface SecurityEnv {
   estopWatch?: string;
   cameraAuth?: string;
   wsQueryToken?: string;
+  wsLimitPayload?: string;
+  wsCloseOnExpiry?: string;
   logRedaction?: string;
   voiceRequireSignature?: string;
   cameraCredentialsViaEnv?: string;
@@ -550,6 +556,8 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     estopWatch: env.HYDRA_UMC_ESTOP_WATCH_MS,
     cameraAuth: env.HYDRA_UMC_CAMERA_AUTH,
     wsQueryToken: env.HYDRA_UMC_WS_QUERY_TOKEN,
+    wsLimitPayload: env.HYDRA_UMC_WS_LIMIT_PAYLOAD,
+    wsCloseOnExpiry: env.HYDRA_UMC_WS_CLOSE_ON_EXPIRY,
     logRedaction: env.HYDRA_UMC_LOG_REDACTION,
     voiceRequireSignature: env.HYDRA_UMC_VOICE_CONFIRM_REQUIRE_SIGNATURE,
     cameraCredentialsViaEnv: env.HYDRA_UMC_CAMERA_CREDENTIALS_VIA_ENV,
@@ -922,6 +930,20 @@ export function resolveWsQueryToken(env: string | undefined, file: SecurityFile)
   return { value: false, source: "default" };
 }
 
+/** Is a WebSocket message limited in size? Yes, unless the environment says "off" or an administrator turned it off. */
+export function resolveWsLimitPayload(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim().toLowerCase() !== "off", source: "env" };
+  if (typeof file.websocket?.limitPayload === "boolean") return { value: file.websocket.limitPayload, source: "config" };
+  return { value: true, source: "default" };
+}
+
+/** Is a WebSocket closed when its token expires? Yes, unless the environment says "off" or an administrator turned it off. */
+export function resolveWsCloseOnExpiry(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env)) return { value: env.trim().toLowerCase() !== "off", source: "env" };
+  if (typeof file.websocket?.closeOnExpiry === "boolean") return { value: file.websocket.closeOnExpiry, source: "config" };
+  return { value: true, source: "default" };
+}
+
 /** Are secrets blanked out of the log? Yes, unless the environment says "off" or an administrator turned it off. */
 export function resolveLogRedaction(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
   if (isSet(env)) return { value: env.trim().toLowerCase() !== "off", source: "env" };
@@ -1131,7 +1153,7 @@ export interface SecuritySnapshot {
   };
   camera: { open: { value: boolean; source: Source }; credentialsViaEnv: { value: boolean; source: Source } };
   install: { newInstallTls: { value: boolean; source: Source } };
-  websocket: { allowQueryToken: { value: boolean; source: Source } };
+  websocket: { allowQueryToken: { value: boolean; source: Source }; limitPayload: { value: boolean; source: Source }; closeOnExpiry: { value: boolean; source: Source } };
   logging: { redactSecrets: { value: boolean; source: Source } };
   /** The request limiters per address: the switch and every number, each with where it comes from. A change reaches the limiters at once (their counters start again). */
   rateLimits: { enabled: { value: boolean; source: Source } } & Record<RateLimitKey, { value: number; source: Source; min: number; max: number }>;
@@ -1375,6 +1397,14 @@ export class SecurityConfig {
   }
 
   /** Whether /ws?token= is accepted (off unless an administrator allowed it). */
+  wsLimitPayloadEnabled(): boolean {
+    return resolveWsLimitPayload(this.options.env.wsLimitPayload, this.file).value;
+  }
+
+  wsCloseOnExpiryEnabled(): boolean {
+    return resolveWsCloseOnExpiry(this.options.env.wsCloseOnExpiry, this.file).value;
+  }
+
   wsQueryTokenAllowed(): boolean {
     return resolveWsQueryToken(this.options.env.wsQueryToken, this.file).value;
   }
@@ -1543,7 +1573,11 @@ export class SecurityConfig {
       jobDispatcher: this.jobDispatcherSnapshot(),
       camera: { open: resolveCameraOpen(this.options.env.cameraAuth, this.file), credentialsViaEnv: resolveCameraCredentialsViaEnv(this.options.env.cameraCredentialsViaEnv, this.file) },
       install: { newInstallTls: resolveNewInstallTls(this.options.env.newInstallTls, this.file) },
-      websocket: { allowQueryToken: resolveWsQueryToken(this.options.env.wsQueryToken, this.file) },
+      websocket: {
+        allowQueryToken: resolveWsQueryToken(this.options.env.wsQueryToken, this.file),
+        limitPayload: resolveWsLimitPayload(this.options.env.wsLimitPayload, this.file),
+        closeOnExpiry: resolveWsCloseOnExpiry(this.options.env.wsCloseOnExpiry, this.file),
+      },
       logging: { redactSecrets: resolveLogRedaction(this.options.env.logRedaction, this.file) },
       bridges: { ...resolveBridgeSettings(this.file.bridges), delivery: resolveBridgeGateway(this.options.env.bridgeGateway, this.file).value ? "gateway_on" : "gateway_off" },
       bridgeSigning: this.options.bridgeSigningStatus?.() ?? {},
@@ -2132,8 +2166,20 @@ export class SecurityConfig {
         if (resolveWsQueryToken(this.options.env.wsQueryToken, this.file).source === "env") throw lockedBy("HYDRA_UMC_WS_QUERY_TOKEN");
         merged.allowQueryToken = websocketPatch.allowQueryToken;
       }
+      if (websocketPatch.limitPayload !== undefined) {
+        if (typeof websocketPatch.limitPayload !== "boolean") throw new SecurityConfigError(400, "websocket.limitPayload must be true or false");
+        if (resolveWsLimitPayload(this.options.env.wsLimitPayload, this.file).source === "env") throw lockedBy("HYDRA_UMC_WS_LIMIT_PAYLOAD");
+        merged.limitPayload = websocketPatch.limitPayload;
+      }
+      if (websocketPatch.closeOnExpiry !== undefined) {
+        if (typeof websocketPatch.closeOnExpiry !== "boolean") throw new SecurityConfigError(400, "websocket.closeOnExpiry must be true or false");
+        if (resolveWsCloseOnExpiry(this.options.env.wsCloseOnExpiry, this.file).source === "env") throw lockedBy("HYDRA_UMC_WS_CLOSE_ON_EXPIRY");
+        merged.closeOnExpiry = websocketPatch.closeOnExpiry;
+      }
       next.websocket = merged;
       if (websocketPatch.allowQueryToken === true) warnings.push("ws_query_token_allowed");
+      if (websocketPatch.limitPayload === false) warnings.push("ws_payload_unlimited");
+      if (websocketPatch.closeOnExpiry === false) warnings.push("ws_expiry_not_enforced");
     }
 
     if (patch.logging !== undefined) {

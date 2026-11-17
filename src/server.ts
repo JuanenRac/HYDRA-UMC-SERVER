@@ -742,7 +742,7 @@ async function startServer() {
   }
 
   attachWebSocketServer(httpServer, {
-    wsClients, getSettings, applySettingsUpdate, WS_QUERY_TOKEN_ALLOWED, twinWsUrl: () => (security.twinRelayEnabled() ? TWIN_WS_URL : ""), getStopState: () => stopState.snapshot(),
+    wsClients, getSettings, applySettingsUpdate, WS_QUERY_TOKEN_ALLOWED, WS_LIMIT_PAYLOAD: () => security.wsLimitPayloadEnabled(), WS_CLOSE_ON_EXPIRY: () => security.wsCloseOnExpiryEnabled(), twinWsUrl: () => (security.twinRelayEnabled() ? TWIN_WS_URL : ""), getStopState: () => stopState.snapshot(),
     readOnlyOn: () => security.readOnlyOn(),
     adminWriteAllowed: (address) => { const networks = security.trustedNetworks(); return !networks.enabled || classifyAddress(address, networks) === "local"; },
   });

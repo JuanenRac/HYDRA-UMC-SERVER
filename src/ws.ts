@@ -11,6 +11,16 @@ import { RobotIdDuplicatedError, ROBOT_ID_DUPLICATED, duplicatedRobotBody } from
 import { realSettings, WS_TOKEN_SUBPROTOCOL, wsTokenFromSubprotocol, redactSettingsSecrets } from "./serverPolicy";
 import { findUser, effectiveTokenVersion, effectiveId } from "./users";
 import { authFailuresTotal, setWsClientsSource } from "./metrics";
+
+/** The size of a message that an account that is not an administrator may send, and the one nobody may pass (websocket.limitPayload of Server Admin). */
+export const WS_MAX_MESSAGE_BYTES = 1024 * 1024;
+export const WS_MAX_ADMIN_BYTES = 16 * 1024 * 1024;
+
+/** The size in bytes of what the library hands to the message handler (one buffer, a list of them, or an array buffer). */
+export function messageSize(raw: Buffer | ArrayBuffer | Buffer[]): number {
+  if (Array.isArray(raw)) return raw.reduce((sum, part) => sum + part.length, 0);
+  return raw instanceof ArrayBuffer ? raw.byteLength : raw.length;
+}
 import { JWT_SECRET } from "./auth";
 import { verifyAccessToken } from "./jwtKeys";
 import { setupDiscovery } from "./runtime";
@@ -181,6 +191,10 @@ export function attachWebSocketServer(
     getSettings: () => any;
     applySettingsUpdate: (payload: any, originatorWs?: WebSocket) => Promise<unknown>;
     WS_QUERY_TOKEN_ALLOWED: boolean | (() => boolean);
+    /** Whether a message is limited in size (1 MiB, 16 MiB for an administrator); default yes (websocket.limitPayload of Server Admin). */
+    WS_LIMIT_PAYLOAD?: () => boolean;
+    /** Whether a socket is closed at its next heartbeat after its token expired; default yes (websocket.closeOnExpiry of Server Admin). */
+    WS_CLOSE_ON_EXPIRY?: () => boolean;
     /** Whether a connection from this address may overwrite the settings (false: the trusted networks keep that for the house and the VPN). Optional: without it every administrator may. */
     adminWriteAllowed?: (address: string | undefined) => boolean;
     /** Whether the server is in read-only mode (settings are not written from a connection then). Optional: without it the environment variable decides. */
@@ -198,6 +212,8 @@ export function attachWebSocketServer(
   // Two paths share this listener (`/ws` and the relay of the twin), so the path is checked here and not with the `path` option, which would refuse the second.
   const wss = new WebSocketServer({
     server: httpServer,
+    // no message is ever larger than this, whoever sends it (the library default is 100 MiB); the smaller limit of an account that is not an administrator is checked per message
+    maxPayload: WS_MAX_ADMIN_BYTES,
     verifyClient: (info: { req: http.IncomingMessage }, done: (ok: boolean, code?: number, message?: string) => void) => {
       const pathname = (info.req.url || "").split("?")[0];
       if (pathname === "/ws" || pathname === TWIN_RELAY_PATH) done(true);
@@ -286,6 +302,7 @@ export function attachWebSocketServer(
       // happens WHILE this socket is open must still close it, not wait
       // for the client to reconnect on its own.
       (ws as any).authTokenVersion = decoded?.tokenVersion;
+      (ws as any).authExpiresAt = typeof decoded?.exp === "number" ? decoded.exp : undefined; // seconds since the epoch
       // This connection's own claimed real identity, re-checked
       // against the account's CURRENT one on every heartbeat tick below,
       // same reasoning as authTokenVersion above.
@@ -305,6 +322,11 @@ export function attachWebSocketServer(
 
       ws.on("message", async (raw) => {
         try {
+          // before the text is parsed: an account that is not an administrator may not make this server parse a large message
+          if ((deps.WS_LIMIT_PAYLOAD ? deps.WS_LIMIT_PAYLOAD() : true) && messageSize(raw) > WS_MAX_MESSAGE_BYTES && (ws as any).meta?.role !== "admin") {
+            ws.close(1009, "Message too big");
+            return;
+          }
           const msg = JSON.parse(raw.toString());
           if (msg && msg.type === "settings" && msg.payload) {
             // This WS path is a second route to the exact
@@ -375,6 +397,13 @@ export function attachWebSocketServer(
       // deletion that happens WHILE this socket is already open closes
       // it here instead of leaving an already-revoked session connected
       // indefinitely until the client happens to reconnect on its own.
+      const expiresAt = (ws as any).authExpiresAt;
+      if (typeof expiresAt === "number" && (deps.WS_CLOSE_ON_EXPIRY ? deps.WS_CLOSE_ON_EXPIRY() : true) && Date.now() / 1000 > expiresAt) {
+        authFailuresTotal.inc({ reason: "ws_token_expired" });
+        ws.close(1008, "Access denied: token expired");
+        wsClients.delete(ws);
+        continue;
+      }
       const username = (ws as any).meta?.username;
       if (username) {
         const currentUser = findUser(username);
