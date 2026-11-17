@@ -589,7 +589,8 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
     try {
       const upstream = await fetch(`${SPI_BRIDGE_URL}${operation === "erase" ? "/fram/erase?confirm=ERASE" : "/fram/selftest"}`, {
         method: "POST",
-        headers: upstreamHeaders("spi-bridge", process.env, undefined, "admin"),
+        // the bridge refuses an erase that does not carry the word in a header too, and one made while the emergency stop is not latched
+        headers: { ...upstreamHeaders("spi-bridge", process.env, undefined, "admin"), ...(operation === "erase" ? { "X-Hydra-Confirm": "ERASE" } : {}) },
         redirect: "error",
         signal: AbortSignal.timeout(FRAM_TIMEOUT_MS),
       });

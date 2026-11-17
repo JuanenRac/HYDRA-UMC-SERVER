@@ -24,10 +24,12 @@ async function setup(opts: { enabled?: boolean; bridgeStatus?: number; bridgeBod
     put() {}, delete() {}, patch() {},
   };
   const seen: { method?: string; url?: string }[] = [];
+  const confirmHeaders: (string | undefined)[] = [];
   const bridge = http.createServer((req, res) => {
     req.resume();
     req.on("end", () => {
       seen.push({ method: req.method, url: req.url });
+      confirmHeaders.push(req.headers["x-hydra-confirm"] as string | undefined);
       res.writeHead(bridgeStatus, { "content-type": "application/json" });
       res.end(JSON.stringify(bridgeBody));
     });
@@ -60,7 +62,7 @@ async function setup(opts: { enabled?: boolean; bridgeStatus?: number; bridgeBod
     await done;
     return res;
   };
-  return { call, seen, events, routes, stop: () => new Promise<void>((resolve) => bridge.close(() => resolve())) };
+  return { call, seen, confirmHeaders, events, routes, stop: () => new Promise<void>((resolve) => bridge.close(() => resolve())) };
 }
 
 const ERASE = "POST /api/hardware/fram/erase";
@@ -114,6 +116,7 @@ test("a confirmed erase goes to the bridge with the word and comes back as the b
     assert.equal(res.statusCode, 200);
     assert.deepEqual(res.body, { operation: "erase", status: "ok", ok: true, board_id: 0, value: 8192 });
     assert.deepEqual(t.seen, [{ method: "POST", url: "/fram/erase?confirm=ERASE" }]);
+    assert.deepEqual(t.confirmHeaders, ["ERASE"], "the bridge needs the word in a header as well");
     assert.deepEqual([t.events[0].type, t.events[0].outcome, t.events[0].username, t.events[0].ip, t.events[0].detail.bridgeStatus], ["fram-erase", "ok", "root", "10.0.0.5", 200]);
   } finally {
     await t.stop();
@@ -126,6 +129,7 @@ test("the self-test needs no word and goes to its own route of the bridge", asyn
     const res = await t.call(SELFTEST, { ip: "10.0.0.5" });
     assert.equal(res.statusCode, 200);
     assert.deepEqual(t.seen, [{ method: "POST", url: "/fram/selftest" }]);
+    assert.deepEqual(t.confirmHeaders, [undefined], "the self-test sends no confirmation");
     assert.equal(t.events[0].type, "fram-selftest");
   } finally {
     await t.stop();
