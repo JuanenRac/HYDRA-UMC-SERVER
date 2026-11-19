@@ -743,7 +743,10 @@ process" posture as the Voice UI relay above.
   `min_bootloader` is then refused with `400` `flash-signature-required` (the missing fields
   are listed in `missing`) before anything is sent. Whatever the option, a flash is refused
   with `409` `flash-robots-moving` while any robot of the roster is playing a trajectory or
-  paused in one: stop them first.
+  paused in one: stop them first. With `production.requireAsymmetricSignature` on (Server Admin, or
+  `HYDRA_UMC_PRODUCTION_REQUIRE_ASYMMETRIC_SIGNATURE=1`, which wins and locks it; off by default) a flash
+  without the 128-digit `signature` is refused with `400` `flash-asymmetric-required` before anything is
+  sent, so an image that only the old shared-key check could vouch for never goes through.
 - `POST /api/hardware/fram/erase` and `POST /api/hardware/fram/selftest` - **`admin` only** and **off by default**
   (`safety.framErase` of Server Admin, or `HYDRA_UMC_FRAM_ERASE=1`, which wins and locks it): while off both
   answer `403` with `code: "FRAM_ERASE_DISABLED"` and nothing leaves this server. They relay to `spi_bridge`'s
@@ -1050,6 +1053,7 @@ Environment variables, read once at start (see `docs/PRODUCTION_BOOTSTRAP.md`):
 | `HYDRA_UMC_PRESENCE_ACTION` | What a lost heartbeat does to the robots of that operator: `slow` (default), `pause`, `notify` or `stop`; any other word is ignored. Also `presence.action` of `PUT /api/admin/server-config`; the variable locks it. |
 | `HYDRA_UMC_CONNECTION_RECORD_ADDRESS=1` | The history of connections (`/api/connections/*`) also keeps the address and user agent of each client, shown to administrators only. Off by default: they are personal data and the history works without them. |
 | `HYDRA_UMC_MQTT_HOME_ASSISTANT=1` | The MQTT bridge also publishes, retained, the discovery configs of each robot under `<discoveryPrefix>/<component>/<node>/<object>/config` (default prefix `homeassistant`, `mqtt.homeAssistant.discoveryPrefix`): one device per robot with its online flag, tool, playback state and joints and, only in `commands` mode, a stop button. Off by default; it applies on the next start. Also `mqtt.homeAssistant.enabled` of `PUT /api/admin/server-config`. See `docs/MQTT_BRIDGE.md`. |
+| `HYDRA_UMC_PRODUCTION_REQUIRE_ASYMMETRIC_SIGNATURE` | `1` makes the firmware flash refuse a request without the Ed25519 `signature` of the image (`400` `flash-asymmetric-required`); `0` is the default (as before). Any other word is ignored. Also `production.requireAsymmetricSignature` of `PUT /api/admin/server-config` (a boolean); the variable locks it. |
 | `HYDRA_UMC_PRODUCTION_REQUIRE_SIGNED_FLASH` | `1` makes the firmware flash (`POST /api/hardware/canota/flash`) refuse a request that does not carry `signature`, `target` and `min_bootloader` (`400` `flash-signature-required`); `0` is the default (as before: they are checked only when sent). Any other word is ignored. Also `production.requireSignedFlash` of `PUT /api/admin/server-config` (a boolean); the variable locks it. |
 | `HYDRA_UMC_ALLOW_DAMAGED_CONFIG` | `1` lets the server start on the defaults when `data/server-config.json` or `data/safety-limits.json` exists and cannot be understood. Without it the server refuses to start, names the file and keeps a copy next to it (`<file>.damaged-<stamp>`), because the options saved in it (TLS, the trusted networks, the jog arming, the lowered limits) would otherwise be dropped without a word. A file that is simply not there is a fresh install and needs nothing. |
 | `HYDRA_UMC_PRODUCTION_RDP_LEVEL` | The read-out protection level a production flash of the controller boards sets: `0` (off, the default: nothing is protected) or `1`; any other word is ignored. Level 2 is permanent and is never offered. Also `production.rdpLevel` of `PUT /api/admin/server-config` (an integer, `400` for any other value); the variable locks it. It only records the choice: no flashing tool reads it yet. |

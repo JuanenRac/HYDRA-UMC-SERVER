@@ -1,0 +1,370 @@
+{
+  "about": "Conformance vectors of the UpdateManifest signature (hydra_umc_sdk.manifest_signing). Test keys only. A consumer in any language must give the same accepted and code for every case.",
+  "cases": [
+    {
+      "accepted": true,
+      "code": "ok",
+      "manifest": {
+        "artifact_url": "https://github.com/JuanenRac/HYDRA-UMC-SERVER/releases/download/v0.2.4/server.tar.gz",
+        "key_id": "ef16b2a301070ea1",
+        "min_bootloader": "0.1.0",
+        "project": "HYDRA-UMC-SERVER",
+        "schema_version": "1.0",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "signature": "a146f27fbabc1e9d0f467c38bfbc95bc8afa45a5e6fc0104eff6c7132072554f4c11e312447720623799b84907beb1541eb8aa80c73ab5137346510d30d90307",
+        "signature_alg": "ed25519",
+        "target": "h745-cm7",
+        "version": "0.2.4"
+      },
+      "name": "a good signature passes with the switch off",
+      "now": "2030-03-01T00:00:00Z",
+      "require_asymmetric_signature": false
+    },
+    {
+      "accepted": true,
+      "code": "ok",
+      "manifest": {
+        "artifact_url": "https://github.com/JuanenRac/HYDRA-UMC-SERVER/releases/download/v0.2.4/server.tar.gz",
+        "key_id": "ef16b2a301070ea1",
+        "min_bootloader": "0.1.0",
+        "project": "HYDRA-UMC-SERVER",
+        "schema_version": "1.0",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "signature": "a146f27fbabc1e9d0f467c38bfbc95bc8afa45a5e6fc0104eff6c7132072554f4c11e312447720623799b84907beb1541eb8aa80c73ab5137346510d30d90307",
+        "signature_alg": "ed25519",
+        "target": "h745-cm7",
+        "version": "0.2.4"
+      },
+      "name": "a good signature passes with the switch on",
+      "now": "2030-03-01T00:00:00Z",
+      "require_asymmetric_signature": true
+    },
+    {
+      "accepted": false,
+      "code": "bad_signature",
+      "manifest": {
+        "artifact_url": "https://github.com/JuanenRac/HYDRA-UMC-SERVER/releases/download/v0.2.4/server.tar.gz",
+        "key_id": "ef16b2a301070ea1",
+        "min_bootloader": "0.1.0",
+        "project": "HYDRA-UMC-SERVER",
+        "schema_version": "1.0",
+        "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "signature": "a146f27fbabc1e9d0f467c38bfbc95bc8afa45a5e6fc0104eff6c7132072554f4c11e312447720623799b84907beb1541eb8aa80c73ab5137346510d30d90307",
+        "signature_alg": "ed25519",
+        "target": "h745-cm7",
+        "version": "0.2.4"
+      },
+      "name": "a changed manifest is refused with the switch off too",
+      "now": "2030-03-01T00:00:00Z",
+      "require_asymmetric_signature": false
+    },
+    {
+      "accepted": false,
+      "code": "bad_signature",
+      "manifest": {
+        "artifact_url": "https://github.com/JuanenRac/HYDRA-UMC-SERVER/releases/download/v0.2.4/server.tar.gz",
+        "key_id": "ef16b2a301070ea1",
+        "min_bootloader": "0.1.0",
+        "project": "HYDRA-UMC-SERVER",
+        "schema_version": "1.0",
+        "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "signature": "a146f27fbabc1e9d0f467c38bfbc95bc8afa45a5e6fc0104eff6c7132072554f4c11e312447720623799b84907beb1541eb8aa80c73ab5137346510d30d90307",
+        "signature_alg": "ed25519",
+        "target": "h745-cm7",
+        "version": "0.2.4"
+      },
+      "name": "a changed manifest is refused with the switch on",
+      "now": "2030-03-01T00:00:00Z",
+      "require_asymmetric_signature": true
+    },
+    {
+      "accepted": true,
+      "code": "legacy",
+      "manifest": {
+        "artifact_url": "https://github.com/JuanenRac/HYDRA-UMC-SERVER/releases/download/v0.2.4/server.tar.gz",
+        "min_bootloader": "0.1.0",
+        "project": "HYDRA-UMC-SERVER",
+        "schema_version": "1.0",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "target": "h745-cm7",
+        "version": "0.2.4"
+      },
+      "name": "a legacy manifest passes with the switch off",
+      "now": "2030-03-01T00:00:00Z",
+      "require_asymmetric_signature": false
+    },
+    {
+      "accepted": false,
+      "code": "downgrade_refused",
+      "manifest": {
+        "artifact_url": "https://github.com/JuanenRac/HYDRA-UMC-SERVER/releases/download/v0.2.4/server.tar.gz",
+        "min_bootloader": "0.1.0",
+        "project": "HYDRA-UMC-SERVER",
+        "schema_version": "1.0",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "target": "h745-cm7",
+        "version": "0.2.4"
+      },
+      "name": "a legacy manifest is refused with the switch on (downgrade)",
+      "now": "2030-03-01T00:00:00Z",
+      "require_asymmetric_signature": true
+    },
+    {
+      "accepted": false,
+      "code": "downgrade_refused",
+      "manifest": {
+        "artifact_url": "https://github.com/JuanenRac/HYDRA-UMC-SERVER/releases/download/v0.2.4/server.tar.gz",
+        "key_id": null,
+        "min_bootloader": "0.1.0",
+        "project": "HYDRA-UMC-SERVER",
+        "schema_version": "1.0",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "signature_alg": null,
+        "target": "h745-cm7",
+        "version": "0.2.4"
+      },
+      "name": "a stripped signature is the same as a legacy manifest",
+      "now": "2030-03-01T00:00:00Z",
+      "require_asymmetric_signature": true
+    },
+    {
+      "accepted": false,
+      "code": "malformed",
+      "manifest": {
+        "artifact_url": "https://github.com/JuanenRac/HYDRA-UMC-SERVER/releases/download/v0.2.4/server.tar.gz",
+        "min_bootloader": "0.1.0",
+        "project": "HYDRA-UMC-SERVER",
+        "schema_version": "1.0",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "signature_alg": "ed25519",
+        "target": "h745-cm7",
+        "version": "0.2.4"
+      },
+      "name": "a signature algorithm without a signature is damaged",
+      "now": "2030-03-01T00:00:00Z",
+      "require_asymmetric_signature": false
+    },
+    {
+      "accepted": false,
+      "code": "malformed",
+      "manifest": {
+        "artifact_url": "https://github.com/JuanenRac/HYDRA-UMC-SERVER/releases/download/v0.2.4/server.tar.gz",
+        "min_bootloader": "0.1.0",
+        "project": "HYDRA-UMC-SERVER",
+        "schema_version": "1.0",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "signature": "a146f27fbabc1e9d0f467c38bfbc95bc8afa45a5e6fc0104eff6c7132072554f4c11e312447720623799b84907beb1541eb8aa80c73ab5137346510d30d90307",
+        "signature_alg": "ed25519",
+        "target": "h745-cm7",
+        "version": "0.2.4"
+      },
+      "name": "a signature without its key_id is damaged",
+      "now": "2030-03-01T00:00:00Z",
+      "require_asymmetric_signature": false
+    },
+    {
+      "accepted": false,
+      "code": "malformed",
+      "manifest": {
+        "artifact_url": "https://github.com/JuanenRac/HYDRA-UMC-SERVER/releases/download/v0.2.4/server.tar.gz",
+        "key_id": "ef16b2a301070ea1",
+        "min_bootloader": "0.1.0",
+        "project": "HYDRA-UMC-SERVER",
+        "schema_version": "1.0",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "signature": "a146f27fbabc1e9d0f467c38bfbc95bc8afa45a5e6fc0104eff6c7132072554f4c11e312447720623799b84907beb1541eb8aa80c73ab5137346510d30d90307",
+        "signature_alg": "hmac-sha256",
+        "target": "h745-cm7",
+        "version": "0.2.4"
+      },
+      "name": "another algorithm name is damaged, not legacy",
+      "now": "2030-03-01T00:00:00Z",
+      "require_asymmetric_signature": false
+    },
+    {
+      "accepted": false,
+      "code": "malformed",
+      "manifest": {
+        "artifact_url": "https://github.com/JuanenRac/HYDRA-UMC-SERVER/releases/download/v0.2.4/server.tar.gz",
+        "key_id": "ef16b2a301070ea1",
+        "min_bootloader": "0.1.0",
+        "project": "HYDRA-UMC-SERVER",
+        "schema_version": "1.0",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "signature": "a146f27fbabc1e9d0f467c38bfbc95bc8afa45a5e6fc0104eff6c7132072554f4c11e312447720623799b84907beb1541eb8aa80c73ab5137346510d30d903",
+        "signature_alg": "ed25519",
+        "target": "h745-cm7",
+        "version": "0.2.4"
+      },
+      "name": "a short signature is damaged",
+      "now": "2030-03-01T00:00:00Z",
+      "require_asymmetric_signature": false
+    },
+    {
+      "accepted": false,
+      "code": "unknown_key",
+      "manifest": {
+        "artifact_url": "https://github.com/JuanenRac/HYDRA-UMC-SERVER/releases/download/v0.2.4/server.tar.gz",
+        "key_id": "a6d18afd85a5a992",
+        "min_bootloader": "0.1.0",
+        "project": "HYDRA-UMC-SERVER",
+        "schema_version": "1.0",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "signature": "f1495385cd5c95631f9f08a59a5f84cebb88d49b22eca32896a87974ea29d28b8372ae644877e14fa3e2de36fb6f414d77668ad7eab33b016dd7f76c276fa000",
+        "signature_alg": "ed25519",
+        "target": "h745-cm7",
+        "version": "0.2.4"
+      },
+      "name": "a key that is not in the list is refused",
+      "now": "2030-03-01T00:00:00Z",
+      "require_asymmetric_signature": false
+    },
+    {
+      "accepted": true,
+      "code": "ok",
+      "manifest": {
+        "artifact_url": "https://github.com/JuanenRac/HYDRA-UMC-SERVER/releases/download/v0.2.4/server.tar.gz",
+        "key_id": "e3490f57fdd07364",
+        "min_bootloader": "0.1.0",
+        "project": "HYDRA-UMC-SERVER",
+        "schema_version": "1.0",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "signature": "a5518ca406b7d3fc9bbaa7fa9c2ef13d47d31d60209c28b4e5e04cebcd874664c9d1aaccf119795bf7d0bd6d602bad7ac429ec990f84ce605196940ab5cf3308",
+        "signature_alg": "ed25519",
+        "target": "h745-cm7",
+        "version": "0.2.4"
+      },
+      "name": "the retired key still counts inside its grace period",
+      "now": "2030-05-31T23:59:59Z",
+      "require_asymmetric_signature": true
+    },
+    {
+      "accepted": false,
+      "code": "key_expired",
+      "manifest": {
+        "artifact_url": "https://github.com/JuanenRac/HYDRA-UMC-SERVER/releases/download/v0.2.4/server.tar.gz",
+        "key_id": "e3490f57fdd07364",
+        "min_bootloader": "0.1.0",
+        "project": "HYDRA-UMC-SERVER",
+        "schema_version": "1.0",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "signature": "a5518ca406b7d3fc9bbaa7fa9c2ef13d47d31d60209c28b4e5e04cebcd874664c9d1aaccf119795bf7d0bd6d602bad7ac429ec990f84ce605196940ab5cf3308",
+        "signature_alg": "ed25519",
+        "target": "h745-cm7",
+        "version": "0.2.4"
+      },
+      "name": "the retired key is refused after its grace period",
+      "now": "2030-06-01T00:00:00Z",
+      "require_asymmetric_signature": true
+    },
+    {
+      "accepted": false,
+      "code": "key_not_yet_valid",
+      "manifest": {
+        "artifact_url": "https://github.com/JuanenRac/HYDRA-UMC-SERVER/releases/download/v0.2.4/server.tar.gz",
+        "key_id": "4281522aa3b40812",
+        "min_bootloader": "0.1.0",
+        "project": "HYDRA-UMC-SERVER",
+        "schema_version": "1.0",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "signature": "22fc92096aa4d9ed3d5b42dff6b30fdacc6525c23578e13892bf533e35b5618be701a3455465bd86bc9de6ab5f56a5d08437bb003f16caf42e77432cc2002507",
+        "signature_alg": "ed25519",
+        "target": "h745-cm7",
+        "version": "0.2.4"
+      },
+      "name": "the next key is refused before its start",
+      "now": "2030-03-01T00:00:00Z",
+      "require_asymmetric_signature": false
+    },
+    {
+      "accepted": true,
+      "code": "ok",
+      "manifest": {
+        "artifact_url": "https://github.com/JuanenRac/HYDRA-UMC-SERVER/releases/download/v0.2.4/server.tar.gz",
+        "key_id": "4281522aa3b40812",
+        "min_bootloader": "0.1.0",
+        "project": "HYDRA-UMC-SERVER",
+        "schema_version": "1.0",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "signature": "22fc92096aa4d9ed3d5b42dff6b30fdacc6525c23578e13892bf533e35b5618be701a3455465bd86bc9de6ab5f56a5d08437bb003f16caf42e77432cc2002507",
+        "signature_alg": "ed25519",
+        "target": "h745-cm7",
+        "version": "0.2.4"
+      },
+      "name": "the next key counts after its start",
+      "now": "2031-01-01T00:00:00Z",
+      "require_asymmetric_signature": true
+    },
+    {
+      "accepted": false,
+      "code": "key_not_yet_valid",
+      "manifest": {
+        "artifact_url": "https://github.com/JuanenRac/HYDRA-UMC-SERVER/releases/download/v0.2.4/server.tar.gz",
+        "key_id": "ef16b2a301070ea1",
+        "min_bootloader": "0.1.0",
+        "project": "HYDRA-UMC-SERVER",
+        "schema_version": "1.0",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "signature": "a146f27fbabc1e9d0f467c38bfbc95bc8afa45a5e6fc0104eff6c7132072554f4c11e312447720623799b84907beb1541eb8aa80c73ab5137346510d30d90307",
+        "signature_alg": "ed25519",
+        "target": "h745-cm7",
+        "version": "0.2.4"
+      },
+      "name": "the current key is refused before its start",
+      "now": "2029-12-31T23:59:59Z",
+      "require_asymmetric_signature": false
+    },
+    {
+      "accepted": false,
+      "code": "key_revoked",
+      "manifest": {
+        "artifact_url": "https://github.com/JuanenRac/HYDRA-UMC-SERVER/releases/download/v0.2.4/server.tar.gz",
+        "key_id": "57f4669372950c1d",
+        "min_bootloader": "0.1.0",
+        "project": "HYDRA-UMC-SERVER",
+        "schema_version": "1.0",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        "signature": "3b4a0cdd532b7f27033b56f1cca18a78cf86efb8e593e225adf389bf276adf93194966181422f312cfe8b1bf2899275f5d9fd8cf4667364a4344f6ed822b9a0a",
+        "signature_alg": "ed25519",
+        "target": "h745-cm7",
+        "version": "0.2.4"
+      },
+      "name": "a revoked key is refused",
+      "now": "2030-03-01T00:00:00Z",
+      "require_asymmetric_signature": false
+    }
+  ],
+  "keys": {
+    "keys": [
+      {
+        "key_id": "e3490f57fdd07364",
+        "not_after": "2030-06-01T00:00:00Z",
+        "not_before": null,
+        "public": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+        "state": "retired"
+      },
+      {
+        "key_id": "ef16b2a301070ea1",
+        "not_after": null,
+        "not_before": "2030-01-01T00:00:00Z",
+        "public": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+        "state": "current"
+      },
+      {
+        "key_id": "4281522aa3b40812",
+        "not_after": null,
+        "not_before": "2031-01-01T00:00:00Z",
+        "public": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+        "state": "next"
+      },
+      {
+        "key_id": "57f4669372950c1d",
+        "not_after": null,
+        "not_before": null,
+        "public": "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48",
+        "state": "revoked"
+      }
+    ],
+    "schema": 1
+  }
+}

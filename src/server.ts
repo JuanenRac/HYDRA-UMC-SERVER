@@ -666,7 +666,7 @@ async function startServer() {
     authenticate, requireAdmin, industrialLog, wsClients, DATALAKE_URL, DATALAKE_TIMEOUT_MS, CONNECTOR_HUB_URL,
     CONNECTOR_HUB_TIMEOUT_MS, SPI_BRIDGE_URL, SPI_BRIDGE_VERSION_TIMEOUT_MS, SPI_BRIDGE_FLASH_TIMEOUT_MS,
     CONNECTOR_HUB_GATE_URL, SEMANTIC_PLANNER_URL, HIL_BRIDGE_URL, ROS2_BRIDGE_URL, SAFETY_ZONES_URL, ATC_URL, requireOperator, audit, opsAgentChannel,
-    atcResetEnabled: () => security.atcResetEnabled(), robotMotion: robotMotionOf(getSettings), requireSignedFlash: () => security.productionRequireSignedFlash(), anyRobotMoving: anyRobotMovingOf(getSettings), sensitiveRateLimiter, framEraseEnabled: () => security.framEraseEnabled(),
+    atcResetEnabled: () => security.atcResetEnabled(), robotMotion: robotMotionOf(getSettings), requireSignedFlash: () => security.productionRequireSignedFlash(), requireAsymmetricSignature: () => security.productionRequireAsymmetricSignature(), anyRobotMoving: anyRobotMovingOf(getSettings), sensitiveRateLimiter, framEraseEnabled: () => security.framEraseEnabled(),
   });
 
   registerInfoRoutes(app, {

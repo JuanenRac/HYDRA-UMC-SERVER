@@ -79,6 +79,8 @@ export interface ProductionFile {
   rdpLevel?: number;
   /** Whether a firmware flash of a controller board is refused unless it carries a signature, the board it is for and the oldest bootloader that may take it (default: no, as before). HYDRA_UMC_PRODUCTION_REQUIRE_SIGNED_FLASH wins. */
   requireSignedFlash?: boolean;
+  /** Whether a firmware flash is refused unless it carries the Ed25519 signature of its image, so nothing that is only protected by the old shared-key check goes through (default: no, while the move to asymmetric signatures is made). HYDRA_UMC_PRODUCTION_REQUIRE_ASYMMETRIC_SIGNATURE wins. */
+  requireAsymmetricSignature?: boolean;
 }
 
 /**
@@ -478,6 +480,7 @@ export interface SecurityEnv {
   healthOpen?: string;
   productionRdpLevel?: string;
   productionRequireSignedFlash?: string;
+  productionRequireAsymmetricSignature?: string;
   /** The ingest switches (INGEST_SWITCH_VARIABLES) and the keys file of the proposals, as written. */
   ingest?: Partial<Record<IngestSwitchKey | "proposalKeysFile", string>>;
   ecosystemHealth?: string;
@@ -540,6 +543,7 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     healthOpen: env.HYDRA_UMC_HEALTH_OPEN,
     productionRdpLevel: env.HYDRA_UMC_PRODUCTION_RDP_LEVEL,
     productionRequireSignedFlash: env.HYDRA_UMC_PRODUCTION_REQUIRE_SIGNED_FLASH,
+    productionRequireAsymmetricSignature: env.HYDRA_UMC_PRODUCTION_REQUIRE_ASYMMETRIC_SIGNATURE,
     ingest: { ...Object.fromEntries(INGEST_SWITCH_KEYS.map((key) => [key, env[INGEST_SWITCH_VARIABLES[key]]])), proposalKeysFile: env[PROPOSAL_KEYS_VARIABLE] },
     ecosystemHealth: env.HYDRA_UMC_ECOSYSTEM_HEALTH,
     nodeHealth: env.HYDRA_UMC_NODE_HEALTH,
@@ -667,6 +671,13 @@ export function resolveProductionRdpLevel(env: string | undefined, file: Securit
 export function resolveProductionRequireSignedFlash(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
   if (isSet(env) && (env.trim() === "0" || env.trim() === "1")) return { value: env.trim() === "1", source: "env" };
   if (typeof file.production?.requireSignedFlash === "boolean") return { value: file.production.requireSignedFlash, source: "config" };
+  return { value: false, source: "default" };
+}
+
+/** Whether a firmware flash must carry the Ed25519 signature of its image: only the exact words "1" and "0" in the environment count; the file decides next; the default is off (as before). */
+export function resolveProductionRequireAsymmetricSignature(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
+  if (isSet(env) && (env.trim() === "0" || env.trim() === "1")) return { value: env.trim() === "1", source: "env" };
+  if (typeof file.production?.requireAsymmetricSignature === "boolean") return { value: file.production.requireAsymmetricSignature, source: "config" };
   return { value: false, source: "default" };
 }
 
@@ -1149,7 +1160,7 @@ export interface SecuritySnapshot {
   voice: { includeHeardText: { value: boolean; source: Source }; minConfidence: { value: number; source: Source }; requireSignature: { value: boolean; source: Source } };
   robots: { allowEnable: { value: boolean; source: Source }; readOnly: { value: boolean; source: Source } };
   connections: { recordAddress: { value: boolean; source: Source } };
-  production: { rdpLevel: { value: 0 | 1; source: Source }; requireSignedFlash: { value: boolean; source: Source } };
+  production: { rdpLevel: { value: 0 | 1; source: Source }; requireSignedFlash: { value: boolean; source: Source }; requireAsymmetricSignature: { value: boolean; source: Source } };
   ingest: Record<IngestSwitchKey, { value: boolean; source: Source }> & { proposalKeysFile: { value: string; source: Source }; appliesOnRestart: boolean };
   health: { open: { value: boolean; source: Source } };
   ecosystemHealth: { enabled: { value: boolean; source: Source } };
@@ -1314,6 +1325,11 @@ export class SecurityConfig {
   /** Whether a firmware flash of a controller board is refused unless it is signed and names its board and bootloader (off unless an administrator turned it on). */
   productionRequireSignedFlash(): boolean {
     return resolveProductionRequireSignedFlash(this.options.env.productionRequireSignedFlash, this.file).value;
+  }
+
+  /** Whether a firmware flash is refused unless it carries the Ed25519 signature of its image (off unless an administrator turned it on). */
+  productionRequireAsymmetricSignature(): boolean {
+    return resolveProductionRequireAsymmetricSignature(this.options.env.productionRequireAsymmetricSignature, this.file).value;
   }
 
   /** Whether the history of connections may keep the address and user agent of a client (off unless an administrator turned it on). */
@@ -1587,7 +1603,7 @@ export class SecurityConfig {
       },
       robots: { allowEnable: resolveRobotAllowEnable(this.options.env.robotAllowEnable, this.file), readOnly: resolveReadOnly(this.options.env.readOnly, this.file) },
       connections: { recordAddress: resolveConnectionRecordAddress(this.options.env.connectionRecordAddress, this.file) },
-      production: { rdpLevel: resolveProductionRdpLevel(this.options.env.productionRdpLevel, this.file), requireSignedFlash: resolveProductionRequireSignedFlash(this.options.env.productionRequireSignedFlash, this.file) },
+      production: { rdpLevel: resolveProductionRdpLevel(this.options.env.productionRdpLevel, this.file), requireSignedFlash: resolveProductionRequireSignedFlash(this.options.env.productionRequireSignedFlash, this.file), requireAsymmetricSignature: resolveProductionRequireAsymmetricSignature(this.options.env.productionRequireAsymmetricSignature, this.file) },
       ingest: {
         ...(Object.fromEntries(INGEST_SWITCH_KEYS.map((key) => [key, resolveIngestSwitch(key, this.options.env.ingest?.[key], this.file)])) as Record<IngestSwitchKey, { value: boolean; source: Source }>),
         proposalKeysFile: resolveProposalKeysFile(this.options.env.ingest?.proposalKeysFile, this.file),
@@ -1852,6 +1868,11 @@ export class SecurityConfig {
         if (typeof productionPatch.requireSignedFlash !== "boolean") throw new SecurityConfigError(400, "production.requireSignedFlash must be true or false");
         if (resolveProductionRequireSignedFlash(this.options.env.productionRequireSignedFlash, this.file).source === "env") throw lockedBy("HYDRA_UMC_PRODUCTION_REQUIRE_SIGNED_FLASH");
         merged.requireSignedFlash = productionPatch.requireSignedFlash;
+      }
+      if (productionPatch.requireAsymmetricSignature !== undefined) {
+        if (typeof productionPatch.requireAsymmetricSignature !== "boolean") throw new SecurityConfigError(400, "production.requireAsymmetricSignature must be true or false");
+        if (resolveProductionRequireAsymmetricSignature(this.options.env.productionRequireAsymmetricSignature, this.file).source === "env") throw lockedBy("HYDRA_UMC_PRODUCTION_REQUIRE_ASYMMETRIC_SIGNATURE");
+        merged.requireAsymmetricSignature = productionPatch.requireAsymmetricSignature;
       }
       next.production = merged;
     }
@@ -2496,6 +2517,7 @@ export class SecurityConfig {
     if (patch.production !== undefined) {
       if (patch.production.rdpLevel !== undefined) log(`[SECURITY] ${actor} set the read-out protection level of a production flash to ${snapshot.production.rdpLevel.value} (${snapshot.production.rdpLevel.value === 1 ? "on" : "off"}).`);
       if (patch.production.requireSignedFlash !== undefined) log(`[SECURITY] ${actor} ${snapshot.production.requireSignedFlash.value ? "now requires" : "no longer requires"} a signature, a target and a minimum bootloader on a firmware flash.`);
+      if (patch.production.requireAsymmetricSignature !== undefined) log(`[SECURITY] ${actor} ${snapshot.production.requireAsymmetricSignature.value ? "now requires" : "no longer requires"} the Ed25519 signature of the image on a firmware flash.`);
     }
 
     if (patch.ingest !== undefined) {

@@ -49,6 +49,8 @@ export interface UpstreamDeps {
   audit?: Pick<AuditLog, "record">;
   /** Whether a firmware flash must carry its signature, its target board and its minimum bootloader (production.requireSignedFlash, off by default: a flash without them goes on as before). */
   requireSignedFlash?: () => boolean;
+  /** Whether a firmware flash must carry the Ed25519 signature of its image (production.requireAsymmetricSignature, off by default: a flash without it goes on as before). */
+  requireAsymmetricSignature?: () => boolean;
   /** Whether any robot of the roster is playing a trajectory or paused in one; a flash is refused (409) while it is true. Absent: nothing is known, so nothing is refused. */
   anyRobotMoving?: () => boolean;
   /** The limiter of the routes that take a code or reach a service (the same budget as the other sensitive routes); absent: none. */
@@ -638,6 +640,11 @@ export function registerUpstreamRoutes(app: express.Express, deps: UpstreamDeps)
         if (missing.length > 0) {
           return res.status(400).json({ error: `a firmware flash needs ${missing.join(", ")} (production.requireSignedFlash is on)`, code: "flash-signature-required", missing });
         }
+      }
+      // With production.requireAsymmetricSignature on, an image that is not covered by an Ed25519 signature is never handed to the flashing service: a flash
+      // that only the old shared-key check could vouch for is a downgrade and is refused here, before anything is sent.
+      if (deps.requireAsymmetricSignature?.() === true && signed.params.signature === undefined) {
+        return res.status(400).json({ error: "a firmware flash needs the Ed25519 signature of its image (production.requireAsymmetricSignature is on)", code: "flash-asymmetric-required" });
       }
       // A controller board is not rewritten under a robot that is playing a trajectory.
       if (deps.anyRobotMoving?.() === true) {

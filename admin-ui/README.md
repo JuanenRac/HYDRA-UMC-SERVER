@@ -39,7 +39,7 @@ because it's served from a different URL prefix (`/admin`) than STUDIO
 
 ## Security tab
 
-Administrators only. It shows the nine access switches of `GET`/`PUT /api/admin/server-config` (`health.open`, `safety.publishGlobalStop`, `safety.latchGlobalStop`, `production.requireSignedFlash`,
+Administrators only. It shows the nine access switches of `GET`/`PUT /api/admin/server-config` (`health.open`, `safety.publishGlobalStop`, `safety.latchGlobalStop`, `production.requireSignedFlash`, `production.requireAsymmetricSignature`,
 `connections.recordAddress`, `camera.open`, `websocket.allowQueryToken`, `logging.redactSecrets`, `voice.requireSignature`,
 `camera.credentialsViaEnv`, `install.newInstallTls`, `safety.framErase`) and the job dispatcher options (the delivery of its stop requests with its robot map, and the two
 options of its replanning). Each switch shows where its value comes from; one fixed by the environment of the server is locked; the value that lowers
