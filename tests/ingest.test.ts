@@ -148,7 +148,7 @@ test("every route answers 404 while its switch is off", () => {
   assert.equal(t.call("POST /api/ingest/scenario-outcome", { body: outcome() }).statusCode, 404);
   assert.equal(t.call("GET /api/ingest/scenario-outcomes").statusCode, 404);
   assert.equal(t.call("GET /api/faults").statusCode, 404);
-  assert.equal(t.call("GET /api/developer-node/status").statusCode, 404);
+  assert.equal(t.call("GET /api/dev-server/status").statusCode, 404);
 });
 
 test("scenario outcome: stored signed, audited, listed and verified; a bad one is refused and audited", () => {
@@ -193,7 +193,7 @@ test("developer node: needs its own token over HTTPS, and the latest status of e
   fs.writeFileSync(tokens, JSON.stringify({ nodes: { "dev-1": hashToken("tok-dev-1-secret") } }));
   const t = setup({ HYDRA_UMC_INGEST_DEVELOPER_NODE: "1", HYDRA_UMC_DEVELOPER_NODE_TOKENS_FILE: tokens });
   const status = { contract: "developer-node-status/1", version: "0.0.1", generated_at: 1, switches: {}, queue: {}, journal: [], health: {} };
-  const post = (headers: any, body: any = status, socket: any = { remoteAddress: "127.0.0.1" }) => t.call("POST /api/ingest/developer-node/status", { headers, body, socket });
+  const post = (headers: any, body: any = status, socket: any = { remoteAddress: "127.0.0.1" }) => t.call("POST /api/ingest/dev-server/status", { headers, body, socket });
   assert.equal(post({}).statusCode, 401);
   assert.equal(post({ authorization: "Bearer nope" }).statusCode, 401);
   assert.equal(post({ authorization: "Bearer tok-dev-1-secret", "x-node-id": "dev-9" }).statusCode, 401);
@@ -201,26 +201,9 @@ test("developer node: needs its own token over HTTPS, and the latest status of e
   assert.equal(post({ authorization: "Bearer tok-dev-1-secret" }, { ...status, contract: "x" }).statusCode, 400);
   assert.equal(post({ authorization: "Bearer tok-dev-1-secret" }).statusCode, 201);
   post({ authorization: "Bearer tok-dev-1-secret" }, { ...status, version: "0.0.2" });
-  const read = t.call("GET /api/developer-node/status", { query: { verify: "1" } });
+  const read = t.call("GET /api/dev-server/status", { query: { verify: "1" } });
   assert.equal((read.body.nodes["dev-1"].status as any).version, "0.0.2");
   assert.equal(read.body.chain.ok, true);
-});
-
-test("developer node: the dev-server names of the SDK answer like the developer-node ones", () => {
-  const dir = tmp();
-  const tokens = path.join(dir, "t.json");
-  fs.writeFileSync(tokens, JSON.stringify({ nodes: { "dev-1": hashToken("tok-dev-1-secret") } }));
-  const t = setup({ HYDRA_UMC_INGEST_DEVELOPER_NODE: "1", HYDRA_UMC_DEVELOPER_NODE_TOKENS_FILE: tokens });
-  const status = { contract: "developer-node-status/1", version: "0.0.3", generated_at: 1, switches: {}, queue: {}, journal: [], health: {} };
-  const headers = { authorization: "Bearer tok-dev-1-secret" };
-  const socket = { remoteAddress: "127.0.0.1" };
-  assert.equal(t.call("POST /api/ingest/dev-server/status", { headers: {}, body: status, socket }).statusCode, 401);
-  assert.equal(t.call("POST /api/ingest/dev-server/status", { headers, body: { ...status, contract: "x" }, socket }).statusCode, 400);
-  assert.equal(t.call("POST /api/ingest/dev-server/status", { headers, body: status, socket }).statusCode, 201);
-  const fresh = t.call("GET /api/dev-server/status", { query: { verify: "1" } });
-  const old = t.call("GET /api/developer-node/status", { query: { verify: "1" } });
-  assert.equal((fresh.body.nodes["dev-1"].status as any).version, "0.0.3");
-  assert.deepEqual(fresh.body, old.body);
 });
 
 test("developer node: while its switch is off even a good token gets 401", () => {
@@ -228,7 +211,7 @@ test("developer node: while its switch is off even a good token gets 401", () =>
   const tokens = path.join(dir, "t.json");
   fs.writeFileSync(tokens, JSON.stringify({ nodes: { "dev-1": hashToken("tok-dev-1-secret") } }));
   const t = setup({ HYDRA_UMC_DEVELOPER_NODE_TOKENS_FILE: tokens });
-  assert.equal(t.call("POST /api/ingest/developer-node/status", { headers: { authorization: "Bearer tok-dev-1-secret" }, body: {} }).statusCode, 401);
+  assert.equal(t.call("POST /api/ingest/dev-server/status", { headers: { authorization: "Bearer tok-dev-1-secret" }, body: {} }).statusCode, 401);
 });
 
 test("fault feed route lists the active faults and the recent ones", () => {

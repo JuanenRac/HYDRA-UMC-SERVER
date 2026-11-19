@@ -13,7 +13,7 @@
 //   node tools/generate_openapi.mjs           rewrite docs/openapi.json
 //   node tools/generate_openapi.mjs --check   fail if the file is out of date
 // =============================================================================
-import { SCHEMAS, RESPONSES, REQUESTS, EXTRA_STATUSES, EMPTY_BODY_STATUSES, errorResponse, jsonContent } from "./openapi_types.mjs";
+import { SCHEMAS, RESPONSES, REQUESTS, QUERY_PARAMETERS, EXTRA_STATUSES, EMPTY_BODY_STATUSES, errorResponse, jsonContent } from "./openapi_types.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -160,7 +160,7 @@ function buildDocument() {
       else if (Number(code) >= 400) response.content = jsonContent(errorResponse);
       else if ((code === "200" || code === "202") && RESPONSES[key]) response.content = jsonContent(RESPONSES[key]);
     }
-    for (const name of r.query) params.push({ name, in: "query", required: false, schema: { type: "string" } });
+    for (const name of [...new Set([...r.query, ...(QUERY_PARAMETERS[key] ?? [])])].sort(compare)) params.push({ name, in: "query", required: false, schema: { type: "string" } });
     if (params.length) operation.parameters = params;
     if (REQUESTS[key]) {
       operation.requestBody = {

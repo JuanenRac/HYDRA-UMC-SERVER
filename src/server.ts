@@ -676,7 +676,8 @@ async function startServer() {
   });
 
   // The newest published version of each program, behind a switch of Server Admin (updateCheck.enabled, off by default: 404). It asks GitHub; nothing else leaves the server.
-  registerUpdateRoutes(app, { authenticate, requireAdmin, enabled: () => security.updateCheckEnabled(), getStatus: () => getEcosystemStatus(), config: () => (loadServerConfig() as { updateCheck?: UpdateCheckSettings }).updateCheck });
+  registerUpdateRoutes(app, { authenticate, requireAdmin, enabled: () => security.updateCheckEnabled(), getStatus: () => getEcosystemStatus(), config: () => (loadServerConfig() as { updateCheck?: UpdateCheckSettings }).updateCheck,
+    manifestKeysFile: () => (loadServerConfig() as { updateManifest?: { trustedKeysFile?: string } }).updateManifest?.trustedKeysFile, requireAsymmetricSignature: () => security.productionRequireAsymmetricSignature() });
 
   // Install, go back and prune the releases of the programs installed here, behind a switch of Server Admin (maintenance.enabled, off by default: 404).
   registerMaintenanceRoutes(app, { authenticate, requireAdmin, enabled: () => security.maintenanceEnabled(), audit, maintenance: new Maintenance({ settings: () => maintenanceSettings((loadServerConfig() as { maintenance?: MaintenanceFile }).maintenance, dataPath) }) });

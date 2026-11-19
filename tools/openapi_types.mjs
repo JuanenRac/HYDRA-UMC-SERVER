@@ -72,6 +72,7 @@ export const RESPONSES = {
   "DELETE /api/admin/device-tokens/{id}": ref("DeviceTokenRevoked"),
   "POST /api/device/login": ref("LoginResult"),
   "GET /api/admin/updates": ref("UpdateReport"),
+  "POST /api/admin/updates/manifest/check": ref("UpdateManifestVerdict"),
   "GET /api/admin/self-update": ref("SelfUpdateStatus"),
   "GET /api/admin/self-update/jobs/{id}": ref("SelfUpdateJob"),
   "POST /api/admin/self-update/apply": ref("SelfUpdateJob"),
@@ -167,6 +168,13 @@ export const RESPONSES = {
 };
 
 // "METHOD /path" -> { required: [...], fields: { name: schema } } for the request body.
+// Query parameters of routes whose handler hands the whole query on (or reads it through a helper), so the scan of `req.query.<name>` cannot see them.
+export const QUERY_PARAMETERS = {
+  "POST /api/hardware/canota/flash": ["downgrade_from", "hardware_id", "min_bootloader", "relay", "signature", "slot", "target", "tier", "version_major", "version_minor", "version_patch"],
+  "GET /api/telemetry/aggregate": ["agg", "before", "bucketMs", "end", "field", "kind", "sourceId", "start"],
+  "GET /api/telemetry/query": ["before", "cursor", "end", "field", "kind", "limit", "sourceId", "start"],
+};
+
 export const REQUESTS = {
   "POST /api/operator/confirmations": { required: ["action", "job_id", "confirm"], fields: { action: str, job_id: str, confirm: { type: "boolean", enum: [true] }, ttl_seconds: int } },
   "POST /api/login": { required: ["username", "password"], fields: { username: str, password: str, totp: str } },
@@ -174,6 +182,8 @@ export const REQUESTS = {
   "POST /api/totp/confirm": { required: ["code"], fields: { code: str } },
   "POST /api/totp/disable": { required: ["password", "code"], fields: { password: str, code: str } },
   "POST /api/totp/recovery-codes": { required: ["password", "code"], fields: { password: str, code: str } },
+  // The body is an UpdateManifest (schema update-manifest of the contracts); the rule of manifestSigning.ts decides, so no field is required here.
+  "POST /api/admin/updates/manifest/check": { required: [], fields: {} },
   "POST /api/refresh": { required: ["refreshToken"], fields: { refreshToken: str } },
   "POST /api/device/login": { required: ["token"], fields: { token: str } },
   "POST /api/tool-arms/reset": { required: ["robot", "toolId", "confirm"], fields: { robot: str, toolId: num, confirm: str } },
@@ -236,6 +246,8 @@ export const EXTRA_STATUSES = {
   "GET /api/admin/device-tokens": [404],
   // 404 while updateCheck.enabled is off.
   "GET /api/admin/updates": [404],
+  // 400 for a body that is not an object, 503 when no usable list of trusted keys is configured (updateManifest.trustedKeysFile).
+  "POST /api/admin/updates/manifest/check": [400, 503],
   // 404 while updateCheck.enabled is off (the look) or maintenance.enabled is off (apply and rollback); 409 for a second job or no earlier release.
   // 404 while updateCheck.enabled is off (the look) or maintenance.enabled is off (apply and resume); 409 for a run or a look already going on, no plan, an old plan or nothing to take up; 502 when the tool fails.
   "GET /api/admin/fleet-update": [404],
