@@ -197,30 +197,6 @@
         }
       }
     },
-    "Reservation": {
-      "type": "object",
-      "required": [
-        "success",
-        "reservationHistory"
-      ],
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "reservation": {
-          "type": [
-            "object",
-            "null"
-          ]
-        },
-        "reservationHistory": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        }
-      }
-    },
     "StopAllResult": {
       "type": "object",
       "required": [
@@ -458,21 +434,6 @@
         }
       },
       "additionalProperties": true
-    },
-    "ServerConfigSaved": {
-      "type": "object",
-      "required": [
-        "success",
-        "appliesOnRestart"
-      ],
-      "properties": {
-        "success": {
-          "type": "boolean"
-        },
-        "appliesOnRestart": {
-          "type": "boolean"
-        }
-      }
     },
     "Reachable": {
       "type": "object",
@@ -3144,6 +3105,45 @@
         }
       },
       "additionalProperties": true
+    },
+    "UpdateManifestVerdict": {
+      "type": "object",
+      "required": [
+        "accepted",
+        "code",
+        "key_id",
+        "require_asymmetric_signature"
+      ],
+      "properties": {
+        "accepted": {
+          "type": "boolean"
+        },
+        "code": {
+          "type": "string",
+          "enum": [
+            "ok",
+            "legacy",
+            "downgrade_refused",
+            "malformed",
+            "bad_signature",
+            "unknown_key",
+            "key_revoked",
+            "key_not_yet_valid",
+            "key_expired"
+          ]
+        },
+        "key_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The key that signed the manifest, or null when it carries no signature."
+        },
+        "require_asymmetric_signature": {
+          "type": "boolean",
+          "description": "Whether the switch that refuses a manifest without an Ed25519 signature was on when the manifest was checked."
+        }
+      }
     }
   }
 }

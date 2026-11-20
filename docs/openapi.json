@@ -198,30 +198,6 @@
           }
         }
       },
-      "Reservation": {
-        "type": "object",
-        "required": [
-          "success",
-          "reservationHistory"
-        ],
-        "properties": {
-          "success": {
-            "type": "boolean"
-          },
-          "reservation": {
-            "type": [
-              "object",
-              "null"
-            ]
-          },
-          "reservationHistory": {
-            "type": "array",
-            "items": {
-              "type": "object"
-            }
-          }
-        }
-      },
       "StopAllResult": {
         "type": "object",
         "required": [
@@ -459,21 +435,6 @@
           }
         },
         "additionalProperties": true
-      },
-      "ServerConfigSaved": {
-        "type": "object",
-        "required": [
-          "success",
-          "appliesOnRestart"
-        ],
-        "properties": {
-          "success": {
-            "type": "boolean"
-          },
-          "appliesOnRestart": {
-            "type": "boolean"
-          }
-        }
       },
       "Reachable": {
         "type": "object",
@@ -3145,6 +3106,45 @@
           }
         },
         "additionalProperties": true
+      },
+      "UpdateManifestVerdict": {
+        "type": "object",
+        "required": [
+          "accepted",
+          "code",
+          "key_id",
+          "require_asymmetric_signature"
+        ],
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "code": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "legacy",
+              "downgrade_refused",
+              "malformed",
+              "bad_signature",
+              "unknown_key",
+              "key_revoked",
+              "key_not_yet_valid",
+              "key_expired"
+            ]
+          },
+          "key_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The key that signed the manifest, or null when it carries no signature."
+          },
+          "require_asymmetric_signature": {
+            "type": "boolean",
+            "description": "Whether the switch that refuses a manifest without an Ed25519 signature was on when the manifest was checked."
+          }
+        }
       }
     }
   },
@@ -4829,6 +4829,66 @@
         "x-rate-limited": true
       }
     },
+    "/api/admin/updates/manifest/check": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "POST /api/admin/updates/manifest/check",
+        "description": "Requires a signed-in account with the admin role.",
+        "x-access": "admin",
+        "responses": {
+          "200": {
+            "description": "Success. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateManifestVerdict"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [],
+                "properties": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-rate-limited": true
+      }
+    },
     "/api/anomaly/verdicts": {
       "get": {
         "tags": [
@@ -6188,37 +6248,6 @@
         "x-rate-limited": true
       }
     },
-    "/api/developer-node/status": {
-      "get": {
-        "tags": [
-          "developer-node"
-        ],
-        "summary": "GET /api/developer-node/status",
-        "description": "Requires a signed-in account (bearer token).",
-        "x-access": "user",
-        "responses": {
-          "200": {
-            "description": "Success. The body is documented in docs/REMOTE_API.md."
-          }
-        },
-        "parameters": [
-          {
-            "name": "verify",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "x-rate-limited": true
-      }
-    },
     "/api/device/login": {
       "post": {
         "tags": [
@@ -6671,6 +6700,96 @@
             }
           }
         },
+        "parameters": [
+          {
+            "name": "downgrade_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hardware_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "min_bootloader",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "relay",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "signature",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "slot",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tier",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version_major",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version_minor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version_patch",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "security": [
           {
             "bearerAuth": []
@@ -7009,42 +7128,6 @@
           "ingest"
         ],
         "summary": "POST /api/ingest/dev-server/status",
-        "description": "No authentication required by the route itself.",
-        "x-access": "public",
-        "responses": {
-          "201": {
-            "description": "Created. The body is documented in docs/REMOTE_API.md."
-          },
-          "400": {
-            "description": "Invalid request. The body is documented in docs/REMOTE_API.md.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Not configured or unavailable. The body is documented in docs/REMOTE_API.md.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "x-rate-limited": true
-      }
-    },
-    "/api/ingest/developer-node/status": {
-      "post": {
-        "tags": [
-          "ingest"
-        ],
-        "summary": "POST /api/ingest/developer-node/status",
         "description": "No authentication required by the route itself.",
         "x-access": "public",
         "responses": {
@@ -9491,6 +9574,72 @@
             }
           }
         },
+        "parameters": [
+          {
+            "name": "agg",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "bucketMs",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "field",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sourceId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "security": [
           {
             "bearerAuth": []
@@ -9580,6 +9729,72 @@
             }
           }
         },
+        "parameters": [
+          {
+            "name": "before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "field",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sourceId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "security": [
           {
             "bearerAuth": []
