@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.8.3.3]
+
 - **A firmware flash can be made to require the Ed25519 signature of its image, and the manifest signature rule is here in TypeScript:** the new option `production.requireAsymmetricSignature` (Server Admin, or `HYDRA_UMC_PRODUCTION_REQUIRE_ASYMMETRIC_SIGNATURE=1`; off by default, so nothing changes until it is turned on; logged, saved and locked by its variable like the other production option) makes `POST /api/hardware/canota/flash` refuse with `400` (`flash-asymmetric-required`) a request without the `signature` of the image, before anything is sent. `src/manifestSigning.ts` is the rule of the SDK for the signature of an update manifest (canonical JSON, trusted public keys that are current, next, retired or revoked with a validity window, a signature that is present always checked, a legacy manifest refused as a downgrade when the switch is on) and runs the same conformance vectors; the Security tab of Server Admin shows the switch in the eight languages.
 - **An account can get new recovery codes for its second factor:** `POST /api/totp/recovery-codes` with the password and a current code (or an unused recovery code) answers ten new codes, shown once, and the ones left stop working; a read-only account may ask for its own. The status answer keeps telling how many codes are left, so a screen can warn that new codes should be generated when they run low.
 - **Server Admin offers the choice for a robot the server has not heard from:** the Security tab has a selector for what to do with the stop that the job dispatcher asks for when the robot has been silent or was never heard, either leave it unacknowledged (the default) or acknowledge it from the state of this server, with its sentences in the eight languages and a warning when the second is saved. It applies on the next start of the server.
@@ -60,6 +62,7 @@
 
 - **The manual production-files build no longer refuses a four-component version:** `package.json` and `package-lock.json` must equal the first three components of the manifest version (npm has no fourth component) and agree with each other, and the archive keeps the name of the manifest version. The rule lives in `tools/extra_checks.py` (`dist-version`), the workflow runs it, and the validator tries it on made-up folders (three components equal, four components with a three-component `package.json`, and a different `package.json` or lock failing).
 
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
 
 ## [0.8.3.2]
 
