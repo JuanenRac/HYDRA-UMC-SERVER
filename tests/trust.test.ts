@@ -261,9 +261,23 @@ test("how a node is doing is the worst latest verdict among its series, compared
   assert.equal(feed.stateOfNode("---"), "unknown");
 });
 
+test("a silent or stale series is not normal, ranks below a suspect one and is not told to the voice interface as an alert", () => {
+  const feed = new AnomalyFeed(new ChainedLog(path.join(tmp(), "s.jsonl"), () => KEY));
+  feed.record(parseAnomalyVerdict(verdict({ source_id: "m1", field: "x" }))!);
+  for (const word of ["no_signal", "stale"]) {
+    const parsed = parseAnomalyVerdict(verdict({ source_id: "m1", field: "y", verdict: word }))!;
+    assert.equal(parsed.verdict, word);
+    feed.record(parsed);
+    assert.equal(feed.stateOfNode("m1"), word);
+    assert.equal(voiceAlertBody(parsed, "en"), null);
+  }
+  feed.record(parseAnomalyVerdict(verdict({ source_id: "m1", field: "z", verdict: "suspect" }))!);
+  assert.equal(feed.stateOfNode("m1"), "suspect");
+});
+
 test("the sentence about a node exists in the eight languages for every state and names the node", () => {
   for (const language of ["en", "es", "de", "fr", "it", "ja", "zh", "pt"]) {
-    for (const state of ["normal", "suspect", "anomalous", "unknown"] as const) {
+    for (const state of ["normal", "no_signal", "stale", "suspect", "anomalous", "unknown"] as const) {
       assert.ok(nodeStateText("motor3", state, language).includes("motor3"), `${language} ${state}`);
     }
     assert.ok(nodeStateText("motor3", "off", language).length > 10, `${language} off`);

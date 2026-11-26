@@ -13,7 +13,8 @@ export type Env = Record<string, string | undefined>;
 
 export const SWITCH_ANOMALY_FEED = "HYDRA_UMC_ANOMALY_FEED";
 export const SWITCH_ANOMALY_VOICE_RELAY = "HYDRA_UMC_ANOMALY_VOICE_RELAY";
-export const VERDICTS = ["normal", "suspect", "anomalous"] as const;
+// from the least to the most serious (what `stateOfNode` ranks by): a silent or a stale series is not a healthy one
+export const VERDICTS = ["normal", "no_signal", "stale", "suspect", "anomalous"] as const;
 export type VerdictName = (typeof VERDICTS)[number];
 
 export interface AnomalyVerdict {
@@ -88,9 +89,9 @@ export class AnomalyFeed {
   }
 }
 
-/** The body for `POST /v1/voice/alert` of the voice interface: a verdict that is not normal, as an alert about the node. Null for a normal verdict (it is never spoken). */
+/** The body for `POST /v1/voice/alert` of the voice interface: a suspect or anomalous verdict, as an alert about the node. Null for any other (never spoken as an alert). */
 export function voiceAlertBody(verdict: AnomalyVerdict, locale: string): Record<string, unknown> | null {
-  if (verdict.verdict === "normal") return null;
+  if (verdict.verdict !== "suspect" && verdict.verdict !== "anomalous") return null;
   const id = `anomaly-${verdict.sourceId}-${verdict.kind}-${verdict.field}`.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 52) + `-${verdict.verdict}`;
   return {
     alertId: id.slice(0, 64),
