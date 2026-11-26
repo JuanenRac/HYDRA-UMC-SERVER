@@ -11,7 +11,7 @@
 // the server always had: AI relay open to any signed-in user, host information open, plain HTTP, no
 // Bluetooth).
 import { DEFAULT_LIVE_ACTIVITY_LEVEL, LIVE_ACTIVITY_LEVELS, MAX_LIVE_ACTIVITY_LEVEL, isLevel as isLiveLevel, raisesExposure, type LiveActivityLevel } from "./liveActivity";
-import { GLOBAL_STOP_KEY_PATTERN, globalStopKeyUsable, removeGlobalStopKey, storeGlobalStopKey } from "./globalStopSigning.ts";
+import { GLOBAL_STOP_KEY_PATTERN, globalStopKeyUsable, removeGlobalStopKey, storeGlobalStopKey } from "./globalStopSigning";
 import { readOnlyEnabled } from "./readOnlyMode";
 import crypto from "node:crypto";
 import fs from "node:fs";

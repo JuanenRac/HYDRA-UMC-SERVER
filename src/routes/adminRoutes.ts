@@ -8,7 +8,7 @@
 // WebSocket connections, the log file, the listen port and the stored server
 // config, all handed in through one small object so this file holds no state.
 import express from "express";
-import { loopbackCallerProblem } from "../serverPolicy.ts";
+import { loopbackCallerProblem } from "../serverPolicy";
 import { apiRateLimiter } from "../auth";
 import fs from "fs";
 import { WebSocket } from "ws";
