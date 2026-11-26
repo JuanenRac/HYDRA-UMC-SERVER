@@ -3144,6 +3144,59 @@
           "description": "Whether the switch that refuses a manifest without an Ed25519 signature was on when the manifest was checked."
         }
       }
+    },
+    "WatchReleaseNoticeSaved": {
+      "type": "object",
+      "required": [
+        "saved"
+      ],
+      "properties": {
+        "saved": {
+          "type": "boolean"
+        }
+      }
+    },
+    "WatchReleaseNoticeList": {
+      "type": "object",
+      "required": [
+        "devices"
+      ],
+      "properties": {
+        "devices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "device_id",
+              "platform",
+              "username",
+              "notifies_watch",
+              "updated_at"
+            ],
+            "properties": {
+              "device_id": {
+                "type": "string"
+              },
+              "platform": {
+                "type": "string",
+                "enum": [
+                  "android",
+                  "ios"
+                ]
+              },
+              "username": {
+                "type": "string"
+              },
+              "notifies_watch": {
+                "type": "boolean"
+              },
+              "updated_at": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

@@ -648,6 +648,10 @@ turn into an actuator call on this route.
 - `GET /api/watch/system-status` returns a small authenticated
   `system_status` health card with CPU, memory and uptime. It intentionally
   excludes full settings, credentials and filesystem paths.
+- `POST /api/watch/release-notice` `{"device_id": "...", "platform": "android|ios", "notifies_watch": true}`
+  (any account, for its own phone) records whether that phone tells its watch about a newer release of the app, and
+  `GET /api/admin/watch/release-notice` (administrator) lists what the phones said. Information only: nothing on
+  the phone or the watch changes. At most 64 phones are kept (`data/watch-release-notice.json`).
 
 The Server reads `HYDRA_UMC_VOICE_UI_URL`,
 `HYDRA_UMC_VOICE_UI_TOKEN` and the bounded timeout
@@ -715,7 +719,7 @@ process" posture as the Voice UI relay above.
   "firmware_minor" }`. `relay=1` tunnels through the resolved Tier 0/1
   target to reach Tier 2 (the URTC Tool Head) - see `spi_bridge`'s own
   `relay_tunnel.py`.
-- `POST /api/hardware/canota/flash?tier=&slot=&relay=&hardware_id=&version_major=&version_minor=[&version_patch=][&downgrade_from=x.y.z][&signature=HEX][&target=NAME][&min_bootloader=x.y.z]`
+- `POST /api/hardware/canota/flash?tier=&slot=&relay=&hardware_id=&version_major=&version_minor=[&version_patch=][&downgrade_from=x.y.z][&signature=HEX][&header=HEX | &rollback_counter=N&key_id=HEX][&target=NAME][&min_bootloader=x.y.z]`
   - **`admin` only** (unlike the read-only version query above - writing
   firmware is exactly the kind of action every other bridge in this
   ecosystem gates more tightly than a read). Body: raw firmware bytes,

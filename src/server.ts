@@ -94,6 +94,8 @@ import { makeEcosystemHealthGate, registerEcosystemHealthRoutes } from "./routes
 import { makeNodeHealthGate, registerNodeHealthRoutes } from "./routes/nodeHealthRoutes";
 import { bridgeNodeHealthFetcher } from "./nodeHealth";
 import { makePushGate, registerPushRoutes } from "./routes/pushRoutes";
+import { registerWatchNoticeRoutes } from "./routes/watchNoticeRoutes";
+import { WatchReleaseNotices } from "./watchReleaseNotice";
 import { PushDevices, PushService, emitPush } from "./pushNotifications";
 import { LiveActivities, LiveActivityService, liveBus, snapshotFromRobot, emitRobotSnapshot, type RobotSnapshot } from "./liveActivity";
 import type { PushFile } from "./securityConfig";
@@ -482,8 +484,8 @@ async function startServer() {
     broadcastCommandLifecycle: (event) => hub.broadcastCommandLifecycle(event),
     robotEnableAllowed: () => security.robotEnableAllowed(),
     // A global stop is also announced on the MQTT bridge only when an administrator allowed it (safety.publishGlobalStop, off by default).
-    announceGlobalStop: () => (security.globalStopPublished() ? mqttBridge?.publishSafety("SAFE_STOP", "global stop") ?? false : undefined),
-    announceGlobalStopReleased: () => (security.globalStopPublished() ? mqttBridge?.publishSafety("READY", "global stop released") ?? false : false),
+    announceGlobalStop: () => (security.globalStopPublished() ? mqttBridge?.publishSafety("SAFE_STOP", "global stop", security.globalStopKeyFile()) ?? false : undefined),
+    announceGlobalStopReleased: () => (security.globalStopPublished() ? mqttBridge?.publishSafety("READY", "global stop released", security.globalStopKeyFile()) ?? false : false),
     onGlobalStopChanged: (stopped) => stopState.setSoftware(stopped),
     // The global stop is written to data/ before the answer and read back at start-up; only the release removes it.
     persistGlobalStop: (by) => persistGlobalStop(dataPath, by),
@@ -637,6 +639,8 @@ async function startServer() {
     status: () => ({ ...pushService.status(), liveActivity: { enabled: security.liveActivityEnabled(), level: security.liveActivityLevel(), activities: liveActivities.count() } }),
     audit, liveActivities, liveActivityGate: makePushGate(() => security.liveActivityEnabled()),
   });
+  // What the phones say about telling their watch of a newer release (information for the administrator).
+  registerWatchNoticeRoutes(app, { authenticate, requireAdmin, notices: new WatchReleaseNotices(path.join(dataPath, "watch-release-notice.json")) });
   registerNodeHealthRoutes(app, {
     authenticate, requireOperator,
     nodeHealthGate: makeNodeHealthGate(() => security.nodeHealthEnabled()),

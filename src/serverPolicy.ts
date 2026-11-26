@@ -471,12 +471,13 @@ export function viewerMayCall(method: string | undefined, path: string | undefin
 }
 
 /** The writes of a read-only account on its own account only: the first two steps of the second factor and the registration of its phone. */
-const VIEWER_OWN_ACCOUNT_POSTS = new Set(["/api/totp/begin", "/api/totp/confirm", "/api/totp/recovery-codes", "/api/push/devices"]);
+const VIEWER_OWN_ACCOUNT_POSTS = new Set(["/api/totp/begin", "/api/totp/confirm", "/api/totp/recovery-codes", "/api/push/devices", "/api/watch/release-notice"]);
 
 /**
  * The signing part of a firmware flash request: `signature` (the Ed25519 signature of the image, 128 hexadecimal digits)
- * and `downgrade_from` (the version installed now, major.minor.patch, asked for when the image is older). Anything else
- * in those two fields is refused here, before it is put into the address of the request to the flashing service. The two fields of the update manifest
+ * and `downgrade_from` (the version installed now, major.minor.patch, asked for when the image is older). What the image was signed with goes too: `header`
+ * (the <image>.hdr2 of a release, 128 hexadecimal digits) or `rollback_counter` and `key_id`, never both. Anything else
+ * in those fields is refused here, before it is put into the address of the request to the flashing service. The two fields of the update manifest
  * the caller holds, `target` (the name of the board the image is for) and `min_bootloader` (the oldest bootloader that may take it, major.minor.patch), go the same
  * way: the flashing service refuses a target that is not the board and a bootloader older than that before it sends a byte, and checks nothing without them.
  */
@@ -502,6 +503,23 @@ export function flashSigningQuery(query: Record<string, unknown>): { ok: true; p
     if (typeof minBootloader !== "string" || !/^\d{1,5}\.\d{1,5}\.\d{1,5}$/.test(minBootloader)) return { ok: false, error: "min_bootloader must be major.minor.patch" };
     params.min_bootloader = minBootloader;
   }
+  const header = query.header;
+  if (header !== undefined) {
+    if (typeof header !== "string" || !/^[0-9a-fA-F]{128}$/.test(header)) return { ok: false, error: "header must be 128 hexadecimal digits" };
+    params.header = header.toLowerCase();
+  }
+  const counter = query.rollback_counter;
+  if (counter !== undefined) {
+    if (typeof counter !== "string" || !/^\d{1,10}$/.test(counter) || Number(counter) > 0xffffffff) return { ok: false, error: "rollback_counter must be a whole number from 0 to 4294967295" };
+    params.rollback_counter = counter;
+  }
+  const keyId = query.key_id;
+  if (keyId !== undefined) {
+    if (typeof keyId !== "string" || !/^[0-9a-fA-F]{16}$/.test(keyId)) return { ok: false, error: "key_id must be 16 hexadecimal digits" };
+    params.key_id = keyId.toLowerCase();
+  }
+  if ((counter === undefined) !== (keyId === undefined)) return { ok: false, error: "rollback_counter and key_id go together" };
+  if (header !== undefined && counter !== undefined) return { ok: false, error: "give header, or rollback_counter and key_id, not both" };
   const patch = query.version_patch;
   if (patch !== undefined && (typeof patch !== "string" || !/^\d{1,5}$/.test(patch))) return { ok: false, error: "version_patch must be a whole number" };
   return { ok: true, params };
