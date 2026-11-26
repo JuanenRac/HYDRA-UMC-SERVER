@@ -11,6 +11,7 @@
 // the server always had: AI relay open to any signed-in user, host information open, plain HTTP, no
 // Bluetooth).
 import { DEFAULT_LIVE_ACTIVITY_LEVEL, LIVE_ACTIVITY_LEVELS, MAX_LIVE_ACTIVITY_LEVEL, isLevel as isLiveLevel, raisesExposure, type LiveActivityLevel } from "./liveActivity";
+import { GLOBAL_STOP_KEY_PATTERN, globalStopKeyUsable, removeGlobalStopKey, storeGlobalStopKey } from "./globalStopSigning";
 import { readOnlyEnabled } from "./readOnlyMode";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -342,6 +343,8 @@ export interface SafetyFile {
   publishGlobalStop?: boolean;
   /** The file of the key that signs the announcement of the global stop (one line, at least 32 characters, mode 600): the same key the bridges are given, so that only a signed READY ends their stop. Not set (the default): unsigned, as before. Read from this file or HYDRA_UMC_GLOBAL_STOP_KEY_FILE only; no route sets it. */
   globalStopKeyFile?: string;
+  /** Whether the announcement is signed with the key an administrator stored through Server Admin (default: no). Ignored while a key file is named above or in the environment. */
+  signGlobalStop?: boolean;
   /** Whether, while the global stop is on, the server refuses every motion command with 423 (stop and disable still pass) until an administrator releases the stop (default: no). */
   latchGlobalStop?: boolean;
   /** Whether the erase and the self-test of the F-RAM of the kinematic brain are offered (default: no). Also needs the bridge started with --enable-fram-erase and a firmware built for it. */
@@ -1186,7 +1189,7 @@ export interface SecuritySnapshot {
   /** The switch, and what the configuration file says about the rest (read only here: the ranges are edited in the file). */
   trustedNetworks: { enabled: { value: boolean; source: Source }; outside: "operate" | "view"; outsideRequiresSecondFactor: boolean; localRanges: number; vpnRanges: number; invalidEntries: number };
   rul: { enabled: { value: boolean; source: Source } };
-  safety: { publishGlobalStop: { value: boolean; source: Source }; latchGlobalStop: { value: boolean; source: Source }; framErase: { value: boolean; source: Source }; estopWatchMs: { value: number; source: Source } };
+  safety: { publishGlobalStop: { value: boolean; source: Source }; latchGlobalStop: { value: boolean; source: Source }; framErase: { value: boolean; source: Source }; estopWatchMs: { value: number; source: Source }; globalStopSigning: GlobalStopSigningView };
   jobDispatcher: {
     stopRelay: { enabled: { value: boolean; source: Source }; robotMap: Record<string, number>; silentRobot: { value: SilentRobotValue; source: Source }; activeEnabled: boolean; appliesOnRestart: boolean };
     /** The execution of the assigned jobs: `enabled` switches it on (a dry run), `live` lets it move the robots. Both apply on the next start. */
@@ -1220,8 +1223,20 @@ export interface SecuritySnapshot {
   mavlink: { signingKeyFile: { value: string; source: Source }; signingAllowUnsigned: { value: boolean; source: Source }; signing: boolean; appliesOnRestart: boolean };
 }
 
+/** The signed release of the global stop as an administrator sees it: never the key, nor the path of its file. */
+export interface GlobalStopSigningView {
+  value: boolean;
+  source: Source;
+  /** Whether a usable key stored through Server Admin is there. */
+  keyStored: boolean;
+  /** A key file named in the environment or in the security file decides: nothing can be changed from Server Admin. */
+  external: boolean;
+}
+
 export interface SecurityConfigOptions {
   env: SecurityEnv;
+  /** Where the key an administrator stores for the signed release of the global stop is kept (mode 600). Without it the switch is not offered. */
+  managedStopKeyFile?: string;
   /** Called once the switches of the bridges are saved, so the gateway can announce them (src/bridgeGateway.ts). */
   afterBridgesWritten?: () => void;
   /** Writes the settings file that DETECTION-HEF re-reads (src/detectionHefSettings.ts); called once the value is saved. */
@@ -1554,8 +1569,19 @@ export class SecurityConfig {
 
   /** The file of the key that signs the announcement of the global stop, or undefined (unsigned). The environment wins over the file. */
   globalStopKeyFile(): string | undefined {
+    return this.externalStopKeyFile() ?? (this.file.safety?.signGlobalStop === true ? this.options.managedStopKeyFile : undefined);
+  }
+
+  private externalStopKeyFile(): string | undefined {
     const chosen = this.options.env.globalStopKeyFile?.trim() || this.file.safety?.globalStopKeyFile;
     return typeof chosen === "string" && chosen.trim() ? chosen.trim() : undefined;
+  }
+
+  private globalStopSigningView(): GlobalStopSigningView {
+    const external = this.externalStopKeyFile() !== undefined;
+    const managed = this.options.managedStopKeyFile;
+    const source: Source = this.options.env.globalStopKeyFile?.trim() ? "env" : external || typeof this.file.safety?.signGlobalStop === "boolean" ? "config" : "default";
+    return { value: this.globalStopKeyFile() !== undefined, source, keyStored: managed !== undefined && globalStopKeyUsable(managed), external };
   }
 
   /** Whether motion commands are refused while the global stop is on (off unless an administrator turned it on). */
@@ -1655,6 +1681,7 @@ export class SecurityConfig {
         latchGlobalStop: resolveSafetyLatchStop(this.options.env.safetyLatchStop, this.file),
         framErase: resolveFramErase(this.options.env.framErase, this.file),
         estopWatchMs: resolveEstopWatchMs(this.options.env.estopWatch, this.file),
+        globalStopSigning: this.globalStopSigningView(),
       },
       jobDispatcher: this.jobDispatcherSnapshot(),
       camera: { open: resolveCameraOpen(this.options.env.cameraAuth, this.file), credentialsViaEnv: resolveCameraCredentialsViaEnv(this.options.env.cameraCredentialsViaEnv, this.file), limitRecordings: resolveCameraLimitRecordings(this.options.env.cameraLimitRecordings, this.file), recordingMaxSeconds: this.recordingLimitNumber("recordingMaxSeconds"), recordingMaxBytes: this.recordingLimitNumber("recordingMaxBytes"), recordingQuotaBytes: this.recordingLimitNumber("recordingQuotaBytes") },
@@ -2299,6 +2326,8 @@ export class SecurityConfig {
       if (loggingPatch.redactSecrets === false) warnings.push("log_redaction_off");
     }
 
+    // the key to store (a text) or to remove (null); written only once the whole patch is accepted
+    let stopKeyWrite: string | null | undefined;
     if (patch.safety !== undefined) {
       const safetyPatch = patch.safety;
       if (typeof safetyPatch !== "object" || safetyPatch === null || Array.isArray(safetyPatch)) throw new SecurityConfigError(400, "safety must be an object");
@@ -2324,6 +2353,22 @@ export class SecurityConfig {
         if (resolveEstopWatchMs(this.options.env.estopWatch, this.file).source === "env") throw lockedBy("HYDRA_UMC_ESTOP_WATCH_MS");
         merged.estopWatchMs = safetyPatch.estopWatchMs;
         appliesOnRestart = true;
+      }
+      if (safetyPatch.signGlobalStop !== undefined || safetyPatch.globalStopKey !== undefined) {
+        const { signGlobalStop: sign, globalStopKey: key } = safetyPatch;
+        const managed = this.options.managedStopKeyFile;
+        if (sign !== undefined && typeof sign !== "boolean") throw new SecurityConfigError(400, "safety.signGlobalStop must be true or false");
+        // never echo what was sent: it is a key
+        if (key !== undefined && key !== null && !(typeof key === "string" && GLOBAL_STOP_KEY_PATTERN.test(key))) throw new SecurityConfigError(400, "safety.globalStopKey must be 32 to 256 printable characters without spaces, or null to remove it");
+        if (this.externalStopKeyFile() !== undefined || managed === undefined) throw new SecurityConfigError(409, "The global stop key file is set in the environment or in the security file of this server; remove it there to change it here");
+        const willSign = sign ?? merged.signGlobalStop === true;
+        const willHaveKey = key === undefined ? globalStopKeyUsable(managed) : key !== null;
+        if (willSign && !willHaveKey) throw new SecurityConfigError(400, "The signed release needs a stored key: send safety.globalStopKey, or turn safety.signGlobalStop off to remove it");
+        if (sign !== undefined) merged.signGlobalStop = sign;
+        stopKeyWrite = key;
+        if (sign === true) warnings.push("global_stop_signed");
+        if (sign === false) warnings.push("global_stop_unsigned");
+        if (typeof key === "string") warnings.push("global_stop_key_stored");
       }
       next.safety = merged;
       if (safetyPatch.publishGlobalStop === true) warnings.push("global_stop_published");
@@ -2487,6 +2532,15 @@ export class SecurityConfig {
       }
     }
 
+    if (stopKeyWrite !== undefined && this.options.managedStopKeyFile !== undefined) {
+      try {
+        if (stopKeyWrite === null) removeGlobalStopKey(this.options.managedStopKeyFile);
+        else storeGlobalStopKey(this.options.managedStopKeyFile, stopKeyWrite);
+      } catch (error) {
+        log(`[SECURITY] The global stop key file could not be written (${(error as NodeJS.ErrnoException).code ?? "unknown error"}).`);
+        throw new SecurityConfigError(500, "The global stop key file could not be written; nothing was changed");
+      }
+    }
     this.options.save(next);
     this.file = next;
     // the file is on disk and the settings are saved: now the dispatcher is asked to read it (the answer comes later)
@@ -2612,6 +2666,10 @@ export class SecurityConfig {
     }
     if (patch.rul !== undefined) {
       log(`[SECURITY] ${actor} turned the remaining-useful-life relay for operators (POST /api/ai/anomaly-detector/rul) ${snapshot.rul.enabled.value ? "on" : "off"}.`);
+    }
+    if (patch.safety?.signGlobalStop !== undefined || patch.safety?.globalStopKey !== undefined) {
+      const s = snapshot.safety.globalStopSigning;
+      log(`[SECURITY] ${actor} ${stopKeyWrite === null ? "removed the global stop key" : stopKeyWrite === undefined ? "kept the global stop key" : "stored a new global stop key"}; the release of the global stop is ${s.value ? "SIGNED (only bridges with the same key end their stop)" : "not signed"}.`);
     }
     if (patch.safety !== undefined) {
       log(`[SECURITY] ${actor} ${snapshot.safety.publishGlobalStop.value ? "allowed" : "forbade"} announcing a global stop on the MQTT bridge; motion commands are ${snapshot.safety.latchGlobalStop.value ? "refused while the global stop is on" : "not held back by the global stop"}; the F-RAM erase of the brain is ${snapshot.safety.framErase.value ? "on" : "off"}; the emergency stop watch is ${snapshot.safety.estopWatchMs.value ? `every ${snapshot.safety.estopWatchMs.value} ms` : "off"}.`);

@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- **The signed release of the global stop can be switched on from Server Admin:** `safety.signGlobalStop` (off by default) and a write-only `safety.globalStopKey` on `PUT /api/admin/server-config`, administrator only. The key is stored for the owner of the process only and is never answered, logged or audited; it is accepted only over HTTPS or from the machine itself. A key file named in the environment or in the security file still wins.
 - **The header of format 2 reaches the flashing service:** `POST /api/hardware/canota/flash` accepts `header` (the `<image>.hdr2`), or `rollback_counter` and `key_id`, checks their shape and passes them on; without them a flash of a HYDRA-UMC board could not be accepted.
 - **A signed release of the global stop:** with `safety.globalStopKeyFile` in the security file (or `HYDRA_UMC_GLOBAL_STOP_KEY_FILE`) the announcement carries `issued_at_ms` and `signature`, so a bridge given the same key ends its stop only on the release of this server. When the key cannot be read a stop is still announced and a release is not. Off by default.
 - **What the phones say about the watch notice:** `POST /api/watch/release-notice` (each account, for its own phone) and `GET /api/admin/watch/release-notice` (administrator).

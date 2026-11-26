@@ -415,6 +415,8 @@ async function startServer() {
     bridgeSigningStatus: () => bridgeSettingsSigner.status(BRIDGE_NAMES),
     writeDetectionHefSettings: (value, file) => { const written = writeDetectionHefSettings(dataPath, value, file); industrialLog(`[SECURITY] DETECTION-HEF settings file written: ${written}`); },
     afterBridgesWritten: () => { if (security.bridgeGatewayEnabled()) { bridgeGateway.ensureStarted(); bridgeGateway.announceSettings(); } },
+    // the key an administrator stores for the signed release of the global stop (mode 600), next to the other data of the server
+    managedStopKeyFile: path.join(process.cwd(), "data", "global-stop.key"),
     tlsActive: startupTls.enabled,
     bleActiveMode: resolveBleMode(securityEnvFrom(process.env).bleGatt, loadServerConfig()).value,
     mqttActiveMode: resolveMqttMode(securityEnvFrom(process.env).mqtt?.mode, loadServerConfig()).value,
