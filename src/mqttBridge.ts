@@ -28,6 +28,7 @@
 import fs from "node:fs";
 import { connect as mqttConnect } from "mqtt";
 import type { BleCommandRequest, BleExecuteResult } from "./ble/bleGateway";
+import { announcementFor } from "./globalStopSigning";
 
 export type MqttMode = "off" | "state" | "commands";
 export const MQTT_MODES: readonly MqttMode[] = ["off", "state", "commands"];
@@ -408,19 +409,22 @@ export class MqttBridge {
 
   /**
    * Announces the safety state of the whole installation on `<prefix>/safety/estop`: a retained message, QoS 1, in the closed
-   * shape of the SafetyState contract of the SDK (`SAFE_STOP` after a global stop, `READY` once an administrator released it).
+   * shape of the SafetyState contract of the SDK (`SAFE_STOP` after a global stop, `READY` once an administrator released it). With a key file the message is
+   * signed (globalStopSigning.ts), and a `READY` that cannot be signed does not go out.
    * Returns false when the broker is not connected, so the caller can say the announcement did not go out.
    */
-  publishSafety(state: "SAFE_STOP" | "READY", reason: string): boolean {
+  publishSafety(state: "SAFE_STOP" | "READY", reason: string, keyFile?: string): boolean {
     if (!this.client || !this.connected || this.stopped) return false;
-    const payload = JSON.stringify({
+    const topic = safetyTopic(this.prefix);
+    const announcement = announcementFor(topic, {
       schema_version: "1.0",
       state,
       source: "hydra-umc-server",
       timestamp_utc: new Date(this.now()).toISOString(),
       reason: reason.slice(0, 120),
-    });
-    this.client.publish(safetyTopic(this.prefix), payload, { qos: 1, retain: true });
+    }, keyFile, this.now(), (line) => console.error(line));
+    if (!announcement) return false;
+    this.client.publish(topic, JSON.stringify(announcement), { qos: 1, retain: true });
     return true;
   }
 

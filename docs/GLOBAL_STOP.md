@@ -52,6 +52,7 @@ The apps show one state for both stops. The server reads the physical emergency 
 | Option | Meaning | Default |
 |---|---|---|
 | `safety.publishGlobalStop` (Server Admin, or `HYDRA_UMC_SAFETY_PUBLISH_STOP=1`; the environment wins) | Announce a global stop and its release on the MQTT bridge. | Off. The bridge itself must also be on (`mqtt.mode` not `off`). |
+| `safety.globalStopKeyFile` of the security file (or `HYDRA_UMC_GLOBAL_STOP_KEY_FILE`; the environment wins; no route sets it) | Sign the announcement (`issued_at_ms`, `signature`) with the key of the file (at least 32 characters, mode 600), the same one the bridges get in `HYDRA_UMC_<NAME>_GLOBAL_STOP_KEY_FILE`: they obey every `SAFE_STOP` and believe only a signed `READY`. If the file cannot be used, a stop is announced unsigned and a release is not announced. | Not set: unsigned. |
 | `safety.latchGlobalStop` (Server Admin, or `HYDRA_UMC_SAFETY_LATCH_STOP=1`; the environment wins) | Refuse every command except `stop` and `disable` with `423` while the global stop is on. | Off. |
 
 ## Related

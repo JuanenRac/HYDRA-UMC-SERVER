@@ -98,6 +98,8 @@ export const RESPONSES = {
   "GET /api/ecosystem/node-health": ref("NodeHealth"),
   "GET /api/admin/service-identity": ref("ServiceIdentityStatus"),
   "POST /api/push/devices": ref("PushDeviceRegistered"),
+  "POST /api/watch/release-notice": ref("WatchReleaseNoticeSaved"),
+  "GET /api/admin/watch/release-notice": ref("WatchReleaseNoticeList"),
   "DELETE /api/push/devices/{token}": ref("PushDeviceRemoved"),
   "POST /api/push/live-activities": ref("LiveActivityRegistered"),
   "DELETE /api/push/live-activities/{token}": ref("LiveActivityRemoved"),
@@ -170,7 +172,7 @@ export const RESPONSES = {
 // "METHOD /path" -> { required: [...], fields: { name: schema } } for the request body.
 // Query parameters of routes whose handler hands the whole query on (or reads it through a helper), so the scan of `req.query.<name>` cannot see them.
 export const QUERY_PARAMETERS = {
-  "POST /api/hardware/canota/flash": ["downgrade_from", "hardware_id", "min_bootloader", "relay", "signature", "slot", "target", "tier", "version_major", "version_minor", "version_patch"],
+  "POST /api/hardware/canota/flash": ["downgrade_from", "hardware_id", "header", "key_id", "min_bootloader", "relay", "rollback_counter", "signature", "slot", "target", "tier", "version_major", "version_minor", "version_patch"],
   "GET /api/telemetry/aggregate": ["agg", "before", "bucketMs", "end", "field", "kind", "sourceId", "start"],
   "GET /api/telemetry/query": ["before", "cursor", "end", "field", "kind", "limit", "sourceId", "start"],
 };
@@ -216,6 +218,7 @@ export const REQUESTS = {
   "POST /api/integrations/test-connection": { required: ["host", "port"], fields: { host: str, port: int } },
   "POST /api/camera/discover-rtsp-path": { required: ["host"], fields: { host: str, port: int, username: str, password: str } },
   "POST /api/camera/{id}/ptz": { required: ["host"], fields: { host: str, port: int, username: str, password: str, channel: int, pan: num, tilt: num, zoom: num } },
+  "POST /api/watch/release-notice": { required: ["device_id", "platform", "notifies_watch"], fields: { device_id: str, platform: { type: "string", enum: ["android", "ios"] }, notifies_watch: { type: "boolean" } } },
   "POST /api/push/devices": { required: ["token", "platform"], fields: { token: str, platform: { type: "string", enum: ["ios"] }, locale: { type: "string", enum: ["en", "es", "de", "fr", "it", "ja", "zh", "pt"] } } },
   "POST /api/push/live-activities": { required: ["activityToken", "robotId"], fields: { activityToken: str, robotId: str } },
   "POST /api/robot/{id}/command": { required: ["command"], fields: { command: str, params: { type: "object" }, seq: int } },

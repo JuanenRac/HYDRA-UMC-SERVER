@@ -340,6 +340,8 @@ export interface LoggingFile {
 export interface SafetyFile {
   /** Whether a global stop is also announced on the MQTT bridge as a retained SafetyState (default: no). */
   publishGlobalStop?: boolean;
+  /** The file of the key that signs the announcement of the global stop (one line, at least 32 characters, mode 600): the same key the bridges are given, so that only a signed READY ends their stop. Not set (the default): unsigned, as before. Read from this file or HYDRA_UMC_GLOBAL_STOP_KEY_FILE only; no route sets it. */
+  globalStopKeyFile?: string;
   /** Whether, while the global stop is on, the server refuses every motion command with 423 (stop and disable still pass) until an administrator releases the stop (default: no). */
   latchGlobalStop?: boolean;
   /** Whether the erase and the self-test of the F-RAM of the kinematic brain are offered (default: no). Also needs the bridge started with --enable-fram-erase and a firmware built for it. */
@@ -503,6 +505,7 @@ export interface SecurityEnv {
   trustedNetworks?: string;
   rul?: string;
   safetyPublishStop?: string;
+  globalStopKeyFile?: string;
   safetyLatchStop?: string;
   framErase?: string;
   estopWatch?: string;
@@ -564,6 +567,7 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     trustedNetworks: env.HYDRA_UMC_TRUSTED_NETWORKS,
     rul: env.HYDRA_UMC_RUL,
     safetyPublishStop: env.HYDRA_UMC_SAFETY_PUBLISH_STOP,
+    globalStopKeyFile: env.HYDRA_UMC_GLOBAL_STOP_KEY_FILE,
     safetyLatchStop: env.HYDRA_UMC_SAFETY_LATCH_STOP,
     framErase: env.HYDRA_UMC_FRAM_ERASE,
     estopWatch: env.HYDRA_UMC_ESTOP_WATCH_MS,
@@ -1546,6 +1550,12 @@ export class SecurityConfig {
   /** Whether a global stop is also announced on the MQTT bridge (off unless an administrator turned it on). */
   globalStopPublished(): boolean {
     return resolveSafetyPublishStop(this.options.env.safetyPublishStop, this.file).value;
+  }
+
+  /** The file of the key that signs the announcement of the global stop, or undefined (unsigned). The environment wins over the file. */
+  globalStopKeyFile(): string | undefined {
+    const chosen = this.options.env.globalStopKeyFile?.trim() || this.file.safety?.globalStopKeyFile;
+    return typeof chosen === "string" && chosen.trim() ? chosen.trim() : undefined;
   }
 
   /** Whether motion commands are refused while the global stop is on (off unless an administrator turned it on). */
