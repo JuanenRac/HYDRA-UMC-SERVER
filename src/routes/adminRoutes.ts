@@ -8,6 +8,7 @@
 // WebSocket connections, the log file, the listen port and the stored server
 // config, all handed in through one small object so this file holds no state.
 import express from "express";
+import { loopbackCallerProblem } from "../serverPolicy.ts";
 import { apiRateLimiter } from "../auth";
 import fs from "fs";
 import { WebSocket } from "ws";
@@ -143,6 +144,11 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
       }
       saveServerConfig({ ...loadServerConfig(), port: portNum });
     }
+    // The key of the signed release of the global stop travels once, from the administrator to this server: never over plain HTTP from another machine.
+    if (typeof req.body?.safety?.globalStopKey === "string" && !req.secure && loopbackCallerProblem(req.socket.remoteAddress, req.headers) !== null) {
+      audit?.record({ type: "global-stop-signing-options", outcome: "refused", userId: (req as any).user?.id, username: (req as any).user?.username, ip: req.ip, detail: { reason: "insecure_transport" } });
+      return res.status(400).json({ error: "The global stop key is only accepted over HTTPS or from this device itself", code: "INSECURE_TRANSPORT" });
+    }
     let security_result: ReturnType<SecurityConfig["update"]> | undefined;
     // Choosing EdDSA creates the signing key now, so a key file that cannot be written refuses the change instead of breaking the next sign-in.
     if (req.body?.auth?.jwtAlgorithm === "EdDSA") {
@@ -169,6 +175,13 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
       audit?.record({
         type: "service-identity-options", outcome: "ok", userId: (req as any).user?.id, username: (req as any).user?.username, ip: req.ip,
         detail: { enabled: security_result.snapshot.auth.serviceIdentity.enabled.value },
+      });
+    }
+    if (security_result && (req.body.safety?.signGlobalStop !== undefined || req.body.safety?.globalStopKey !== undefined)) {
+      const s = security_result.snapshot.safety.globalStopSigning;
+      audit?.record({
+        type: "global-stop-signing-options", outcome: "ok", userId: (req as any).user?.id, username: (req as any).user?.username, ip: req.ip,
+        detail: { signing: s.value, keyStored: s.keyStored, keyChanged: req.body.safety.globalStopKey !== undefined },
       });
     }
     if (security_result && req.body.rateLimits !== undefined) {

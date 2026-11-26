@@ -34,6 +34,34 @@ export function loadGlobalStopKey(file: string): Buffer {
   return key;
 }
 
+/** What a key an administrator stores through the API may look like (what the bridges' key file loaders accept). */
+export const GLOBAL_STOP_KEY_PATTERN = /^[\x21-\x7e]{32,256}$/;
+
+/** Writes the key to `file` (mode 600), replacing it as a whole: a reader finds the old key or the new one. */
+export function storeGlobalStopKey(file: string, key: string): void {
+  const temporary = `${file}.${crypto.randomBytes(8).toString("hex")}.tmp`;
+  try {
+    fs.writeFileSync(temporary, `${key}\n`, { mode: 0o600, flag: "wx" });
+    fs.renameSync(temporary, file);
+  } finally {
+    fs.rmSync(temporary, { force: true });
+  }
+}
+
+export function removeGlobalStopKey(file: string): void {
+  fs.rmSync(file, { force: true });
+}
+
+/** Whether `file` holds a key that can be used. */
+export function globalStopKeyUsable(file: string): boolean {
+  try {
+    loadGlobalStopKey(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** What to publish: the payload as it is without a key file, signed with one, and null for a READY that cannot be signed as configured. */
 export function announcementFor(topic: string, payload: Record<string, unknown>, keyFile: string | undefined, nowMs: number, log: (line: string) => void): Record<string, unknown> | null {
   if (!keyFile) return payload;
