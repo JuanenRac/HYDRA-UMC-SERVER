@@ -152,40 +152,48 @@ export function voiceStatusText(facts: VoiceStatusFacts, locale: unknown): strin
 // ---------------------------------------------------------------------------
 // How a node or a motor is doing, from the verdicts of the anomaly detector
 // ---------------------------------------------------------------------------
-/** "normal", "suspect" and "anomalous" are the verdicts; "unknown" is a node no verdict names; "off" is a server that does not read the verdicts. */
-export type NodeState = "normal" | "suspect" | "anomalous" | "unknown" | "off";
+/** "normal", "no_signal", "stale", "suspect" and "anomalous" are the verdicts; "unknown" is a node no verdict names; "off" is a server that does not read the verdicts. */
+export type NodeState = "normal" | "no_signal" | "stale" | "suspect" | "anomalous" | "unknown" | "off";
 
 const NODE_SENTENCES: Record<VoiceLanguage, Record<NodeState, (node: string) => string>> = {
   en: {
     normal: (n) => `${n} is behaving normally.`, suspect: (n) => `${n} looks suspect: its vibration is close to the limit.`, anomalous: (n) => `${n} is behaving abnormally.`,
+    no_signal: (n) => `${n} gives no signal: it cannot be judged.`, stale: (n) => `The verdict of ${n} is out of date: no new data is arriving.`,
     unknown: (n) => `There is no verdict for ${n}.`, off: () => "This server does not read the verdicts of the anomaly detector.",
   },
   es: {
     normal: (n) => `${n} funciona con normalidad.`, suspect: (n) => `${n} resulta sospechoso: su vibración está cerca del límite.`, anomalous: (n) => `${n} funciona de forma anómala.`,
+    no_signal: (n) => `${n} no da señal: no se puede juzgar.`, stale: (n) => `El veredicto de ${n} está desfasado: no llegan datos nuevos.`,
     unknown: (n) => `No hay veredicto para ${n}.`, off: () => "Este servidor no lee los veredictos del detector de anomalías.",
   },
   de: {
     normal: (n) => `${n} verhält sich normal.`, suspect: (n) => `${n} wirkt verdächtig: Die Vibration liegt nahe am Grenzwert.`, anomalous: (n) => `${n} verhält sich auffällig.`,
+    no_signal: (n) => `${n} liefert kein Signal: Es lässt sich nicht beurteilen.`, stale: (n) => `Das Urteil für ${n} ist veraltet: Es kommen keine neuen Daten an.`,
     unknown: (n) => `Für ${n} gibt es kein Urteil.`, off: () => "Dieser Server liest die Urteile des Anomaliedetektors nicht.",
   },
   fr: {
     normal: (n) => `${n} se comporte normalement.`, suspect: (n) => `${n} semble suspect : sa vibration est proche de la limite.`, anomalous: (n) => `${n} se comporte de façon anormale.`,
+    no_signal: (n) => `${n} ne donne aucun signal : il est impossible de juger.`, stale: (n) => `Le verdict de ${n} est périmé : aucune nouvelle donnée n'arrive.`,
     unknown: (n) => `Il n'y a pas de verdict pour ${n}.`, off: () => "Ce serveur ne lit pas les verdicts du détecteur d'anomalies.",
   },
   it: {
     normal: (n) => `${n} si comporta normalmente.`, suspect: (n) => `${n} appare sospetto: la vibrazione è vicina al limite.`, anomalous: (n) => `${n} si comporta in modo anomalo.`,
+    no_signal: (n) => `${n} non dà segnale: non si può giudicare.`, stale: (n) => `Il verdetto di ${n} è superato: non arrivano dati nuovi.`,
     unknown: (n) => `Non c'è nessun verdetto per ${n}.`, off: () => "Questo server non legge i verdetti del rilevatore di anomalie.",
   },
   ja: {
     normal: (n) => `${n}は正常に動作しています。`, suspect: (n) => `${n}は疑わしい状態です。振動が限界に近づいています。`, anomalous: (n) => `${n}は異常な動作をしています。`,
+    no_signal: (n) => `${n}の信号がありません。判定できません。`, stale: (n) => `${n}の判定は古くなっています。新しいデータが届いていません。`,
     unknown: (n) => `${n}の判定はありません。`, off: () => "このサーバーは異常検知の判定を読み取っていません。",
   },
   zh: {
     normal: (n) => `${n} 运行正常。`, suspect: (n) => `${n} 有可疑迹象：振动接近限值。`, anomalous: (n) => `${n} 运行异常。`,
+    no_signal: (n) => `${n} 没有信号，无法判断。`, stale: (n) => `${n} 的判定已过期：没有新数据到达。`,
     unknown: (n) => `没有 ${n} 的判定结果。`, off: () => "此服务器不读取异常检测器的判定结果。",
   },
   pt: {
     normal: (n) => `${n} está a funcionar normalmente.`, suspect: (n) => `${n} parece suspeito: a vibração está perto do limite.`, anomalous: (n) => `${n} está a funcionar de forma anómala.`,
+    no_signal: (n) => `${n} não dá sinal: não é possível avaliar.`, stale: (n) => `O veredicto de ${n} está desatualizado: não chegam dados novos.`,
     unknown: (n) => `Não há veredicto para ${n}.`, off: () => "Este servidor não lê os veredictos do detetor de anomalias.",
   },
 };

@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- **The anomaly feed knows a silent and a stale series:** the verdicts `no_signal` and `stale` are accepted, listed and filtered, rank above `normal` and below `suspect` in the state of a node, have their sentence in the eight languages, and are not relayed to the voice interface as alerts. Before this the server ignored them and kept showing the last verdict.
 - **An update manifest can be checked against the trusted keys, and the old developer-node routes are gone:** `POST /api/admin/updates/manifest/check` (administrator) takes an `UpdateManifest` and answers whether it would pass the signature rule (`accepted`, `code`, `key_id`, `require_asymmetric_signature`) against the list of public keys of `updateManifest.trustedKeysFile` of the server configuration; it installs nothing, answers `503` when no usable list is configured and follows the switch `production.requireAsymmetricSignature` (off by default). `GET /api/developer-node/status` and `POST /api/ingest/developer-node/status`, kept for a version as aliases of the `dev-server` routes, are removed; the ingest switch keeps its name `ingest.developerNode`. The route tables of the OpenAPI document now name the query parameters of the CAN-OTA flash and of the two telemetry reads, which the SDK already listed.
 
 ## [0.8.3.3]
