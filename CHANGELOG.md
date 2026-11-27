@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.8.3.5] - Updates through the root helper of the device
 
 - **Updates through the root helper of the device:** the fleet-update report passes on the identifier of the look, whether a one-time code is needed and the version kept of each program; applying and taking up a program pass the identifier and the code to the helper, and `rollback: true` of the resume route goes back to the kept version. Nothing changes without that helper. Not tried on a CM5.
 
