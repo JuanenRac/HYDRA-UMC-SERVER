@@ -12,7 +12,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { FcmClient, fcmAssertion, fcmMessage, readFcmServiceAccount, FCM_ANDROID_CHANNEL, type FcmNotification, type FcmServiceAccount } from "../src/pushFcm";
-import { PushDevices, PushService, providerOf, validPushToken, type ApnsSender } from "../src/pushNotifications";
+import { LOCALES, PushDevices, PushService, providerOf, validPushToken, type ApnsSender } from "../src/pushNotifications";
 
 const APPLE = "a".repeat(64);
 const ANDROID = "fid-android:APA91b" + "x".repeat(40);
@@ -186,5 +186,25 @@ test("switched off, or without a service account, nothing leaves the server", as
     off.push.close();
     none.push.close();
     inside.push.close();
+  }
+});
+
+test("the sentence is generic in the eight languages unless the configuration asks for the name of the robot", async () => {
+  for (const included of [false, true]) {
+    const s = service({ config: included ? { includeRobotName: true } : undefined });
+    try {
+      for (const locale of LOCALES) {
+        for (const [index, event] of (["job-finished", "global-stop", "presence-lost"] as const).entries()) {
+          s.devices.register(ANDROID, "ana", locale, new Date(), "android");
+          const before = s.firebase.calls.length;
+          assert.equal(await s.push.notify(event, { robotName: "CELL-ROBOT-7" }), 1);
+          const sent = s.firebase.calls.slice(before).filter((c) => c.url !== ACCOUNT.tokenUri)[0].init.body as string;
+          // a global stop is about every robot: it never names one
+          assert.equal(sent.includes("CELL-ROBOT-7"), included && index !== 1, `${locale} ${event} included=${included}`);
+        }
+      }
+    } finally {
+      s.push.close();
+    }
   }
 });

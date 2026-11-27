@@ -438,11 +438,13 @@ export class PushService {
     try {
       if (!this.deps.enabled() || !this.eventAllowed(event)) return 0;
       const apns = this.liveSender();
-      const collapseId = event === "job-finished" ? `job-${detail.robotName ?? "any"}` : event;
+      // The sentence goes through the servers of Google or Apple: it is generic unless the configuration asks for the name.
+      const robotName = this.deps.config()?.includeRobotName === true ? detail.robotName : undefined;
+      const collapseId = event === "job-finished" ? `job-${robotName ?? "any"}` : event;
       const expiresInSeconds = event === "job-finished" ? 24 * 3600 : 3600;
       let accepted = 0;
       for (const device of [...this.deps.devices.list()]) {
-        const text = pushText(event, device.locale, detail.robotName);
+        const text = pushText(event, device.locale, robotName);
         let result: { status: number; reason?: string };
         if (providerOf(device) === "apns") {
           if (!apns) continue;

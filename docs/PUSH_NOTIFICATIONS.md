@@ -6,7 +6,9 @@ a Firebase configuration) or through the **Apple Push Notification service** (AP
 token. It is **off by default** and does nothing until it is switched on **and** the credentials of a service are present.
 
 A notification **only informs**. It carries a title, a sentence, the kind of event and no action: nothing can be stopped,
-moved, released or confirmed from it. The sentence may name a robot, and it passes through the servers of Google or Apple.
+moved, released or confirmed from it. It passes through the servers of Google or Apple, so by default the sentence is generic:
+no robot name and nothing of the cell, unless `push.includeRobotName` is `true`. (The Live Activity is a separate option with
+its own levels.)
 
 ## Firebase: where the key goes and how to switch the sending on
 
@@ -34,6 +36,7 @@ The server needs to reach `oauth2.googleapis.com` and `fcm.googleapis.com` over 
 | `push.sandbox` | `true` uses the sandbox host of Apple (builds run from Xcode); default `false`. |
 | `push.notifyJobFinished`, `push.notifyGlobalStop` | Each event can be muted; both are sent by default once the service is on. |
 | `push.maxDevices` | How many device tokens the server keeps (1 to 10000, 500 by default). |
+| `push.includeRobotName` | `true` names the robot in the sentence of a notification; default `false`: the sentence is generic and says nothing of the cell. Read from the configuration file only. |
 
 These parameters are not secrets and live in the configuration file. The credentials never do.
 

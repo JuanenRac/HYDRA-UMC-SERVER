@@ -166,7 +166,7 @@ test("a notification goes to every phone in its language, a dead token is forgot
   assert.equal(t.sender.sent.length, 2);
   assert.match(t.sender.sent[0].payload.aps.alert.body, /secuencia de trabajo/);
   assert.equal(t.sender.sent[0].payload.kind, "job-finished");
-  assert.equal(t.sender.sent[0].collapseId, "job-A1");
+  assert.equal(t.sender.sent[0].collapseId, "job-any");
   assert.deepEqual(t.devices.list().map((d) => d.token), [TOKEN]);
 
   t.sender.answers.set(TOKEN, { status: 500, reason: "InternalServerError" });

@@ -146,6 +146,8 @@ export interface PushFile {
   notifyPresenceLost?: boolean;
   /** How many device tokens the server keeps (1 to 10000; 500 by default). Read from the file only. */
   maxDevices?: number;
+  /** Name the robot in the sentence of a notification (default: no, the sentence is generic). Read from the file only. */
+  includeRobotName?: boolean;
   /** Path of the Firebase service account file, outside the directory of the server. Read from the file only; HYDRA_UMC_FCM_SERVICE_ACCOUNT wins. */
   fcmServiceAccountFile?: string;
   /** The Live Activity (the card of a robot on the lock screen, src/liveActivity.ts): off by default, and its level is the most it may show. */
