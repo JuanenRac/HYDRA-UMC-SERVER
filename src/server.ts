@@ -460,6 +460,8 @@ async function startServer() {
   registerAdminRoutes(app, {
     authenticate, requireAdmin, asyncHandler, industrialLog, wsClients,
     logFile: LOG_FILE, getCurrentPort, loadServerConfig, saveServerConfig, security, audit,
+    // asked at the time of a request, after the registry below exists
+    forgetPhones: (username) => { pushDevices.removeAccount(username); },
   });
 
   registerSettingsRoutes(app, { authenticate, requireAdmin, loadFullSettingsFromDisk, applySettingsUpdate, getSettings });
@@ -625,8 +627,8 @@ async function startServer() {
   // The health of the services of the ecosystem in one answer, behind a switch of Server Admin (off by default: 404).
   const ecosystemHealthMemory = new LastSeenMemory({ file: path.join(process.cwd(), "data", "ecosystem-health-last-seen.json") });
   const ecosystemHealthConfig = () => (loadServerConfig() as { ecosystemHealth?: { certWarnDays?: unknown; probeTimeoutMs?: unknown; lastSeenMaxEntries?: unknown; lastSeenSaveIntervalS?: unknown } }).ecosystemHealth;
-  // Push notifications to the phones that registered a device token: off by default; the credentials of the Apple push service come
-  // from the environment only (src/pushNotifications.ts).
+  // Push notifications to the phones that registered a device token: off by default; the credentials of the push services live
+  // outside the repository (src/pushNotifications.ts, src/pushFcm.ts).
   const pushConfig = () => (loadServerConfig() as { push?: PushFile }).push;
   const pushDevices = new PushDevices({
     file: path.join(process.cwd(), "data", "push-devices.json"),

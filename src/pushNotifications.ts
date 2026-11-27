@@ -3,17 +3,21 @@
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D) <electrohobby3d@gmail.com>
 // GPL-3.0-or-later - see LICENSE
 // =============================================================================
-// Push notifications to the iPhones that registered their device token: a job that finished and a global stop. OFF by default
-// (push.enabled, a switch of Server Admin, or HYDRA_UMC_PUSH=1) and a no-op until the credentials of the Apple push service
-// are present. The credentials - the .p8 key, its key id, the team id and the bundle id (the topic) - come ONLY from the
-// environment of the deployment (HYDRA_UMC_APNS_KEY_FILE, HYDRA_UMC_APNS_KEY_ID, HYDRA_UMC_APNS_TEAM_ID, HYDRA_UMC_APNS_TOPIC);
-// the key file must live outside the directory the server runs from, and nothing of it is ever logged, audited or returned
-// by a route. A device token is not a secret of the account but identifies a phone, so it is never logged either.
+// Push notifications to the phones that registered their device token: a job that finished, a global stop and a lost operator
+// heartbeat. They only inform; nothing can be commanded from them. OFF by default (push.enabled, a switch of Server Admin, or
+// HYDRA_UMC_PUSH=1) and a no-op until the credentials of a push service are present: Firebase Cloud Messaging for the Android
+// phones and for an iPhone that registered a Firebase token (src/pushFcm.ts), the Apple push service for an iPhone that
+// registered its Apple token. The Apple credentials - the .p8 key, its key id, the team id and the bundle id (the topic) - come
+// ONLY from the environment of the deployment (HYDRA_UMC_APNS_KEY_FILE, HYDRA_UMC_APNS_KEY_ID, HYDRA_UMC_APNS_TEAM_ID,
+// HYDRA_UMC_APNS_TOPIC); a key file must live outside the directory the server runs from, and nothing of it is ever logged,
+// audited or returned by a route. A device token is not a secret of the account but identifies a phone, so it is never logged
+// either.
 import crypto from "node:crypto";
 import { EventEmitter } from "node:events";
 import fs from "node:fs";
 import http2 from "node:http2";
 import path from "node:path";
+import { FcmClient, readFcmServiceAccount, validFcmToken, type FcmAccountProblem, type FcmSender, type FcmServiceAccount } from "./pushFcm";
 import type { PushFile } from "./securityConfig";
 
 export type PushEvent = "job-finished" | "global-stop" | "presence-lost";
@@ -74,9 +78,11 @@ export function pushText(event: PushEvent, locale: string, robot?: string): { ti
 
 // ---- The registry of device tokens -------------------------------------------------------------------------------------
 
+export type PushPlatform = "ios" | "android";
+
 export interface PushDevice {
   token: string;
-  platform: "ios";
+  platform: PushPlatform;
   username: string;
   locale: PushLocale;
   registeredAt: string;
@@ -93,6 +99,20 @@ export function validDeviceToken(token: unknown): token is string {
   return typeof token === "string" && /^[0-9a-fA-F]{32,200}$/.test(token);
 }
 
+/** An Android phone registers a Firebase token; an iPhone an Apple token, or a Firebase one (which always holds a colon). */
+export function validPushToken(token: unknown, platform: PushPlatform): token is string {
+  if (platform === "android") return validFcmToken(token);
+  return validDeviceToken(token) || (validFcmToken(token) && token.includes(":"));
+}
+
+/** Which service reaches a registered phone: Apple only for the hexadecimal Apple token of an iPhone. */
+export function providerOf(device: Pick<PushDevice, "platform" | "token">): "apns" | "fcm" {
+  return device.platform === "ios" && validDeviceToken(device.token) ? "apns" : "fcm";
+}
+
+/** An Apple token is the same in either case; a Firebase token is not. */
+const normalizeToken = (token: string): string => (validDeviceToken(token) ? token.toLowerCase() : token);
+
 export class PushDevices {
   private devices: PushDevice[] = [];
 
@@ -105,8 +125,8 @@ export class PushDevices {
       const parsed = JSON.parse(fs.readFileSync(this.options.file, "utf8"));
       if (Array.isArray(parsed?.devices)) {
         this.devices = parsed.devices.filter(
-          (d: any) => validDeviceToken(d?.token) && typeof d?.username === "string" && d?.platform === "ios",
-        ).map((d: any) => ({ token: d.token.toLowerCase(), platform: "ios" as const, username: d.username, locale: (LOCALES as readonly string[]).includes(d.locale) ? d.locale : "en", registeredAt: String(d.registeredAt ?? "") }));
+          (d: any) => (d?.platform === "ios" || d?.platform === "android") && validPushToken(d?.token, d.platform) && typeof d?.username === "string",
+        ).map((d: any) => ({ token: normalizeToken(d.token), platform: d.platform as PushPlatform, username: d.username, locale: (LOCALES as readonly string[]).includes(d.locale) ? d.locale : "en", registeredAt: String(d.registeredAt ?? "") }));
       }
     } catch {
       this.devices = [];
@@ -129,10 +149,10 @@ export class PushDevices {
   }
 
   /** Registers (or refreshes) a token for an account; a token seen again moves to the account that registered it last. */
-  register(token: string, username: string, locale: string, now = new Date()): void {
-    const lowered = token.toLowerCase();
-    const known = this.devices.findIndex((d) => d.token === lowered);
-    const entry: PushDevice = { token: lowered, platform: "ios", username, locale: (LOCALES as readonly string[]).includes(locale) ? (locale as PushLocale) : "en", registeredAt: now.toISOString() };
+  register(token: string, username: string, locale: string, now = new Date(), platform: PushPlatform = "ios"): void {
+    const normalized = normalizeToken(token);
+    const known = this.devices.findIndex((d) => d.token === normalized);
+    const entry: PushDevice = { token: normalized, platform, username, locale: (LOCALES as readonly string[]).includes(locale) ? (locale as PushLocale) : "en", registeredAt: now.toISOString() };
     if (known >= 0) {
       this.devices[known] = entry;
     } else {
@@ -144,15 +164,15 @@ export class PushDevices {
 
   /** Removes a token; an account can remove only its own unless [anyAccount]. True when something was removed. */
   remove(token: string, username: string | null): boolean {
-    const lowered = token.toLowerCase();
+    const normalized = normalizeToken(token);
     const before = this.devices.length;
-    this.devices = this.devices.filter((d) => !(d.token === lowered && (username === null || d.username === username)));
+    this.devices = this.devices.filter((d) => !(d.token === normalized && (username === null || d.username === username)));
     const removed = this.devices.length !== before;
     if (removed) this.save();
     return removed;
   }
 
-  /** Forgets the tokens of an account (it signed out everywhere or was deleted). */
+  /** Forgets the tokens of an account (it was deleted, renamed or got a new password). */
   removeAccount(username: string): number {
     const before = this.devices.length;
     this.devices = this.devices.filter((d) => d.username !== username);
@@ -316,7 +336,7 @@ const DEAD_TOKEN_REASONS = new Set(["BadDeviceToken", "Unregistered", "DeviceTok
 
 export interface PushStatus {
   enabled: boolean;
-  /** Whether the credentials are present and usable. Never the credentials themselves. */
+  /** Whether the credentials of at least one push service are present and usable. Never the credentials themselves. */
   configured: boolean;
   problem: CredentialsProblem | null;
   devices: number;
@@ -329,6 +349,9 @@ export interface PushStatus {
 export class PushService {
   private sender: ApnsSender | null = null;
   private credentialsState: { credentials: ApnsCredentials } | { problem: CredentialsProblem } | null = null;
+  private fcmSender: FcmSender | null = null;
+  private fcmState: { account: FcmServiceAccount } | { problem: FcmAccountProblem } | null = null;
+  private fcmProblemSaid: FcmAccountProblem | null = null;
 
   constructor(
     private readonly deps: {
@@ -338,6 +361,8 @@ export class PushService {
       env: () => NodeJS.ProcessEnv;
       /** Tests plug in a simulated Apple service here. */
       makeSender?: (credentials: ApnsCredentials, sandbox: boolean) => ApnsSender;
+      /** Tests plug in a simulated Firebase here. */
+      makeFcmSender?: (account: FcmServiceAccount) => FcmSender;
       log: (line: string) => void;
     },
   ) {
@@ -357,13 +382,36 @@ export class PushService {
     return this.credentialsState;
   }
 
+  private fcm(): { account: FcmServiceAccount } | { problem: FcmAccountProblem } {
+    if (!this.fcmState || "problem" in this.fcmState) this.fcmState = readFcmServiceAccount(this.deps.env(), this.deps.config()?.fcmServiceAccountFile);
+    return this.fcmState;
+  }
+
+  /** The Firebase sender, or null while its service account is not usable (said once in the log when a file was named). */
+  private firebaseSender(): FcmSender | null {
+    const state = this.fcm();
+    if ("account" in state) {
+      if (!this.fcmSender) this.fcmSender = (this.deps.makeFcmSender ?? ((account) => new FcmClient(account)))(state.account);
+      return this.fcmSender;
+    }
+    if (state.problem !== "missing" && state.problem !== this.fcmProblemSaid) {
+      this.fcmProblemSaid = state.problem;
+      this.deps.log(`[PUSH] the Firebase service account is not usable: ${state.problem}`);
+    }
+    return null;
+  }
+
   status(): PushStatus {
     const c = this.credentials();
+    const f = this.fcm();
     const config = this.deps.config();
+    const configured = "credentials" in c || "account" in f;
+    // with neither usable: the problem of Firebase when a service account was named, otherwise the one of Apple
+    const problem = configured ? null : "problem" in f && f.problem !== "missing" ? f.problem : "problem" in c ? c.problem : null;
     return {
       enabled: this.deps.enabled(),
-      configured: "credentials" in c,
-      problem: "problem" in c ? c.problem : null,
+      configured,
+      problem,
       devices: this.deps.devices.count(),
       sandbox: this.sandbox(),
       events: { jobFinished: config?.notifyJobFinished !== false, globalStop: config?.notifyGlobalStop !== false },
@@ -389,18 +437,23 @@ export class PushService {
   async notify(event: PushEvent, detail: { robotName?: string } = {}): Promise<number> {
     try {
       if (!this.deps.enabled() || !this.eventAllowed(event)) return 0;
-      const state = this.credentials();
-      if (!("credentials" in state)) return 0;
-      if (!this.sender) this.sender = (this.deps.makeSender ?? ((c, sandbox) => new ApnsClient(c, { sandbox, baseUrl: this.deps.env().HYDRA_UMC_APNS_URL?.trim() || undefined })))(state.credentials, this.sandbox());
-      const sender = this.sender;
+      const apns = this.liveSender();
+      // The sentence goes through the servers of Google or Apple: it is generic unless the configuration asks for the name.
+      const robotName = this.deps.config()?.includeRobotName === true ? detail.robotName : undefined;
+      const collapseId = event === "job-finished" ? `job-${robotName ?? "any"}` : event;
+      const expiresInSeconds = event === "job-finished" ? 24 * 3600 : 3600;
       let accepted = 0;
       for (const device of [...this.deps.devices.list()]) {
-        const text = pushText(event, device.locale, detail.robotName);
-        const result = await sender.send(
-          device.token,
-          { aps: { alert: { title: text.title, body: text.body }, sound: "default" }, kind: event },
-          { collapseId: event === "job-finished" ? `job-${detail.robotName ?? "any"}` : event, expiresInSeconds: event === "job-finished" ? 24 * 3600 : 3600 },
-        );
+        const text = pushText(event, device.locale, robotName);
+        let result: { status: number; reason?: string };
+        if (providerOf(device) === "apns") {
+          if (!apns) continue;
+          result = await apns.send(device.token, { aps: { alert: { title: text.title, body: text.body }, sound: "default" }, kind: event }, { collapseId, expiresInSeconds });
+        } else {
+          const firebase = this.firebaseSender();
+          if (!firebase) continue;
+          result = await firebase.send(device.token, { platform: device.platform, title: text.title, body: text.body, kind: event, collapseId, expiresInSeconds });
+        }
         if (result.status === 200) accepted++;
         else if (result.status === 410 || DEAD_TOKEN_REASONS.has(result.reason ?? "")) this.deps.devices.remove(device.token, null);
         else this.deps.log(`[PUSH] the push service refused a notification: ${result.status} ${result.reason ?? ""}`.trim());
@@ -416,5 +469,6 @@ export class PushService {
     pushBus.off("event", this.onEvent);
     this.sender?.close();
     this.sender = null;
+    this.fcmSender = null;
   }
 }

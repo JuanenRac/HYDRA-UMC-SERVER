@@ -33,6 +33,8 @@ export interface AdminRouteDeps {
   security: SecurityConfig;
   /** The audit record: a change of the job dispatcher options (delivery of its stop requests, replanning) is written to it. */
   audit?: Pick<AuditLog, "record">;
+  /** Forgets the phones an account registered for notifications (the account was deleted, renamed or got a new password). */
+  forgetPhones?: (username: string) => void;
 }
 
 import { buildServiceIdentityStatus, identityKey } from "../serviceIdentity";
@@ -72,6 +74,8 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
     const safeRole: UserRole | undefined = isUserRole(role) ? role : undefined;
     const result = await updateUser(req.params.username, { newUsername, password, role: safeRole });
     if (!result.ok) return res.status(400).json({ error: result.error });
+    // the phones register again at their next sign-in
+    if (password || (newUsername && newUsername !== req.params.username)) deps.forgetPhones?.(String(req.params.username));
     res.json({ success: true });
   }));
 
@@ -81,6 +85,7 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
     // are, through the same asyncHandler() wrapper.
     const result = await deleteUser(req.params.username);
     if (!result.ok) return res.status(400).json({ error: result.error });
+    deps.forgetPhones?.(String(req.params.username));
     res.json({ success: true });
   }));
 
