@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **Server Admin can set whether the orchestrator keeps asking to confirm a global stop:** `orchestrator.retryServer` of `PUT /api/admin/server-config` writes `estop.retry_server` into the configuration file of the orchestrator named by `HYDRA_UMC_ORCHESTRATOR_CONFIG` (or `orchestrator.configFile`). It stays on by default, switching it off is warned about and audited, and the orchestrator reads it on its next start.
+
 - **A stop reaches the clients before the disk, and nothing about the request holds it back:** `stop`, `disable` and `POST /api/stop-all` tell the clients (WebSocket, MQTT, BLE) before the settings are written; a write that fails no longer turns the stop of one robot into a 500 that nobody else hears of; a malformed `X-Controller-Id` or an id that two robots share no longer refuses a stop (every robot with that id is stopped). Tests.
 ## [0.8.3.4] - Signed global stop release, format 2 flash header and watch release notice
 
