@@ -129,9 +129,9 @@ export interface HealthFile {
 }
 
 /**
- * Push notifications to the phones that registered a device token (src/pushNotifications.ts). The credentials of the
- * Apple push service (key, key id, team id, bundle) are NEVER read from this file: only from the environment of the
- * deployment (HYDRA_UMC_APNS_*), or from a key file outside the repository named there.
+ * Push notifications to the phones that registered a device token (src/pushNotifications.ts). No credential is ever
+ * written in this file: the Apple ones come from the environment (HYDRA_UMC_APNS_*) and Firebase takes only the PATH of
+ * its service account file, from HYDRA_UMC_FCM_SERVICE_ACCOUNT or from fcmServiceAccountFile below.
  */
 export interface PushFile {
   /** Whether the server sends push notifications at all (default: no). */
@@ -146,6 +146,8 @@ export interface PushFile {
   notifyPresenceLost?: boolean;
   /** How many device tokens the server keeps (1 to 10000; 500 by default). Read from the file only. */
   maxDevices?: number;
+  /** Path of the Firebase service account file, outside the directory of the server. Read from the file only; HYDRA_UMC_FCM_SERVICE_ACCOUNT wins. */
+  fcmServiceAccountFile?: string;
   /** The Live Activity (the card of a robot on the lock screen, src/liveActivity.ts): off by default, and its level is the most it may show. */
   liveActivity?: LiveActivityFile;
 }

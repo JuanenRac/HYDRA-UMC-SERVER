@@ -8,7 +8,7 @@
 // is off, registering answers 404 as if the route did not exist.
 import express from "express";
 import type { AuditEvent } from "../auditLog";
-import { LOCALES, PushRegistryError, validDeviceToken, type PushDevices, type PushStatus } from "../pushNotifications";
+import { LOCALES, PushRegistryError, validPushToken, type PushDevices, type PushStatus } from "../pushNotifications";
 import { LiveActivityError, validActivityToken, validRobotId, type LiveActivities } from "../liveActivity";
 
 type Middleware = (req: any, res: any, next: any) => unknown;
@@ -41,13 +41,13 @@ export function registerPushRoutes(app: express.Express, deps: PushRouteDeps): v
 
   app.post("/api/push/devices", authenticate, pushGate, (req: any, res) => {
     const { token, platform, locale } = req.body || {};
-    if (!validDeviceToken(token)) return res.status(400).json({ error: "token must be the hexadecimal device token of the phone" });
-    if (platform !== "ios") return res.status(400).json({ error: "platform must be ios" });
+    if (platform !== "ios" && platform !== "android") return res.status(400).json({ error: "platform must be ios or android" });
+    if (!validPushToken(token, platform)) return res.status(400).json({ error: "token must be the push token the system of the phone gave to the app" });
     if (locale !== undefined && !(typeof locale === "string" && (LOCALES as readonly string[]).includes(locale))) {
       return res.status(400).json({ error: `locale must be one of ${LOCALES.join(", ")}` });
     }
     try {
-      devices.register(token, String(req.user?.username ?? ""), typeof locale === "string" ? locale : "en");
+      devices.register(token, String(req.user?.username ?? ""), typeof locale === "string" ? locale : "en", new Date(), platform);
     } catch (error) {
       if (error instanceof PushRegistryError) return res.status(error.status).json({ error: error.message });
       throw error;
@@ -58,7 +58,7 @@ export function registerPushRoutes(app: express.Express, deps: PushRouteDeps): v
 
   app.delete("/api/push/devices/:token", authenticate, pushGate, (req: any, res) => {
     const token = String(req.params.token ?? "");
-    if (!validDeviceToken(token)) return res.status(400).json({ error: "token must be the hexadecimal device token of the phone" });
+    if (!validPushToken(token, "android") && !validPushToken(token, "ios")) return res.status(400).json({ error: "token must be the push token the system of the phone gave to the app" });
     const admin = req.user?.role === "admin";
     const removed = devices.remove(token, admin ? null : String(req.user?.username ?? ""));
     if (removed) audit?.record({ type: "push-device-removed", outcome: "ok", userId: req.user?.id, username: req.user?.username, ip: req.ip });

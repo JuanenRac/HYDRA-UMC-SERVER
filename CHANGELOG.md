@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **Push notifications through Firebase, for Android phones and iPhones:** `POST /api/push/devices` also takes `platform: "android"` with a Firebase token, and an iPhone may register a Firebase token instead of its Apple one. The server sends to them with the service account file named by `HYDRA_UMC_FCM_SERVICE_ACCOUNT` or `push.fcmServiceAccountFile`, which must be outside the directory of the server; without it nothing is sent. The switch `push.enabled` stays off by default and a notification only informs. Deleting or renaming an account, or giving it a new password, now forgets the phones it registered. Tested against a simulated Firebase; nothing was sent to a real phone.
+
 - **Updates through the root helper of the device:** the fleet-update report passes on the identifier of the look, whether a one-time code is needed and the version kept of each program; applying and taking up a program pass the identifier and the code to the helper, and `rollback: true` of the resume route goes back to the kept version. Nothing changes without that helper. Not tried on a CM5.
 
 - **A development server answers only its own machine:** when `NODE_ENV` is not `production` the server listens on `127.0.0.1`; `HYDRA_UMC_DEV_BIND=all` accepts other machines. Production (the systemd unit, the Docker image) listens as before.

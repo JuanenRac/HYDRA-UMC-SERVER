@@ -294,7 +294,7 @@ test("a signed-in account registers and removes its own device; bad input is ref
   await withApp(true, async (call, devices) => {
     assert.equal((await call("POST", "/api/push/devices", null, { token: TOKEN, platform: "ios" })).status, 401);
     assert.equal((await call("POST", "/api/push/devices", "ana", { token: "nope", platform: "ios" })).status, 400);
-    assert.equal((await call("POST", "/api/push/devices", "ana", { token: TOKEN, platform: "android" })).status, 400);
+    assert.equal((await call("POST", "/api/push/devices", "ana", { token: TOKEN, platform: "windows" })).status, 400);
     assert.equal((await call("POST", "/api/push/devices", "ana", { token: TOKEN, platform: "ios", locale: "xx" })).status, 400);
     const ok = await call("POST", "/api/push/devices", "ana", { token: TOKEN, platform: "ios", locale: "pt" });
     assert.deepEqual(ok, { status: 200, json: { registered: true } });
