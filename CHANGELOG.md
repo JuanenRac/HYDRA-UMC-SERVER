@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **Releasing a robot that was never reserved answers with an empty history:** the answer of `POST /api/robot/:id/release` and the change sent to the clients left `reservationHistory` out (or passed a damaged stored value on), although the contract requires the list; both now carry `[]` in that case. Test.
+
 - **Server Admin can set whether the orchestrator keeps asking to confirm a global stop:** `orchestrator.retryServer` of `PUT /api/admin/server-config` writes `estop.retry_server` into the configuration file of the orchestrator named by `HYDRA_UMC_ORCHESTRATOR_CONFIG` (or `orchestrator.configFile`). It stays on by default, switching it off is warned about and audited, and the orchestrator reads it on its next start.
 
 - **A stop reaches the clients before the disk, and nothing about the request holds it back:** `stop`, `disable` and `POST /api/stop-all` tell the clients (WebSocket, MQTT, BLE) before the settings are written; a write that fails no longer turns the stop of one robot into a 500 that nobody else hears of; a malformed `X-Controller-Id` or an id that two robots share no longer refuses a stop (every robot with that id is stopped). Tests.
@@ -402,10 +404,6 @@ All notable changes to this project are documented here.
 - Maturity is functional: nothing here has been verified on real hardware yet.
 - The READMEs say, in the eight languages, what is planned and what has only been tested against fakes, emulators or fixtures, and carry a short safety and security status note.
 
-## [0.8.0.9]
-
-- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
-
 ## [0.8.0.9] - Global stop, tickets required by default and no token in the WebSocket address
 
 - New `POST /api/stop-all`: one call, open to every signed-in account (`admin` or `operator`), stops every robot of every controller and switches every valve and pump off, whatever any reservation says (a foreign reservation is reported as `reservedBy` and left untouched). It needs no confirmation, answers one result per robot (`stopped`, `valvesOff`, `pumpsOff`, `error`), keeps going when one robot fails, reports `persisted: false` when the settings could not be written, and broadcasts one delta per robot.
@@ -414,6 +412,7 @@ All notable changes to this project are documented here.
 - `/ws?token=` is now refused by default with a message that names the `hydra.bearer` subprotocol, followed by a close with code `1008`. `HYDRA_UMC_WS_QUERY_TOKEN=allow` is the documented opt-out for clients that have not moved yet, and the server warns at every start while it is set.
 - `docs/REMOTE_API.md` (new endpoint, role decision, the 3D view page address as the one remaining token-in-address case), `docs/openapi.json`, `docs/PRODUCTION_BOOTSTRAP.md`, `.env.example` and the 8 READMEs describe the new defaults, the opt-outs and the new route; the unit and contract counts in the READMEs are updated.
 - New tests: unit tests for every path of the global stop and for both opt-out switches, a real-server contract for the global stop (sign-in, reservations, valves and pumps, results, broadcast, audit log, metric, rate limit, empty installation) and one for the defaults and the two opt-outs.
+- Build version synchronized with `hydra-umc.project.json` and the repository-native version source.
 
 ## [0.8.0.8] - Command validation, claim checks over combined robots and camera/relay limits
 
