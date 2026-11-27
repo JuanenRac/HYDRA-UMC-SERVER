@@ -26,6 +26,23 @@ function parseListenPort(raw: string | undefined): number | undefined {
   return Number.isInteger(value) && value > 0 && value < 65536 ? value : undefined;
 }
 
+export const DEV_BIND_VARIABLE = "HYDRA_UMC_DEV_BIND";
+
+export interface ResolvedListenAddress {
+  address: "0.0.0.0" | "127.0.0.1";
+  notice?: string;
+}
+
+// Outside production the server may run with the development secret of the source, so it answers only this machine
+// unless the operator asks for every interface. In production the address is what it always was.
+export function resolveListenAddress(env: Record<string, string | undefined>, nodeEnv: string): ResolvedListenAddress {
+  if (nodeEnv === "production") return { address: "0.0.0.0" };
+  const asked = (env[DEV_BIND_VARIABLE] ?? "").trim().toLowerCase();
+  if (asked === "all") return { address: "0.0.0.0", notice: `${DEV_BIND_VARIABLE}=all: a development server (NODE_ENV is not production) is reachable from the network.` };
+  const unknown = asked !== "" && asked !== "loopback" ? ` (${DEV_BIND_VARIABLE} takes loopback or all)` : "";
+  return { address: "127.0.0.1", notice: `NODE_ENV is not production: listening on 127.0.0.1 only${unknown}. Set ${DEV_BIND_VARIABLE}=all to accept other machines.` };
+}
+
 export function resolveListenPort(
   env: Record<string, string | undefined>,
   configPort: number | undefined,
