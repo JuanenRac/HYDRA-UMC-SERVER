@@ -78,13 +78,22 @@ export type FleetState = "planned" | "running" | "done" | "failed" | "blocked" |
 export interface FleetRow {
   name: string; kind: "repo" | "svc" | "frontend"; repo: string; installed: string | null; latest: string | null; action: RowAction; reason: string; state: RowState;
   step: string; substep: string; substeps: number; detail: string; error: string; order: number; elapsedS: number; freeMb: number | null; needMb: number | null; unitRestored: boolean | null;
+  /** Root helper only: the version kept to go back to. */
+  previous?: string;
   log: Array<{ at: string; text: string }>;
 }
 
 export interface FleetReport {
   schema: string; id: string; mode: "plan" | "run"; state: FleetState; startedAt: string; updatedAt: string; error: string; stoppedAt: string; requireSignedTags: boolean;
   disk: { rootFreeMb: number | null; workspaceFreeMb: number | null }; services: FleetRow[];
+  /** Root helper of the device (signed packages, nothing compiled) only: its name, the identifier of this look and whether applying needs a one-time code. */
+  helper?: "root"; planId?: string; totpRequired?: boolean;
 }
+
+/** What the second step brings to the root helper; the other ways to the tool ignore it. */
+export interface FleetConfirmation { planId?: unknown; code?: unknown }
+const PLAN_ID = /^[0-9a-f]{32}$/;
+const ONE_TIME_CODE = /^[0-9]{6}$/;
 
 const text = (value: unknown, max = 300): string => (typeof value === "string" ? value.slice(0, max) : "");
 const whole = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : null);
@@ -107,6 +116,7 @@ export function parseFleetReport(raw: unknown): FleetReport | null {
       substep: text(r.substep, 40), substeps: whole(r.substeps) ?? 0, detail: text(r.detail, 200), error: text(r.error, 40), order: whole(r.order) ?? rows.length, elapsedS: whole(r.elapsedS) ?? 0,
       freeMb: whole(r.freeMb), needMb: whole(r.needMb), unitRestored: typeof r.unitRestored === "boolean" ? r.unitRestored : null,
       log: Array.isArray(r.log) ? r.log.slice(-30).map((l) => ({ at: text((l as Record<string, unknown>)?.at, 30), text: text((l as Record<string, unknown>)?.text, 300) })) : [],
+      ...(typeof r.previous === "string" ? { previous: r.previous.slice(0, 40) } : {}),
     });
   }
   const disk = (typeof body.disk === "object" && body.disk !== null ? body.disk : {}) as Record<string, unknown>;
@@ -114,6 +124,7 @@ export function parseFleetReport(raw: unknown): FleetReport | null {
     schema: FLEET_SCHEMA, id: text(body.id, 40), mode: body.mode === "run" ? "run" : "plan", state: body.state as FleetState, startedAt: text(body.startedAt, 30), updatedAt: text(body.updatedAt, 30),
     error: text(body.error, 60), stoppedAt: text(body.stoppedAt, 60), requireSignedTags: body.requireSignedTags === true,
     disk: { rootFreeMb: whole(disk.rootFreeMb), workspaceFreeMb: whole(disk.workspaceFreeMb) }, services: rows,
+    ...(body.helper === "root" ? { helper: "root" as const, planId: PLAN_ID.test(String(body.planId)) ? String(body.planId) : "", totpRequired: body.totpRequired !== false } : {}),
   };
 }
 
@@ -212,10 +223,10 @@ export class FleetUpdate {
   }
 
   /** Helper way: writes the request in one step (a file that is complete or not there) for the helper unit to find. The helper takes the file away as soon as it starts. */
-  private writeRequest(settings: FleetSettings, id: string, command: "plan" | "run" | "resume", names: string[]): void {
+  private writeRequest(settings: FleetSettings, id: string, command: "plan" | "run" | "resume" | "rollback", names: string[], confirmation: { planId?: string; code?: string } = {}): void {
     fs.mkdirSync(path.dirname(settings.requestFile), { recursive: true, mode: 0o770 });
     fs.rmSync(settings.answerFile, { force: true });
-    const body = JSON.stringify({ v: FLEET_REQUEST_SCHEMA, id, command, names });
+    const body = JSON.stringify({ v: FLEET_REQUEST_SCHEMA, id, command, names, ...confirmation });
     const partial = `${settings.requestFile}.${id}.tmp`;
     fs.writeFileSync(partial, body, { mode: 0o660 });
     fs.renameSync(partial, settings.requestFile);
@@ -269,24 +280,44 @@ export class FleetUpdate {
   }
 
   /** Starts the update of the programs asked for (all the ones the plan marks to update when none is named). The tool runs detached and keeps its progress in the file. */
-  async apply(names: unknown): Promise<FleetReport> {
+  async apply(names: unknown, confirmation: FleetConfirmation = {}): Promise<FleetReport> {
     const report = this.read();
     if (!report) throw new FleetUpdateError(409, "Look first: there is no plan");
     if (this.busy) throw new FleetUpdateError(409, "Another look or update is going on");
     if (report.state === "planned" && (this.now() - Date.parse(report.updatedAt)) / 1000 > FLEET_PLAN_MAX_AGE_SECONDS) throw new FleetUpdateError(409, "The plan is old: look again first");
     const wanted = this.validNames(names, report, (row) => row.action === "update");
     if (wanted.length === 0) throw new FleetUpdateError(409, "There is nothing to update");
-    return this.launch(["run", "--yes", "--only", wanted.join(",")]);
+    return this.launch(["run", "--yes", "--only", wanted.join(",")], this.confirmed(report, confirmation));
   }
 
   /** Takes up a program whose step was cut, from its first step. */
-  async resume(name: unknown): Promise<FleetReport> {
+  async resume(name: unknown, confirmation: FleetConfirmation = {}): Promise<FleetReport> {
     const report = this.read();
     if (!report) throw new FleetUpdateError(409, "Look first: there is no plan");
     if (this.busy) throw new FleetUpdateError(409, "Another look or update is going on");
     const wanted = this.validNames([name], report, (row) => row.state === "interrupted" || row.state === "failed" || row.state === "rolled_back" || row.state === "blocked");
     if (wanted.length !== 1) throw new FleetUpdateError(409, "That program has nothing to take up");
-    return this.launch(["resume", "--yes", "--only", wanted[0]]);
+    return this.launch(["resume", "--yes", "--only", wanted[0]], this.confirmed(report, confirmation));
+  }
+
+  /** Goes back to the version kept for one program. Only the root helper does it. */
+  async rollback(name: unknown, confirmation: FleetConfirmation = {}): Promise<FleetReport> {
+    const report = this.read();
+    if (!report) throw new FleetUpdateError(409, "Look first: there is no plan");
+    if (this.busy) throw new FleetUpdateError(409, "Another look or update is going on");
+    if (report.helper !== "root" || !this.deps.settings().helper) throw new FleetUpdateError(409, "Going back needs the root helper of the device");
+    const wanted = this.validNames([name], report, (row) => row.previous !== undefined);
+    return this.launch(["rollback", "--yes", "--only", wanted[0]], this.confirmed(report, confirmation));
+  }
+
+  /** The second step of the root helper: the identifier of the look the user saw and the one-time code. The helper checks both; it trusts nothing from here. */
+  private confirmed(report: FleetReport, given: FleetConfirmation): { planId?: string; code?: string } {
+    if (report.helper !== "root") return {};
+    if (given.code !== undefined && !(typeof given.code === "string" && ONE_TIME_CODE.test(given.code))) throw new FleetUpdateError(400, "code must be six digits");
+    if (given.planId !== undefined && !(typeof given.planId === "string" && PLAN_ID.test(given.planId))) throw new FleetUpdateError(400, "planId is not one of a look");
+    if (report.totpRequired && given.code === undefined) throw new FleetUpdateError(400, "A one-time code is needed");
+    const planId = (given.planId as string | undefined) ?? report.planId;
+    return { ...(planId ? { planId } : {}), ...(given.code !== undefined ? { code: given.code as string } : {}) };
   }
 
   private validNames(names: unknown, report: FleetReport, fits: (row: FleetRow) => boolean): string[] {
@@ -302,7 +333,7 @@ export class FleetUpdate {
     return chosen;
   }
 
-  private async launch(args: string[]): Promise<FleetReport> {
+  private async launch(args: string[], confirmation: { planId?: string; code?: string } = {}): Promise<FleetReport> {
     const settings = this.deps.settings();
     const id = this.newId();
     const folder = path.dirname(settings.stateFile);
@@ -312,7 +343,7 @@ export class FleetUpdate {
       fs.writeFileSync(this.heartbeatFile(), String(this.now() / 1000), { mode: 0o660 });
       this.launchedAt = this.now();
       this.lastLaunch = { at: this.launchedAt, outFile: settings.answerFile, seen: this.trace() };
-      this.writeRequest(settings, id, args[0] as "run" | "resume", args[args.indexOf("--only") + 1].split(","));
+      this.writeRequest(settings, id, args[0] as "run" | "resume" | "rollback", args[args.indexOf("--only") + 1].split(","), confirmation);
       const asked = this.read();
       if (!asked) throw new FleetUpdateError(502, "The tool did not leave a file");
       return { ...asked, state: "running" };

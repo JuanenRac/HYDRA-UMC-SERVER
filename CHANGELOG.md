@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **Updates through the root helper of the device:** the fleet-update report passes on the identifier of the look, whether a one-time code is needed and the version kept of each program; applying and taking up a program pass the identifier and the code to the helper, and `rollback: true` of the resume route goes back to the kept version. Nothing changes without that helper. Not tried on a CM5.
+
 - **A development server answers only its own machine:** when `NODE_ENV` is not `production` the server listens on `127.0.0.1`; `HYDRA_UMC_DEV_BIND=all` accepts other machines. Production (the systemd unit, the Docker image) listens as before.
 
 - **Releasing a robot that was never reserved answers with an empty history:** the answer of `POST /api/robot/:id/release` and the change sent to the clients left `reservationHistory` out (or passed a damaged stored value on), although the contract requires the list; both now carry `[]` in that case. Test.

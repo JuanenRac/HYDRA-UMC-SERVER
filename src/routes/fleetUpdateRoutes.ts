@@ -52,7 +52,7 @@ export function registerFleetUpdateRoutes(app: express.Express, deps: FleetRoute
     const body = bodyOf(req);
     if (body.confirm !== true) return res.status(400).json({ error: "apply needs confirm: true" });
     const detail = { action: "apply", services: Array.isArray(body.services) ? body.services.slice(0, 60) : "all" };
-    fleet.apply(body.services).then(
+    fleet.apply(body.services, { planId: body.planId, code: body.code }).then(
       (report) => {
         audit?.record({ type: "fleet-update", outcome: "ok", userId: req.user?.id, username: req.user?.username, ip: req.ip, detail });
         res.json({ applyEnabled: true, busy: true, report });
@@ -61,12 +61,15 @@ export function registerFleetUpdateRoutes(app: express.Express, deps: FleetRoute
     );
   });
 
-  // Takes up one program whose step was cut (or that failed), from its first step.
+  // Takes up one program whose step was cut (or that failed), from its first step; with `rollback: true`, goes back to the version kept (root helper only).
+  // The one-time code of the root helper is passed on to it and is never written to the audit record.
   app.post("/api/admin/fleet-update/resume", apiRateLimiter, authenticate, requireAdmin, applyGate, (req: any, res) => {
     const body = bodyOf(req);
     if (body.confirm !== true) return res.status(400).json({ error: "resume needs confirm: true" });
-    const detail = { action: "resume", service: typeof body.service === "string" ? body.service.slice(0, 41) : undefined };
-    fleet.resume(body.service).then(
+    const goBack = body.rollback === true;
+    const detail = { action: goBack ? "rollback" : "resume", service: typeof body.service === "string" ? body.service.slice(0, 41) : undefined };
+    const confirmation = { planId: body.planId, code: body.code };
+    (goBack ? fleet.rollback(body.service, confirmation) : fleet.resume(body.service, confirmation)).then(
       (report) => {
         audit?.record({ type: "fleet-update", outcome: "ok", userId: req.user?.id, username: req.user?.username, ip: req.ip, detail });
         res.json({ applyEnabled: true, busy: true, report });
