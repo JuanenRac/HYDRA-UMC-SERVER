@@ -357,3 +357,30 @@ test("a jog of the XY table is checked like the table command: the end position,
   assert.equal(arm.xyTable.pos.x, 100);
   assert.equal(arm.pos.tx, 100, "the absolute jog keeps writing the older representation, as before");
 });
+
+test("a stop is told to the clients before the write, and a write that fails does not turn it into an error", async () => {
+  const order: string[] = [];
+  const t = setup(makeSettings(), {
+    broadcastRobotDelta: () => { order.push("broadcast"); },
+    queueSettingsWrite: async () => { order.push("write"); throw new Error("disk full"); },
+  });
+  for (const command of ["stop", "disable"]) {
+    order.length = 0;
+    const r = await t.call("3", { command });
+    assert.equal(r.status, 200, command);
+    assert.deepEqual(order, ["broadcast", "write"], command);
+  }
+});
+
+test("a stop is not refused for a controller id that is not well formed, nor for an id two robots share", async () => {
+  const bad = setup();
+  assert.equal((await bad.call("3", { command: "play", controllerId: "not a valid id!" })).status, 400);
+  assert.equal((await bad.call("3", { command: "stop", controllerId: "not a valid id!" })).status, 200);
+  assert.deepEqual(bad.stopped, [3]);
+  const settings = makeSettings();
+  settings.controllers.push({ id: "c9", cameras: [], robots: [{ ...structuredClone(settings.controllers[0].robots[2]), name: "twin of B" }] });
+  const shared = setup(settings);
+  assert.equal((await shared.call("3", { command: "play" })).status, 409);
+  assert.equal((await shared.call("3", { command: "stop" })).status, 200);
+  assert.equal(shared.deltas.length, 2, "both robots that carry the id are stopped");
+});

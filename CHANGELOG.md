@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- **A stop reaches the clients before the disk, and nothing about the request holds it back:** `stop`, `disable` and `POST /api/stop-all` tell the clients (WebSocket, MQTT, BLE) before the settings are written; a write that fails no longer turns the stop of one robot into a 500 that nobody else hears of; a malformed `X-Controller-Id` or an id that two robots share no longer refuses a stop (every robot with that id is stopped). Tests.
 ## [0.8.3.4] - Signed global stop release, format 2 flash header and watch release notice
 
 - **The signed release of the global stop can be switched on from Server Admin:** `safety.signGlobalStop` (off by default) and a write-only `safety.globalStopKey` on `PUT /api/admin/server-config`, administrator only. The key is stored for the owner of the process only and is never answered, logged or audited; it is accepted only over HTTPS or from the machine itself. A key file named in the environment or in the security file still wins.
