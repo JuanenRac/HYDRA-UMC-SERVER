@@ -1,6 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveListenPort } from "../src/listenPort";
+import { resolveListenAddress, resolveListenPort } from "../src/listenPort";
+
+test("outside production the server answers only this machine unless all is asked for", () => {
+  assert.equal(resolveListenAddress({}, "production").address, "0.0.0.0");
+  assert.equal(resolveListenAddress({ HYDRA_UMC_DEV_BIND: "loopback" }, "production").address, "0.0.0.0");
+  assert.equal(resolveListenAddress({}, "development").address, "127.0.0.1");
+  assert.equal(resolveListenAddress({ HYDRA_UMC_DEV_BIND: " ALL " }, "development").address, "0.0.0.0");
+  assert.match(resolveListenAddress({ HYDRA_UMC_DEV_BIND: "0.0.0.0" }, "test").notice ?? "", /takes loopback or all/);
+  assert.equal(resolveListenAddress({ HYDRA_UMC_DEV_BIND: "0.0.0.0" }, "test").address, "127.0.0.1");
+});
 
 test("the variable of the service wins over the shared PORT", () => {
   const r = resolveListenPort({ HYDRA_UMC_SERVER_PORT: "3100", PORT: "1883" }, 4000);

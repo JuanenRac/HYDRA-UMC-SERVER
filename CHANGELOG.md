@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **A development server answers only its own machine:** when `NODE_ENV` is not `production` the server listens on `127.0.0.1`; `HYDRA_UMC_DEV_BIND=all` accepts other machines. Production (the systemd unit, the Docker image) listens as before.
+
 - **Releasing a robot that was never reserved answers with an empty history:** the answer of `POST /api/robot/:id/release` and the change sent to the clients left `reservationHistory` out (or passed a damaged stored value on), although the contract requires the list; both now carry `[]` in that case. Test.
 
 - **Server Admin can set whether the orchestrator keeps asking to confirm a global stop:** `orchestrator.retryServer` of `PUT /api/admin/server-config` writes `estop.retry_server` into the configuration file of the orchestrator named by `HYDRA_UMC_ORCHESTRATOR_CONFIG` (or `orchestrator.configFile`). It stays on by default, switching it off is warned about and audited, and the orchestrator reads it on its next start.
