@@ -409,6 +409,33 @@ test("with the helper a request nobody took for two minutes is removed and does 
   } finally { done(); }
 });
 
+test("the root helper needs the identifier of the look and the one-time code, which go into the request and nowhere else", async () => {
+  const { dir, done } = scratch();
+  try {
+    const plan = { ...file("planned", [row("datalake", { previous: "v0.9.0" })]), helper: "root", planId: "a".repeat(32), totpRequired: true };
+    const m = helperMachine(dir, plan);
+    const seen = await m.fleet.plan();
+    assert.deepEqual([seen.helper, seen.planId, seen.totpRequired, seen.services[0].previous], ["root", "a".repeat(32), true, "v0.9.0"]);
+    await assert.rejects(m.fleet.apply(["datalake"]), (e: unknown) => e instanceof FleetUpdateError && e.status === 400);
+    await assert.rejects(m.fleet.apply(["datalake"], { code: "12345" }), (e: unknown) => e instanceof FleetUpdateError && e.status === 400);
+    await m.fleet.apply(["datalake"], { code: "123456" });
+    assert.deepEqual(JSON.parse(fs.readFileSync(m.settings.requestFile, "utf8")), { v: 1, id: "req1", command: "run", names: ["datalake"], planId: "a".repeat(32), code: "123456" });
+  } finally { done(); }
+});
+
+test("going back is only for the root helper and for a program that keeps an earlier version", async () => {
+  const { dir, done } = scratch();
+  try {
+    const plain = helperMachine(dir);
+    await plain.fleet.plan();
+    await assert.rejects(plain.fleet.rollback("datalake", { code: "123456" }), (e: unknown) => e instanceof FleetUpdateError && e.status === 409);
+    const m = helperMachine(dir, { ...file("planned", [row("datalake", { previous: "v0.9.0" })]), helper: "root", planId: "b".repeat(32), totpRequired: true });
+    await m.fleet.plan();
+    await m.fleet.rollback("datalake", { code: "654321" });
+    assert.deepEqual(JSON.parse(fs.readFileSync(m.settings.requestFile, "utf8")), { v: 1, id: "req1", command: "rollback", names: ["datalake"], planId: "b".repeat(32), code: "654321" });
+  } finally { done(); }
+});
+
 // The unit of the server and the default of the way to the tool have to agree: this test pins the facts that make the direct way impossible under the isolated unit
 // and the helper way possible, so that a change of either file shows up here.
 test("the isolated unit of the server and the settings agree on the account, the folder and the way the work is reached", () => {
