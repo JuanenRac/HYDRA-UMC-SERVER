@@ -227,17 +227,19 @@ export function registerRobotRoutes(app: express.Express, deps: RobotRouteDeps):
     }
     robot.reservation = null;
     arming?.disarm(robotId);
+    // a robot that was never reserved has no history yet; the contract of the answer requires the list all the same
+    const reservationHistory = Array.isArray(robot.reservationHistory) ? robot.reservationHistory : [];
     const controllerId = findControllerIdForRobot(robotId);
     await queueSettingsWrite(getSettings());
     if (controllerId) {
       broadcastRobotDelta(
-        [{ controllerId, robotId, patch: { reservation: null, reservationHistory: robot.reservationHistory } }],
+        [{ controllerId, robotId, patch: { reservation: null, reservationHistory } }],
         getSettings(),
       );
     }
     onClaimsChanged?.();
     const revision = robotRevision(robot);
     res.setHeader("ETag", `"${revision}"`);
-    res.json({ success: true, reservationHistory: robot.reservationHistory, revision });
+    res.json({ success: true, reservationHistory, revision });
   });
 }

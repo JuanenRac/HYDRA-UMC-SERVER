@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { test } from "node:test";
 import { registerRobotRoutes } from "../src/routes/robotRoutes.ts";
 
@@ -23,7 +24,12 @@ function setup(initial: any = { id: 1 }) {
     findRobotById: (id: number) => (id === robot.id ? robot : null),
     findControllerIdForRobot: (id: number) => (id === robot.id ? "c1" : null),
     isReservationActive: (r: any) => !!r && r.expiresAt > Date.now(),
-    appendReservationHistory: (_r: any, action: string, by: unknown, _name: unknown, reason?: string) => { history.push({ action, by, reason }); },
+    appendReservationHistory: (r: any, action: string, by: unknown, _name: unknown, reason?: string) => {
+      history.push({ action, by, reason });
+      // as the real one (src/playback.ts): the robot keeps the list, and a damaged one starts again
+      if (!Array.isArray(r.reservationHistory)) r.reservationHistory = [];
+      r.reservationHistory.push({ action });
+    },
     queueSettingsWrite: async () => { writes++; },
     broadcastRobotDelta: (batch: any[]) => { deltas.push(...batch); },
     DEFAULT_RESERVATION_TTL_MS: DEFAULT_TTL,
@@ -139,4 +145,19 @@ test("releasing an expired claim is open to anyone and records the expiry; relea
   assert.equal((await t.call("release", "1", bob)).status, 200);
   assert.equal(t.history.length, 1);
   assert.equal(t.robot.reservation, null);
+});
+
+test("every field the contract requires is in the answer, also for a robot that was never reserved or whose stored history is damaged", async () => {
+  // the required fields of the 200 answers in the contract of the SDK, which its typed clients demand
+  const required = { claim: ["success", "reservation", "reservationHistory", "revision"], release: ["success", "reservationHistory", "revision"] };
+  for (const initial of [{ id: 1 }, { id: 1, reservation: null }, { id: 1, reservationHistory: "damaged" }]) {
+    for (const route of ["release", "claim"] as const) {
+      const t = setup(initial);
+      const answer = await t.call(route, "1", alice);
+      const sent = JSON.parse(JSON.stringify(answer.json)); // an undefined field is not sent at all
+      for (const field of required[route]) assert.ok(field in sent, `${route} of ${JSON.stringify(initial)} answers without ${field}`);
+      assert.ok(Array.isArray(sent.reservationHistory), `${route} of ${JSON.stringify(initial)}: reservationHistory is not a list`);
+      assert.ok(Array.isArray(t.deltas.at(-1).patch.reservationHistory), "the clients are told a list too");
+    }
+  }
 });
