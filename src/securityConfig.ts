@@ -17,6 +17,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import tls from "node:tls";
+import { OrchestratorConfigError, readRetryServer, writeRetryServer } from "./orchestratorConfigFile";
 import { DispatcherConfigError, readReplanOptions, validTimeout, writeReplanOptions, DEFAULT_STOP_ACK_TIMEOUT_SECONDS } from "./dispatcherConfigFile";
 import { applyBridgesPatch, resolveBridgeSettings, type BridgesFile, type BridgesSnapshot } from "./bridgeSettings";
 import { DEFAULT_KEY_OVERLAP_SECONDS, JWT_ALGORITHMS, MAX_KEY_OVERLAP_SECONDS, MIN_KEY_OVERLAP_SECONDS, type JwtAlgorithm } from "./jwtKeys";
@@ -377,6 +378,13 @@ export interface JobDispatcherFile {
   };
 }
 
+/** The orchestrator: where its configuration file is (set by the deployment) and whether it keeps asking to confirm a global stop. */
+export interface OrchestratorOptionsFile {
+  /** The JSON file given to the orchestrator with `--config`. Set by the deployment; no request can change it. */
+  configFile?: string;
+  retryServer?: boolean;
+}
+
 /** The request limits per address (src/auth.ts). The switch and every number can be changed from Server Admin; each number keeps the range of RATE_LIMIT_BOUNDS. */
 export interface RateLimitsFile {
   /** Whether the limiters answer 429 when a budget is used up (default: yes; with "no" none of them limits, which only a bench should want). */
@@ -458,6 +466,7 @@ export interface SecurityFile {
   rul?: RulFile;
   safety?: SafetyFile;
   jobDispatcher?: JobDispatcherFile;
+  orchestrator?: OrchestratorOptionsFile;
   camera?: CameraFile;
   install?: InstallFile;
   websocket?: WebsocketFile;
@@ -528,6 +537,7 @@ export interface SecurityEnv {
   jobExecutor?: string;
   jobExecutorLive?: string;
   jobDispatcherConfig?: string;
+  orchestratorConfig?: string;
 }
 
 export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
@@ -589,6 +599,7 @@ export function securityEnvFrom(env: NodeJS.ProcessEnv): SecurityEnv {
     jobExecutor: env.HYDRA_UMC_JOB_EXECUTOR,
     jobExecutorLive: env.HYDRA_UMC_JOB_EXECUTOR_LIVE,
     jobDispatcherConfig: env.HYDRA_UMC_JOB_DISPATCHER_CONFIG,
+    orchestratorConfig: env.HYDRA_UMC_ORCHESTRATOR_CONFIG,
   };
 }
 
@@ -916,6 +927,12 @@ export function resolveDispatcherConfigFile(env: string | undefined, file: Secur
   return typeof file.jobDispatcher?.configFile === "string" ? file.jobDispatcher.configFile.trim() : "";
 }
 
+/** The configuration file of the orchestrator, from the deployment only (environment first, then the settings file). Empty: none. */
+export function resolveOrchestratorConfigFile(env: string | undefined, file: SecurityFile): string {
+  if (isSet(env)) return env.trim();
+  return typeof file.orchestrator?.configFile === "string" ? file.orchestrator.configFile.trim() : "";
+}
+
 /** The F-RAM erase and self-test of the brain: only the exact word "1" in the environment switches it on; the default is off. */
 export function resolveFramErase(env: string | undefined, file: SecurityFile): { value: boolean; source: Source } {
   if (isSet(env)) return { value: env.trim() === "1", source: "env" };
@@ -1190,6 +1207,13 @@ export interface SecuritySnapshot {
   trustedNetworks: { enabled: { value: boolean; source: Source }; outside: "operate" | "view"; outsideRequiresSecondFactor: boolean; localRanges: number; vpnRanges: number; invalidEntries: number };
   rul: { enabled: { value: boolean; source: Source } };
   safety: { publishGlobalStop: { value: boolean; source: Source }; latchGlobalStop: { value: boolean; source: Source }; framErase: { value: boolean; source: Source }; estopWatchMs: { value: number; source: Source }; globalStopSigning: GlobalStopSigningView };
+  orchestrator: {
+    /** Whether the orchestrator keeps asking this server to confirm a global stop (it reads this when it starts). On by default. */
+    retryServer: { value: boolean; source: Source };
+    /** Whether the deployment named the configuration file of the orchestrator; without it the option cannot be changed here. */
+    editable: boolean;
+    error?: string;
+  };
   jobDispatcher: {
     stopRelay: { enabled: { value: boolean; source: Source }; robotMap: Record<string, number>; silentRobot: { value: SilentRobotValue; source: Source }; activeEnabled: boolean; appliesOnRestart: boolean };
     /** The execution of the assigned jobs: `enabled` switches it on (a dry run), `live` lets it move the robots. Both apply on the next start. */
@@ -1518,6 +1542,20 @@ export class SecurityConfig {
     return { ...(this.file.jobDispatcher?.stopRelay?.robotMap ?? {}) };
   }
 
+  private orchestratorSnapshot(): SecuritySnapshot["orchestrator"] {
+    const configFile = resolveOrchestratorConfigFile(this.options.env.orchestratorConfig, this.file);
+    const saved = this.file.orchestrator?.retryServer;
+    const kept: { value: boolean; source: Source } = typeof saved === "boolean" ? { value: saved, source: "config" } : { value: true, source: "default" };
+    if (configFile === "") return { retryServer: kept, editable: false };
+    try {
+      // the file is what the orchestrator reads, so it wins over what was saved here
+      const value = readRetryServer(configFile);
+      return { retryServer: { value, source: value && saved === undefined ? "default" : "config" }, editable: true };
+    } catch (error) {
+      return { retryServer: kept, editable: false, error: error instanceof Error ? error.message : "the configuration file of the orchestrator cannot be read" };
+    }
+  }
+
   private jobDispatcherSnapshot(): SecuritySnapshot["jobDispatcher"] {
     const relay = resolveJobStopRelay(this.options.env.jobStopRelay, this.file);
     const executor = resolveJobExecutor(this.options.env.jobExecutor, this.file);
@@ -1683,6 +1721,7 @@ export class SecurityConfig {
         estopWatchMs: resolveEstopWatchMs(this.options.env.estopWatch, this.file),
         globalStopSigning: this.globalStopSigningView(),
       },
+      orchestrator: this.orchestratorSnapshot(),
       jobDispatcher: this.jobDispatcherSnapshot(),
       camera: { open: resolveCameraOpen(this.options.env.cameraAuth, this.file), credentialsViaEnv: resolveCameraCredentialsViaEnv(this.options.env.cameraCredentialsViaEnv, this.file), limitRecordings: resolveCameraLimitRecordings(this.options.env.cameraLimitRecordings, this.file), recordingMaxSeconds: this.recordingLimitNumber("recordingMaxSeconds"), recordingMaxBytes: this.recordingLimitNumber("recordingMaxBytes"), recordingQuotaBytes: this.recordingLimitNumber("recordingQuotaBytes") },
       install: { newInstallTls: resolveNewInstallTls(this.options.env.newInstallTls, this.file) },
@@ -1732,7 +1771,7 @@ export class SecurityConfig {
   /** Applies a change asked for by an administrator; returns the new state and the warnings to show. */
   update(patch: any, actor: string): { snapshot: SecuritySnapshot; warnings: string[]; appliesOnRestart: boolean } {
     const warnings: string[] = [];
-    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, ingest: this.file.ingest ? { ...this.file.ingest } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, nodeHealth: this.file.nodeHealth ? { ...this.file.nodeHealth } : undefined, twinRelay: this.file.twinRelay ? { ...this.file.twinRelay } : undefined, infoTickets: this.file.infoTickets ? { ...this.file.infoTickets } : undefined, deviceTokens: this.file.deviceTokens ? { ...this.file.deviceTokens } : undefined, updateCheck: this.file.updateCheck ? { ...this.file.updateCheck } : undefined, discovery: this.file.discovery ? { ...this.file.discovery } : undefined, maintenance: this.file.maintenance ? { ...this.file.maintenance } : undefined, atc: this.file.atc ? { ...this.file.atc } : undefined, detectionHef: this.file.detectionHef ? { ...this.file.detectionHef } : undefined, presence: this.file.presence ? { ...this.file.presence } : undefined, bridgeGateway: this.file.bridgeGateway ? { ...this.file.bridgeGateway } : undefined, push: this.file.push ? { ...this.file.push } : undefined, trustedNetworks: this.file.trustedNetworks ? { ...this.file.trustedNetworks } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined };
+    const next: SecurityFile = { ...this.file, tls: this.file.tls ? { ...this.file.tls } : undefined, ble: this.file.ble ? { ...this.file.ble } : undefined, mqtt: this.file.mqtt ? { ...this.file.mqtt } : undefined, voice: this.file.voice ? { ...this.file.voice } : undefined, mavlink: this.file.mavlink ? { ...this.file.mavlink } : undefined, robots: this.file.robots ? { ...this.file.robots } : undefined, connections: this.file.connections ? { ...this.file.connections } : undefined, ingest: this.file.ingest ? { ...this.file.ingest } : undefined, health: this.file.health ? { ...this.file.health } : undefined, ecosystemHealth: this.file.ecosystemHealth ? { ...this.file.ecosystemHealth } : undefined, nodeHealth: this.file.nodeHealth ? { ...this.file.nodeHealth } : undefined, twinRelay: this.file.twinRelay ? { ...this.file.twinRelay } : undefined, infoTickets: this.file.infoTickets ? { ...this.file.infoTickets } : undefined, deviceTokens: this.file.deviceTokens ? { ...this.file.deviceTokens } : undefined, updateCheck: this.file.updateCheck ? { ...this.file.updateCheck } : undefined, discovery: this.file.discovery ? { ...this.file.discovery } : undefined, maintenance: this.file.maintenance ? { ...this.file.maintenance } : undefined, atc: this.file.atc ? { ...this.file.atc } : undefined, detectionHef: this.file.detectionHef ? { ...this.file.detectionHef } : undefined, presence: this.file.presence ? { ...this.file.presence } : undefined, bridgeGateway: this.file.bridgeGateway ? { ...this.file.bridgeGateway } : undefined, push: this.file.push ? { ...this.file.push } : undefined, trustedNetworks: this.file.trustedNetworks ? { ...this.file.trustedNetworks } : undefined, rul: this.file.rul ? { ...this.file.rul } : undefined, safety: this.file.safety ? { ...this.file.safety } : undefined, jobDispatcher: this.file.jobDispatcher ? { ...this.file.jobDispatcher } : undefined, orchestrator: this.file.orchestrator ? { ...this.file.orchestrator } : undefined };
     let appliesOnRestart = false;
     const log = this.options.log ?? (() => undefined);
     const lockedBy = (name: string) => new SecurityConfigError(409, `${name} is set in the environment of this server; remove it there to change it here`);
@@ -2373,6 +2412,26 @@ export class SecurityConfig {
       next.safety = merged;
       if (safetyPatch.publishGlobalStop === true) warnings.push("global_stop_published");
       if (safetyPatch.framErase === true) warnings.push("fram_erase_on");
+    }
+
+    if (patch.orchestrator !== undefined) {
+      const orch = patch.orchestrator;
+      if (typeof orch !== "object" || orch === null || Array.isArray(orch)) throw new SecurityConfigError(400, "orchestrator must be an object");
+      for (const key of Object.keys(orch)) if (key !== "retryServer") throw new SecurityConfigError(400, `orchestrator.${key} cannot be changed here`);
+      if (orch.retryServer !== undefined) {
+        if (typeof orch.retryServer !== "boolean") throw new SecurityConfigError(400, "orchestrator.retryServer must be true or false");
+        const configFile = resolveOrchestratorConfigFile(this.options.env.orchestratorConfig, this.file);
+        if (configFile === "") throw new SecurityConfigError(409, "the configuration file of the orchestrator is not set on this server (HYDRA_UMC_ORCHESTRATOR_CONFIG or orchestrator.configFile); the option cannot be changed here");
+        try {
+          writeRetryServer(configFile, orch.retryServer);
+        } catch (error) {
+          throw new SecurityConfigError(409, error instanceof OrchestratorConfigError ? error.message : "the configuration file of the orchestrator could not be written");
+        }
+        next.orchestrator = { ...(next.orchestrator ?? {}), retryServer: orch.retryServer };
+        appliesOnRestart = true;
+        if (!orch.retryServer) warnings.push("orchestrator_stop_retry_off");
+        log(`[SECURITY] ${actor} set the orchestrator to ${orch.retryServer ? "keep asking" : "NOT ask again"} until a global stop is confirmed (it reads this on its next start).`);
+      }
     }
 
     let replanWritten = false;

@@ -156,7 +156,7 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
         return res.status(500).json({ error: "The key file for EdDSA cannot be created or read; nothing was changed", code: "JWT_KEY_FILE_UNUSABLE" });
       }
     }
-    const wantsSecurity = req.body && (req.body.aiAccess !== undefined || req.body.infoAuth !== undefined || req.body.tls !== undefined || req.body.ble !== undefined || req.body.mqtt !== undefined || req.body.voice !== undefined || req.body.mavlink !== undefined || req.body.robots !== undefined || req.body.connections !== undefined || req.body.health !== undefined || req.body.ecosystemHealth !== undefined || req.body.nodeHealth !== undefined || req.body.twinRelay !== undefined || req.body.infoTickets !== undefined || req.body.deviceTokens !== undefined || req.body.updateCheck !== undefined || req.body.discovery !== undefined || req.body.maintenance !== undefined || req.body.atc !== undefined || req.body.detectionHef !== undefined || req.body.auth !== undefined || req.body.presence !== undefined || req.body.push !== undefined || req.body.trustedNetworks !== undefined || req.body.rul !== undefined || req.body.safety !== undefined || req.body.camera !== undefined || req.body.install !== undefined || req.body.websocket !== undefined || req.body.logging !== undefined || req.body.rateLimits !== undefined || req.body.bridges !== undefined || req.body.jobDispatcher !== undefined);
+    const wantsSecurity = req.body && (req.body.aiAccess !== undefined || req.body.infoAuth !== undefined || req.body.tls !== undefined || req.body.ble !== undefined || req.body.mqtt !== undefined || req.body.voice !== undefined || req.body.mavlink !== undefined || req.body.robots !== undefined || req.body.connections !== undefined || req.body.health !== undefined || req.body.ecosystemHealth !== undefined || req.body.nodeHealth !== undefined || req.body.twinRelay !== undefined || req.body.infoTickets !== undefined || req.body.deviceTokens !== undefined || req.body.updateCheck !== undefined || req.body.discovery !== undefined || req.body.maintenance !== undefined || req.body.atc !== undefined || req.body.detectionHef !== undefined || req.body.auth !== undefined || req.body.presence !== undefined || req.body.push !== undefined || req.body.trustedNetworks !== undefined || req.body.rul !== undefined || req.body.safety !== undefined || req.body.camera !== undefined || req.body.install !== undefined || req.body.websocket !== undefined || req.body.logging !== undefined || req.body.rateLimits !== undefined || req.body.bridges !== undefined || req.body.jobDispatcher !== undefined || req.body.orchestrator !== undefined);
     if (wantsSecurity) {
       try {
         security_result = security.update(req.body, String((req as any).user?.username ?? "admin"));
@@ -198,6 +198,9 @@ export function registerAdminRoutes(app: express.Express, deps: AdminRouteDeps):
         type: "bridge-options", outcome: "ok", userId: (req as any).user?.id, username: (req as any).user?.username, ip: req.ip,
         detail: Object.fromEntries(Object.entries(req.body.bridges as Record<string, Record<string, unknown>>).flatMap(([b, o]) => Object.keys(o).map((k) => [`${b}.${k}`, view[b]?.[k]?.value]))),
       });
+    }
+    if (security_result && req.body.orchestrator !== undefined) {
+      audit?.record({ type: "orchestrator-options", outcome: "ok", userId: (req as any).user?.id, username: (req as any).user?.username, ip: req.ip, detail: { retryServer: security_result.snapshot.orchestrator.retryServer.value } });
     }
     if (security_result && req.body.jobDispatcher !== undefined) {
       const jd = security_result.snapshot.jobDispatcher;
