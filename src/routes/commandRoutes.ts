@@ -261,17 +261,18 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
         industrialLog(`GLOBAL STOP: the announcement failed (${error instanceof Error ? error.message : "unknown error"}).`);
       }
     }
+    // The clients are told before the settings are written: a slow disk holds back the answer, never the news of the stop.
+    try {
+      broadcastRobotDelta(deltas, getSettings());
+    } catch (error) {
+      industrialLog(`GLOBAL STOP: the broadcast failed (${error instanceof Error ? error.message : "unknown error"}).`);
+    }
     let persisted = true;
     try {
       await writeSettingsCoalesced();
     } catch (error) {
       persisted = false;
       industrialLog(`GLOBAL STOP: the settings could not be saved (${error instanceof Error ? error.message : "unknown error"}); the stop is applied in memory and broadcast.`);
-    }
-    try {
-      broadcastRobotDelta(deltas, getSettings());
-    } catch (error) {
-      industrialLog(`GLOBAL STOP: the broadcast failed (${error instanceof Error ? error.message : "unknown error"}).`);
     }
     res.json({ success: failedCount === 0, stoppedCount, failedCount, persisted, ...(announced === undefined ? {} : { announced }), robots: results });
   });
@@ -324,8 +325,10 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
       return res.status(400).json({ error: "No settings loaded" });
     }
 
+    // A stop and a disable are never refused for an id that two robots share: every robot that carries it is stopped.
+    const makesSafer = command === "stop" || command === "disable";
     const ambiguous = ambiguousRobotBody(getSettings(), robotId);
-    if (ambiguous) return res.status(409).json(ambiguous);
+    if (ambiguous && !makesSafer) return res.status(409).json(ambiguous);
 
     let targetRobot: any = null;
     getSettings().controllers.forEach((c: any) => {
@@ -356,10 +359,11 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
     // through the group path.
     // The controller of the caller (one client of the account): header or body field.
     const presentedController = readControllerId(req.headers?.["x-controller-id"], req.body?.controllerId);
-    if (presentedController === null) {
+    // A stop with a controller id that is not well formed is applied as one that names no controller.
+    if (presentedController === null && !makesSafer) {
       return res.status(400).json({ error: "controllerId must be 1 to 64 characters: letters, digits, . _ : -", code: "invalid-controller-id" });
     }
-    const callerController = presentedController;
+    const callerController = presentedController ?? undefined;
 
     // Enabling is the risky direction. It needs the option to be on (off by default) and an administrator; the claim check below still applies.
     if (command === "enable") {
@@ -974,8 +978,22 @@ export function registerCommandRoutes(app: express.Express, deps: CommandRouteDe
       }
     }
 
-    await queueSettingsWrite(getSettings());
-    broadcastRobotDelta(deltas, getSettings());
+    if (makesSafer) {
+      // The stop is already applied in memory: it is told to everybody before anything is written, and a write that fails (a full disk) does not turn it into an error.
+      try {
+        broadcastRobotDelta(deltas, getSettings());
+      } catch (error) {
+        industrialLog(`Command: the broadcast of ${command} on Robot ${robotId} failed (${error instanceof Error ? error.message : "unknown error"}).`);
+      }
+      try {
+        await queueSettingsWrite(getSettings());
+      } catch (error) {
+        industrialLog(`Command: ${command} on Robot ${robotId} could not be saved (${error instanceof Error ? error.message : "unknown error"}); it is applied in memory.`);
+      }
+    } else {
+      await queueSettingsWrite(getSettings());
+      broadcastRobotDelta(deltas, getSettings());
+    }
     const newRevision = robotRevision(targetRobot);
     res.setHeader("ETag", `"${newRevision}"`);
     // The server accepted and applied the command: it says so in the closed shapes of the SDK (an Operation and the first lifecycle event).
