@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 - **The README gives the right number of end-to-end contract scripts.**
+- **The OpenAPI document declares the confirmation of the root helper:** `planId` and `code` of applying and taking up the update of everything installed, and `rollback` of taking up.
 - **The server can speak for each robot with the robot's own token of the job dispatcher:** `jobDispatcher.robotTokenEnv` (robot id to the name of an environment variable, empty by default) is used for the acknowledgement of a stop and for the registration of that robot; a wrong entry keeps both off. Tests added.
 
 ## [0.8.3.5] - Updates through the root helper of the device
