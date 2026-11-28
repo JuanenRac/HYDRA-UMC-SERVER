@@ -27,7 +27,7 @@ GPL-3.0-or-later - see LICENSE
 
 ---
 
-> **Verifica di onestà - cosa funziona davvero oggi:** il motore Express + WebSocket, la sua superficie REST e WebSocket (63 operazioni in 58 percorsi), l'accesso JWT con rotazione del token di refresh e scrypt, la scoperta mDNS, prenotazioni e revisioni dei robot, la riproduzione e i relay verso CAN-OTA, telemetria, voce, i servizi di IA locali e il connector hub sono reali e provati contro un'istanza reale di questo stesso server avviata dai test stessi: 1271 test unitari più 29 script di contratto end-to-end, tutti superati. Ciò che sfiora l'hardware e non è verificato qui: il collegamento a una vera CM5 HYDRA-UMC con una scheda STM32H757, codice reale esercitato solo tramite lo strato API e contratti. TLS, Bluetooth LE, il bridge MQTT e lo stack Prometheus e Grafana sono reali, facoltativi e spenti per impostazione predefinita.
+> **Verifica di onestà - cosa funziona davvero oggi:** il motore Express + WebSocket, la sua superficie REST e WebSocket (63 operazioni in 58 percorsi), l'accesso JWT con rotazione del token di refresh e scrypt, la scoperta mDNS, prenotazioni e revisioni dei robot, la riproduzione e i relay verso CAN-OTA, telemetria, voce, i servizi di IA locali e il connector hub sono reali e provati contro un'istanza reale di questo stesso server avviata dai test stessi: 1271 test unitari più 38 script di contratto end-to-end, tutti superati. Ciò che sfiora l'hardware e non è verificato qui: il collegamento a una vera CM5 HYDRA-UMC con una scheda STM32H757, codice reale esercitato solo tramite lo strato API e contratti. TLS, Bluetooth LE, il bridge MQTT e lo stack Prometheus e Grafana sono reali, facoltativi e spenti per impostazione predefinita.
 
 ---
 
@@ -456,7 +456,7 @@ Il server ascolta su `0.0.0.0:3000`; tutto il suo stato vive in `data/`. Il suo 
 
 ## 🧪 Test
 
-1271 test automatici si eseguono con `npm run test:unit`. In più, `npm test` esegue il controllo OpenAPI e 29 script di contratto end-to-end in `tools/` contro un'istanza reale di questo server (scoperta, accesso senza e con credenziali, avvio di produzione, comandi e proprietà dei robot, token di refresh, relay vocale e i suoi percorsi di errore, riproduzione, lo stop globale, bridge Bluetooth e MQTT, media delle telecamere, relay IA e connector-hub, ruolo osservatore e altro); tutti passano. Nessuno richiede hardware.
+1271 test automatici si eseguono con `npm run test:unit`. In più, `npm test` esegue il controllo OpenAPI e 38 script di contratto end-to-end in `tools/` contro un'istanza reale di questo server (scoperta, accesso senza e con credenziali, avvio di produzione, comandi e proprietà dei robot, token di refresh, relay vocale e i suoi percorsi di errore, riproduzione, lo stop globale, bridge Bluetooth e MQTT, media delle telecamere, relay IA e connector-hub, ruolo osservatore e altro); tutti passano. Nessuno richiede hardware.
 
 La CI esegue `HYDRA_UMC_CI=1 python tools/ci_validate.py`, che controlla il manifesto, i documenti, gli otto README e le immagini.
 
