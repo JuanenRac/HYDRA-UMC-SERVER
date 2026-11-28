@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- **The README gives the right number of end-to-end contract scripts.**
+
 ## [0.8.3.5] - Updates through the root helper of the device
 
 - **Push notifications through Firebase, for Android phones and iPhones:** `POST /api/push/devices` also takes `platform: "android"` with a Firebase token, and an iPhone may register a Firebase token instead of its Apple one. The server sends to them with the service account file named by `HYDRA_UMC_FCM_SERVICE_ACCOUNT` or `push.fcmServiceAccountFile`, which must be outside the directory of the server; without it nothing is sent. The switch `push.enabled` stays off by default and a notification only informs. Its sentence is generic: the name of a robot is included (also for the iPhones reached through Apple) only with `push.includeRobotName` in the configuration file, off by default. Deleting or renaming an account, or giving it a new password, now forgets the phones it registered. Tested against a simulated Firebase; nothing was sent to a real phone.
