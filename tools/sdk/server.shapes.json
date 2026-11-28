@@ -2522,6 +2522,10 @@
               }
             }
           }
+        },
+        "previous": {
+          "type": "string",
+          "description": "Root helper only: the version kept to go back to."
         }
       }
     },
@@ -2610,6 +2614,19 @@
           "items": {
             "$ref": "#/components/schemas/FleetUpdateRow"
           }
+        },
+        "helper": {
+          "type": "string",
+          "enum": [
+            "root"
+          ]
+        },
+        "planId": {
+          "type": "string",
+          "description": "Root helper only: the identifier of this look, empty when the helper gave none that is valid."
+        },
+        "totpRequired": {
+          "type": "boolean"
         }
       }
     },
