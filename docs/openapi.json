@@ -3637,6 +3637,14 @@
                     "enum": [
                       true
                     ]
+                  },
+                  "planId": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{32}$"
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[0-9]{6}$"
                   }
                 }
               }
@@ -3788,6 +3796,17 @@
                     "enum": [
                       true
                     ]
+                  },
+                  "rollback": {
+                    "type": "boolean"
+                  },
+                  "planId": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{32}$"
+                  },
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[0-9]{6}$"
                   }
                 }
               }
