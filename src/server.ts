@@ -35,6 +35,7 @@ import { registerRobotRoutes } from "./routes/robotRoutes";
 import { registerCommandRoutes, ROBOT_COMMANDS, stoppedPlaybackState } from "./routes/commandRoutes";
 import { JobStopRelay, resolveStopRelay, type StopRelayFile } from "./jobStopRelay";
 import { DispatcherRegistrar, resolveRegistrar, type RegistrarFile } from "./dispatcherRegistrar";
+import { resolveRobotTokens } from "./robotTokens";
 import { DispatcherExecutor, resolveExecutor, type ExecutorFile } from "./dispatcherExecutor";
 import { OrchestratorTakeover, resolveTakeover, type TakeoverFile } from "./orchestratorTakeover";
 import { reloadDispatcher, resolveReload, type ReloadFile } from "./dispatcherReload";
@@ -795,16 +796,21 @@ async function startServer() {
       orchestratorTakeover.start({ set: (fn, ms) => setTimeout(fn, ms), clear: (handle) => clearTimeout(handle as NodeJS.Timeout) });
       industrialLog(`[takeover] ON: watching ${takeoverResolution.settings.primaryUrl}; the standby is ${takeoverResolution.settings.standbyUrl}`);
     }
+    // The tokens of the robots towards the job dispatcher (jobDispatcher.robotTokenEnv, empty by default): a wrong entry keeps the relay and the registrar off.
+    const robotTokensResolution = resolveRobotTokens((loadServerConfig() as { jobDispatcher?: { robotTokenEnv?: unknown } }).jobDispatcher?.robotTokenEnv, process.env, process.env.HYDRA_UMC_JOB_DISPATCHER_TOKEN ?? "");
+    const robotTokens = robotTokensResolution.ok ? robotTokensResolution.tokens : undefined;
+    if (!robotTokensResolution.ok) industrialLog(`[robot-tokens] ${robotTokensResolution.error}: the stop relay and the robot registrar do not start`);
     // The delivery of the stop that the job dispatcher asks for (off unless jobDispatcher.stopRelay.enabled or HYDRA_UMC_JOB_STOP_RELAY=1): see src/jobStopRelay.ts.
     const relayResolution = resolveStopRelay(process.env, (loadServerConfig() as { jobDispatcher?: { stopRelay?: StopRelayFile } }).jobDispatcher?.stopRelay);
     if (!relayResolution.ok) {
       industrialLog(`[stop-relay] NOT STARTED: ${relayResolution.error}`);
-    } else if (relayResolution.settings.enabled) {
+    } else if (relayResolution.settings.enabled && robotTokens) {
       // The map of robots is edited in Server Admin: it is read again at every pass, so a change needs no restart.
       const relaySettings = relayResolution.settings;
       Object.defineProperty(relaySettings, "robotMap", { get: () => security.jobStopRobotMap(), enumerable: true });
       jobStopRelay = new JobStopRelay({
         settings: relaySettings,
+        robotTokens,
         fetch: (url, init) => fetch(url, init),
         now: () => Date.now(),
         log: industrialLog,
@@ -838,9 +844,10 @@ async function startServer() {
     const registrarResolution = resolveRegistrar(process.env, registrarFile?.registrar, registrarFile?.stopRelay?.url);
     if (!registrarResolution.ok) {
       industrialLog(`[robot-registrar] NOT STARTED: ${registrarResolution.error}`);
-    } else if (registrarResolution.settings.enabled) {
+    } else if (registrarResolution.settings.enabled && robotTokens) {
       dispatcherRegistrar = new DispatcherRegistrar({
         settings: registrarResolution.settings,
+        robotTokens,
         fetch: (url, init) => fetch(url, init),
         getSettings: () => getSettings(),
         robotMap: () => security.jobStopRobotMap(),

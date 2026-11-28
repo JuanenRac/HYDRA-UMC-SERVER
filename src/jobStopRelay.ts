@@ -22,6 +22,7 @@
 // and its token come from the environment (HYDRA_UMC_JOB_DISPATCHER_URL, HYDRA_UMC_JOB_DISPATCHER_TOKEN): a token is never kept in the
 // settings file. The clock, the HTTP client and the timers are injected, so the whole behaviour is tested with simulated time.
 
+import { robotTokenOf } from "./robotTokens";
 import { identityHeader } from "./serviceIdentity";
 
 export const STOP_RELAY_DEFAULTS = {
@@ -132,6 +133,8 @@ export interface StopRelayDeps {
   fetch: (url: string, init: { method: string; headers: Record<string, string>; body?: string; signal: AbortSignal }) => Promise<{ status: number; json: () => Promise<unknown> }>;
   /** The wall clock in milliseconds (Date.now in production). */
   now: () => number;
+  /** Dispatcher robot id -> the token of that robot (src/robotTokens.ts). Absent = the general token for every call. */
+  robotTokens?: Record<string, string>;
   /** Stops a robot of this server; true only when the stop was applied. */
   stopRobot: (robotId: number) => boolean | Promise<boolean>;
   /** What this server knows of the robot before the stop (the stop itself must not count as news). Absent = every robot is taken as heard, as before. */
@@ -167,13 +170,14 @@ export class JobStopRelay {
 
   constructor(private readonly deps: StopRelayDeps) {}
 
-  private async call(method: string, path: string, body?: unknown): Promise<{ status: number; json: unknown }> {
+  private async call(method: string, path: string, body?: unknown, ownToken?: string): Promise<{ status: number; json: unknown }> {
     const { settings } = this.deps;
     const controller = new AbortController();
     const abort = setTimeout(() => controller.abort(), settings.requestTimeoutMs);
     try {
       const headers: Record<string, string> = { Accept: "application/json" };
-      if (settings.token) headers.Authorization = `Bearer ${settings.token}`;
+      const token = ownToken ?? settings.token; // a robot with a token of its own is spoken for with it (src/robotTokens.ts)
+      if (token) headers.Authorization = `Bearer ${token}`;
       else Object.assign(headers, identityHeader("operator"));
       if (body !== undefined) headers["Content-Type"] = "application/json";
       const answer = await this.deps.fetch(settings.url + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal });
@@ -261,7 +265,7 @@ export class JobStopRelay {
       try {
         const body: Record<string, unknown> = { robotId: request.robotId, jobId: request.jobId };
         if (silent) body.confirmedBy = "server-state";
-        const ack = await this.call("POST", "/jobs/stop-ack", body);
+        const ack = await this.call("POST", "/jobs/stop-ack", body, robotTokenOf(this.deps.robotTokens, request.robotId));
         if (ack.status === 200 || ack.status === 409) {
           // 409: nothing is open for it any more (answered by another way or already sent back): the robot is stopped all the same.
           this.settled.set(request.jobId, request.robotId);
