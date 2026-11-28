@@ -23,6 +23,7 @@
 // switched on, also `id`, `tool`: this reader accepts both.
 
 import { robotIdConflicts } from "./robotIds";
+import { robotTokenOf } from "./robotTokens";
 import { identityHeader } from "./serviceIdentity";
 
 export const REGISTRAR_DEFAULTS = {
@@ -145,6 +146,8 @@ export interface RegistrarDeps {
   getSettings: () => unknown;
   /** The robot map (dispatcher id -> robot id of this server), read at every pass. */
   robotMap: () => Record<string, number>;
+  /** Dispatcher robot id -> the token of that robot (src/robotTokens.ts). Absent = the general token for every call. */
+  robotTokens?: Record<string, string>;
   log: (line: string) => void;
   audit?: (event: { type: string; outcome: "ok" | "failed" | "refused"; robotId?: number; detail: Record<string, unknown> }) => void;
 }
@@ -166,13 +169,14 @@ export class DispatcherRegistrar {
 
   constructor(private readonly deps: RegistrarDeps) {}
 
-  private async call(method: string, path: string, body?: unknown): Promise<{ status: number; json: unknown }> {
+  private async call(method: string, path: string, body?: unknown, ownToken?: string): Promise<{ status: number; json: unknown }> {
     const { settings } = this.deps;
     const controller = new AbortController();
     const abort = setTimeout(() => controller.abort(), settings.requestTimeoutMs);
     try {
       const headers: Record<string, string> = { Accept: "application/json" };
-      if (settings.token) headers.Authorization = `Bearer ${settings.token}`;
+      const token = ownToken ?? settings.token; // a robot with a token of its own is spoken for with it (src/robotTokens.ts)
+      if (token) headers.Authorization = `Bearer ${token}`;
       else Object.assign(headers, identityHeader("operator"));
       if (body !== undefined) headers["Content-Type"] = "application/json";
       const answer = await this.deps.fetch(settings.url + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: controller.signal });
@@ -211,7 +215,7 @@ export class DispatcherRegistrar {
         continue;
       }
       try {
-        const answer = await this.call("POST", "/robots", { id: robot.dispatcherId, available: true });
+        const answer = await this.call("POST", "/robots", { id: robot.dispatcherId, available: true }, robotTokenOf(this.deps.robotTokens, robot.dispatcherId));
         if (answer.status === 200) {
           report.registered.push(robot.dispatcherId);
           log(`[robot-registrar] robot ${robot.robotId} registered in the dispatcher as ${robot.dispatcherId}`);

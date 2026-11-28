@@ -25,6 +25,7 @@ JOB-DISPATCHER  <--POST /jobs/stop-ack------  SERVER  (only after the stop was a
 - **A wrong setting stops the relay from starting** and says why in the log; it never falls back to a default.
 - **No secret in the file.** The address is `HYDRA_UMC_JOB_DISPATCHER_URL` (or `jobDispatcher.stopRelay.url`) and the token is only `HYDRA_UMC_JOB_DISPATCHER_TOKEN`.
 - **Every outcome is audited** (`job-stop-relay`: stopped and acknowledged, refused, or failed).
+- **Tokens of the robots.** When the dispatcher gives a robot a token of its own (`robot_tokens`), `jobDispatcher.robotTokenEnv` (for example `{ "arm-1": "ARM1_TOKEN" }`, empty by default) names the environment variable with that token: the acknowledgement of its stop and its registration carry it instead of the general token. An empty variable, a token of two robots or one equal to the general token keeps the relay and the registrar off, and the log says why. A change needs a restart.
 
 ## Editing it
 
